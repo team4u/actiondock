@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,7 +71,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
   let server: ActionDockServerInstance;
   const TOKEN = "https-test-token-abcdef";
 
-  beforeAll(async () => {
+  before(async () => {
     initProject(projectDir, {
       id: "test.https-app",
       name: "HTTPS Test App",
@@ -88,7 +89,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
     });
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (server) {
       await server.stop();
     }
@@ -100,8 +101,8 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
   });
 
   it("正确启动 HTTPS 服务并设置 https:// 协议基础 URL", () => {
-    expect(server.url).toMatch(/^https:\/\/127\.0\.0\.1:\d+$/);
-    expect(server.port).toBeGreaterThan(0);
+    assert.ok(/^https:\/\/127\.0\.0\.1:\d+$/.test(server.url));
+    assert.ok((server.port) > 0);
   });
 
   it("未开启 insecure 时请求自签名 HTTPS 服务端被拒绝校验", async () => {
@@ -111,21 +112,21 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
     } catch {
       errorOccurred = true;
     }
-    expect(errorOccurred).toBe(true);
+    assert.strictEqual(errorOccurred, true);
 
     const health = await checkRemoteHealth(server.url, TOKEN, 3000, {
       insecure: false,
     });
-    expect(health.ok).toBe(false);
+    assert.strictEqual(health.ok, false);
   });
 
   it("开启 insecure 时 checkRemoteHealth 顺利连通自签名 HTTPS 服务端", async () => {
     const health = await checkRemoteHealth(server.url, TOKEN, 3000, {
       insecure: true,
     });
-    expect(health.ok).toBe(true);
-    expect(health.status).toBe("healthy");
-    expect(health.latencyMs).toBeGreaterThanOrEqual(0);
+    assert.strictEqual(health.ok, true);
+    assert.strictEqual(health.status, "healthy");
+    assert.ok((health.latencyMs) >= 0);
   });
 
   it("直接使用 fetch 配合 getInsecureDispatcher 可正常访问 HTTPS API", async () => {
@@ -134,9 +135,9 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
       dispatcher: getInsecureDispatcher(),
       tls: { rejectUnauthorized: false },
     } as any);
-    expect(res.status).toBe(200);
+    assert.strictEqual(res.status, 200);
     const json: any = await res.json();
-    expect(json.status).toBe("healthy");
+    assert.strictEqual(json.status, "healthy");
   });
 
   it("RemoteActionDockService 开启 insecure 时能够通过 HTTPS 进行自省与动作查询", async () => {
@@ -148,12 +149,12 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
 
     try {
       const info = await service.info();
-      expect(Array.isArray(info)).toBe(true);
-      expect(info.length).toBeGreaterThan(0);
-      expect(info[0].id).toBe("test.https-app");
+      assert.strictEqual(Array.isArray(info), true);
+      assert.ok((info.length) > 0);
+      assert.strictEqual(info[0].id, "test.https-app");
 
       const actions = await service.discovery.listActions();
-      expect(Array.isArray(actions)).toBe(true);
+      assert.strictEqual(Array.isArray(actions), true);
     } finally {
       await service.close();
     }

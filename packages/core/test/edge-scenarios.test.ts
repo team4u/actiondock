@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -33,23 +34,23 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
     it("传入 NaN 时防御拦截并返回 INPUT_NOT_JSON 错误", async () => {
       const runner = createRunner("test.nan");
       const res = await runner.execute("echo", { invalidNum: NaN });
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(INPUT_NOT_JSON);
-      expect((res as any).error?.message).toContain("Number is non-finite or NaN");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, INPUT_NOT_JSON);
+      assert.ok(((res as any).error?.message).includes("Number is non-finite or NaN"));
     });
 
     it("传入 Infinity 与 -Infinity 时防御拦截并返回 INPUT_NOT_JSON 错误", async () => {
       const runner = createRunner("test.inf");
 
       const posRes = await runner.execute("echo", { inf: Infinity });
-      expect(posRes.ok).toBe(false);
-      expect((posRes as any).error?.code).toBe(INPUT_NOT_JSON);
-      expect((posRes as any).error?.message).toContain("Number is non-finite or NaN");
+      assert.strictEqual(posRes.ok, false);
+      assert.strictEqual((posRes as any).error?.code, INPUT_NOT_JSON);
+      assert.ok(((posRes as any).error?.message).includes("Number is non-finite or NaN"));
 
       const negRes = await runner.execute("echo", { negInf: -Infinity });
-      expect(negRes.ok).toBe(false);
-      expect((negRes as any).error?.code).toBe(INPUT_NOT_JSON);
-      expect((negRes as any).error?.message).toContain("Number is non-finite or NaN");
+      assert.strictEqual(negRes.ok, false);
+      assert.strictEqual((negRes as any).error?.code, INPUT_NOT_JSON);
+      assert.ok(((negRes as any).error?.message).includes("Number is non-finite or NaN"));
     });
 
     it("传入循环引用对象时防御拦截并返回 INPUT_NOT_JSON 错误", async () => {
@@ -58,9 +59,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       circular.self = circular;
 
       const res = await runner.execute("echo", circular);
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(INPUT_NOT_JSON);
-      expect((res as any).error?.message).toContain("Circular reference detected");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, INPUT_NOT_JSON);
+      assert.ok(((res as any).error?.message).includes("Circular reference detected"));
     });
 
     it("共享子对象的有向无环结构可正常通过校验", async () => {
@@ -69,9 +70,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const dagInput = { a: shared, b: shared, list: [shared, shared] };
 
       const res = await runner.execute("echo", dagInput);
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({ received: dagInput });
+        assert.deepStrictEqual(res.data, { received: dagInput });
       }
     });
 
@@ -84,15 +85,15 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       };
 
       const okRes = await runner.execute("echo", input);
-      expect(okRes.ok).toBe(true);
+      assert.strictEqual(okRes.ok, true);
 
       // 同一对象在自身内部形成真实环路时仍必须被拦截
       const loopHolder: any = { leaf: sharedLeaf };
       loopHolder.self = loopHolder;
       const badRes = await runner.execute("echo", loopHolder);
-      expect(badRes.ok).toBe(false);
-      expect((badRes as any).error?.code).toBe(INPUT_NOT_JSON);
-      expect((badRes as any).error?.message).toContain("Circular reference detected");
+      assert.strictEqual(badRes.ok, false);
+      assert.strictEqual((badRes as any).error?.code, INPUT_NOT_JSON);
+      assert.ok(((badRes as any).error?.message).includes("Circular reference detected"));
     });
   });
 
@@ -109,9 +110,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("nan-action", {});
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(OUTPUT_NOT_JSON);
-      expect((res as any).error?.message).toContain("Number is non-finite or NaN");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, OUTPUT_NOT_JSON);
+      assert.ok(((res as any).error?.message).includes("Number is non-finite or NaN"));
     });
 
     it("Action 执行产出包含 Infinity 时拦截并返回 OUTPUT_NOT_JSON 错误", async () => {
@@ -126,9 +127,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("inf-action", {});
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(OUTPUT_NOT_JSON);
-      expect((res as any).error?.message).toContain("Number is non-finite or NaN");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, OUTPUT_NOT_JSON);
+      assert.ok(((res as any).error?.message).includes("Number is non-finite or NaN"));
     });
 
     it("Action 执行产出包含循环引用对象时拦截并返回 OUTPUT_NOT_JSON 错误", async () => {
@@ -147,9 +148,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("circ-action", {});
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(OUTPUT_NOT_JSON);
-      expect((res as any).error?.message).toContain("Circular reference detected");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, OUTPUT_NOT_JSON);
+      assert.ok(((res as any).error?.message).includes("Circular reference detected"));
     });
   });
 
@@ -186,10 +187,10 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       try {
         await runner.execute("simple", {});
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(RUN_REPOSITORY_UNAVAILABLE);
-        expect(err.message).toContain("RUN_REPOSITORY_UNAVAILABLE");
+        assert.strictEqual(err.code, RUN_REPOSITORY_UNAVAILABLE);
+        assert.ok((err.message).includes("RUN_REPOSITORY_UNAVAILABLE"));
       }
     });
 
@@ -221,9 +222,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("simple", {});
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(RUN_PERSISTENCE_FAILED);
-      expect((res as any).error?.message).toContain("RUN_PERSISTENCE_FAILED");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, RUN_PERSISTENCE_FAILED);
+      assert.ok(((res as any).error?.message).includes("RUN_PERSISTENCE_FAILED"));
     });
   });
 
@@ -296,10 +297,10 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("parent", {});
-      expect(res.ok).toBe(true);
-      expect((res as any).data?.failed).toBe(true);
-      expect((res as any).data?.code).toBe(ACTION_SUBRUN_LIMIT);
-      expect((res as any).data?.message).toContain("Maximum concurrent sub-runs");
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual((res as any).data?.failed, true);
+      assert.strictEqual((res as any).data?.code, ACTION_SUBRUN_LIMIT);
+      assert.ok(((res as any).data?.message).includes("Maximum concurrent sub-runs"));
     });
 
     it("检测到 Action 互相递归调用成环时拦截并返回 ACTION_CALL_CYCLE 错误", async () => {
@@ -347,9 +348,9 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
 
       const res = await runner.execute("action-a", {});
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe(ACTION_CALL_CYCLE);
-      expect((res as any).error?.message).toContain("Cycle detected");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, ACTION_CALL_CYCLE);
+      assert.ok(((res as any).error?.message).includes("Cycle detected"));
     });
   });
 
@@ -389,28 +390,28 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       // 1. 使用短 ID "calc" 查询存在歧义冲突，返回 INVALID_ACTION_REF
       const resAmbiguous = await host.runAction("calc", {});
-      expect(resAmbiguous.ok).toBe(false);
-      expect((resAmbiguous as any).error?.code).toBe("INVALID_ACTION_REF");
-      expect((resAmbiguous as any).error?.details?.alias).toBe("AMBIGUOUS_ACTION_REF");
-      expect((resAmbiguous as any).error?.message).toContain("ambiguous");
+      assert.strictEqual(resAmbiguous.ok, false);
+      assert.strictEqual((resAmbiguous as any).error?.code, "INVALID_ACTION_REF");
+      assert.strictEqual((resAmbiguous as any).error?.details?.alias, "AMBIGUOUS_ACTION_REF");
+      assert.ok(((resAmbiguous as any).error?.message).includes("ambiguous"));
 
       // 2. describeAction 使用歧义短 ID 抛出异常
       try {
         await host.describeAction("calc");
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe("INVALID_ACTION_REF");
-        expect(err.message).toContain("AMBIGUOUS_ACTION_REF");
+        assert.strictEqual(err.code, "INVALID_ACTION_REF");
+        assert.ok((err.message).includes("AMBIGUOUS_ACTION_REF"));
       }
 
       // 3. 明确指定带包名完整限定标识符时正常路由与执行
       const resA = await host.runAction("pkg.math-a/calc", {});
-      expect(resA.ok).toBe(true);
-      expect(((resA as any).data as any).source).toBe("pkg.math-a");
+      assert.strictEqual(resA.ok, true);
+      assert.strictEqual(((resA as any).data as any).source, "pkg.math-a");
 
       const resB = await host.runAction("pkg.math-b/calc", {});
-      expect(resB.ok).toBe(true);
-      expect(((resB as any).data as any).source).toBe("pkg.math-b");
+      assert.strictEqual(resB.ok, true);
+      assert.strictEqual(((resB as any).data as any).source, "pkg.math-b");
 
       await host.close();
     });

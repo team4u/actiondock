@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   validateSchema,
   validateSchemaOnly,
@@ -7,8 +8,8 @@ import {
 
 describe("JSON Schema Validator 测试套件", () => {
   it("处理空 Schema 或未定义 Schema 默认校验通过", () => {
-    expect(validateSchema(undefined, { foo: "bar" }).valid).toBe(true);
-    expect(validateSchema({}, { foo: "bar" }).valid).toBe(true);
+    assert.strictEqual(validateSchema(undefined, { foo: "bar" }).valid, true);
+    assert.strictEqual(validateSchema({}, { foo: "bar" }).valid, true);
   });
 
   it("支持基础 Schema 校验成功与失败", () => {
@@ -22,12 +23,12 @@ describe("JSON Schema Validator 测试套件", () => {
     };
 
     const pass = validateSchema(schema, { name: "Alice", age: 30 });
-    expect(pass.valid).toBe(true);
+    assert.strictEqual(pass.valid, true);
 
     const fail = validateSchema(schema, { age: 30 });
-    expect(fail.valid).toBe(false);
-    expect(fail.errors).toBeDefined();
-    expect(fail.errors!.length).toBeGreaterThan(0);
+    assert.strictEqual(fail.valid, false);
+    assert.notStrictEqual(fail.errors, undefined);
+    assert.ok((fail.errors!.length) > 0);
   });
 
   it("相同引用的 Schema 多次校验命中 WeakMap 缓存", () => {
@@ -39,13 +40,13 @@ describe("JSON Schema Validator 测试套件", () => {
     };
 
     const res1 = validateSchema(schema, { title: "First" });
-    expect(res1.valid).toBe(true);
+    assert.strictEqual(res1.valid, true);
 
     const res2 = validateSchema(schema, { title: "Second" });
-    expect(res2.valid).toBe(true);
+    assert.strictEqual(res2.valid, true);
 
     const res3 = validateSchema(schema, { title: 123 });
-    expect(res3.valid).toBe(false);
+    assert.strictEqual(res3.valid, false);
   });
 
   it("包含相同 $id 的多个独立 Schema 对象实例反复校验不会抛出已存在异常", () => {
@@ -76,35 +77,35 @@ describe("JSON Schema Validator 测试套件", () => {
       username: "antigravity",
       email: "test@actiondock.dev",
     });
-    expect(res1.valid).toBe(true);
+    assert.strictEqual(res1.valid, true);
 
     // 第二次校验不同实例但相同 $id 的 instance2，确保不会抛出 "schema with key or id already exists"
     const res2 = validateSchema(schemaInstance2, {
       username: "deepmind",
       email: "deepmind@actiondock.dev",
     });
-    expect(res2.valid).toBe(true);
+    assert.strictEqual(res2.valid, true);
 
     // 校验 instance2 在数据不合规时正确报错
     const res3 = validateSchema(schemaInstance2, {
       username: "deepmind",
       email: "not-an-email",
     });
-    expect(res3.valid).toBe(false);
-    expect(res3.errors).toBeDefined();
-    expect(res3.errors?.some((e) => e.includes("email"))).toBe(true);
+    assert.strictEqual(res3.valid, false);
+    assert.notStrictEqual(res3.errors, undefined);
+    assert.strictEqual(res3.errors?.some((e) => e.includes("email")), true);
   });
 
   it("支持布尔 Schema 校验：false 拒绝所有数据，true 允许合法数据", () => {
     const resFalse = validateSchema(false, { any: "data" });
-    expect(resFalse.valid).toBe(false);
-    expect(resFalse.errors?.[0]).toContain("Schema is false");
+    assert.strictEqual(resFalse.valid, false);
+    assert.ok((resFalse.errors?.[0]).includes("Schema is false"));
 
     const resTrue = validateSchema(true, { key: 42 });
-    expect(resTrue.valid).toBe(true);
+    assert.strictEqual(resTrue.valid, true);
 
     const resTrueDangerous = validateSchema(true, JSON.parse('{"__proto__": {"polluted": true}}'));
-    expect(resTrueDangerous.valid).toBe(false);
+    assert.strictEqual(resTrueDangerous.valid, false);
   });
 
   it("相同 $id 但具有不同规则的 Schema 互不污染", () => {
@@ -127,16 +128,16 @@ describe("JSON Schema Validator 测试套件", () => {
     };
 
     const res1 = validateSchema(stringSchema, { val: "hello" });
-    expect(res1.valid).toBe(true);
+    assert.strictEqual(res1.valid, true);
 
     const res2 = validateSchema(numberSchema, { val: 123 });
-    expect(res2.valid).toBe(true);
+    assert.strictEqual(res2.valid, true);
 
     const res3 = validateSchema(stringSchema, { val: 123 });
-    expect(res3.valid).toBe(false);
+    assert.strictEqual(res3.valid, false);
 
     const res4 = validateSchema(numberSchema, { val: "hello" });
-    expect(res4.valid).toBe(false);
+    assert.strictEqual(res4.valid, false);
   });
 
   it("深度递归拦截原型污染属性键名（__proto__、constructor、prototype）", () => {
@@ -145,13 +146,13 @@ describe("JSON Schema Validator 测试套件", () => {
         level2: JSON.parse('{"__proto__": "attack"}'),
       },
     };
-    expect(validateSchema({}, nestedProto).valid).toBe(false);
+    assert.strictEqual(validateSchema({}, nestedProto).valid, false);
 
     const arrayConstructor = [
       { ok: 1 },
       { level2: [JSON.parse('{"constructor": "attack"}')] },
     ];
-    expect(validateSchema({}, arrayConstructor).valid).toBe(false);
+    assert.strictEqual(validateSchema({}, arrayConstructor).valid, false);
 
     const deepPrototype = {
       items: [
@@ -160,7 +161,7 @@ describe("JSON Schema Validator 测试套件", () => {
         },
       ],
     };
-    expect(validateSchema({}, deepPrototype).valid).toBe(false);
+    assert.strictEqual(validateSchema({}, deepPrototype).valid, false);
   });
 
   it("完全支持 Object.create(null) 无原型对象的数据校验", () => {
@@ -176,29 +177,29 @@ describe("JSON Schema Validator 测试套件", () => {
     nullProtoObj.foo = "bar";
 
     const res = validateSchema(schema, nullProtoObj);
-    expect(res.valid).toBe(true);
+    assert.strictEqual(res.valid, true);
 
     const nullProtoFail = Object.create(null);
     nullProtoFail.foo = 123;
     const resFail = validateSchema(schema, nullProtoFail);
-    expect(resFail.valid).toBe(false);
+    assert.strictEqual(resFail.valid, false);
   });
 
   it("validateSchemaOnly 仅校验 Schema 规则而不执行 dangerous-key 检查", () => {
     // false Schema 拒绝所有输入
     const resFalse = validateSchemaOnly(false, { a: 1 });
-    expect(resFalse.valid).toBe(false);
-    expect(resFalse.errors?.[0]).toContain("Schema is false");
+    assert.strictEqual(resFalse.valid, false);
+    assert.ok((resFalse.errors?.[0]).includes("Schema is false"));
 
     // true, undefined, 空对象均通过
-    expect(validateSchemaOnly(true, { a: 1 }).valid).toBe(true);
-    expect(validateSchemaOnly(undefined, { a: 1 }).valid).toBe(true);
-    expect(validateSchemaOnly({}, { a: 1 }).valid).toBe(true);
+    assert.strictEqual(validateSchemaOnly(true, { a: 1 }).valid, true);
+    assert.strictEqual(validateSchemaOnly(undefined, { a: 1 }).valid, true);
+    assert.strictEqual(validateSchemaOnly({}, { a: 1 }).valid, true);
 
     // 包含原型污染键的数据在 validateSchemaOnly 下若无 schema 规则限制将直接通过
     const dangerous = JSON.parse('{"__proto__": {"evil": true}}');
-    expect(validateSchemaOnly(undefined, dangerous).valid).toBe(true);
-    expect(validateSchemaOnly({}, dangerous).valid).toBe(true);
+    assert.strictEqual(validateSchemaOnly(undefined, dangerous).valid, true);
+    assert.strictEqual(validateSchemaOnly({}, dangerous).valid, true);
   });
 
   it("hasDangerousKeys 与 validateSchema 支持 DAG 有向无环图安全遍历", () => {
@@ -210,7 +211,7 @@ describe("JSON Schema Validator 测试套件", () => {
       items: [leaf, leaf],
     };
 
-    expect(hasDangerousKeys(dag)).toBe(false);
+    assert.strictEqual(hasDangerousKeys(dag), false);
 
     const schema = {
       type: "object",
@@ -221,7 +222,7 @@ describe("JSON Schema Validator 测试套件", () => {
       },
     };
     const res = validateSchema(schema, dag);
-    expect(res.valid).toBe(true);
+    assert.strictEqual(res.valid, true);
   });
 
   it("hasDangerousKeys 与 validateSchema 环路安全，杜绝调用栈溢出", () => {
@@ -230,11 +231,11 @@ describe("JSON Schema Validator 测试套件", () => {
     circularObj.self = circularObj;
 
     // 不会因递归导致 RangeError: Maximum call stack size exceeded
-    expect(hasDangerousKeys(circularObj)).toBe(false);
+    assert.strictEqual(hasDangerousKeys(circularObj), false);
 
     // 构造带原型的环路对象
     const circularDangerous: any = { constructor: "danger" };
     circularDangerous.loop = circularDangerous;
-    expect(hasDangerousKeys(circularDangerous)).toBe(true);
+    assert.strictEqual(hasDangerousKeys(circularDangerous), true);
   });
 });

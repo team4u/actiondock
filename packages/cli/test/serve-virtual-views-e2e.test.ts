@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -301,14 +302,14 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
     // 1. 验证横幅展示配置的多视图标识与端点信息
-    expect(bannerOutput).toContain("* Views:");
-    expect(bannerOutput).toContain("- admin:");
-    expect(bannerOutput).toContain("/views/admin");
-    expect(bannerOutput).toContain("- restricted:");
-    expect(bannerOutput).toContain("/views/restricted");
-    expect(bannerOutput).toContain("- no-mcp:");
+    assert.ok((bannerOutput).includes("* Views:"));
+    assert.ok((bannerOutput).includes("- admin:"));
+    assert.ok((bannerOutput).includes("/views/admin"));
+    assert.ok((bannerOutput).includes("- restricted:"));
+    assert.ok((bannerOutput).includes("/views/restricted"));
+    assert.ok((bannerOutput).includes("- no-mcp:"));
 
     // 2. 验证多视图下的 MCP 隔离性（admin 视图 vs restricted 视图）
     // 2.1 admin 视图下的 MCP initialize 与 tools/list
@@ -322,7 +323,7 @@ export default defineAction({
         clientInfo: { name: "test-admin-client", version: "1.0.0" },
       },
     });
-    expect(adminInit.status).toBe(200);
+    assert.strictEqual(adminInit.status, 200);
 
     const adminTools = await sendMcpRequest(
       `${serverUrl}/views/admin/mcp`,
@@ -335,11 +336,11 @@ export default defineAction({
       },
       adminInit.sessionId
     );
-    expect(adminTools.status).toBe(200);
+    assert.strictEqual(adminTools.status, 200);
     const adminToolNames = adminTools.data?.result?.tools?.map((t: any) => t.name) || [];
-    expect(adminToolNames).toContain("calc-add");
-    expect(adminToolNames).toContain("calc-secret");
-    expect(adminToolNames).toContain("manage");
+    assert.ok((adminToolNames).includes("calc-add"));
+    assert.ok((adminToolNames).includes("calc-secret"));
+    assert.ok((adminToolNames).includes("manage"));
 
     // 2.2 restricted 视图下的 MCP initialize 与 tools/list
     const restrictedInit = await sendMcpRequest(
@@ -356,7 +357,7 @@ export default defineAction({
         },
       }
     );
-    expect(restrictedInit.status).toBe(200);
+    assert.strictEqual(restrictedInit.status, 200);
 
     const restrictedTools = await sendMcpRequest(
       `${serverUrl}/views/restricted/mcp`,
@@ -369,13 +370,13 @@ export default defineAction({
       },
       restrictedInit.sessionId
     );
-    expect(restrictedTools.status).toBe(200);
+    assert.strictEqual(restrictedTools.status, 200);
     const restrictedToolNames = restrictedTools.data?.result?.tools?.map((t: any) => t.name) || [];
     // 白名单内工具必须存在
-    expect(restrictedToolNames).toContain("calc-add");
+    assert.ok((restrictedToolNames).includes("calc-add"));
     // 未授权工具绝不包含在受限视图中
-    expect(restrictedToolNames).not.toContain("calc-secret");
-    expect(restrictedToolNames).not.toContain("manage");
+    assert.ok(!(restrictedToolNames).includes("calc-secret"));
+    assert.ok(!(restrictedToolNames).includes("manage"));
 
     // 2.3 禁用 MCP 的视图访问返回 404
     const noMcpRes = await sendMcpRequest(`${serverUrl}/views/no-mcp/mcp`, NO_MCP_TOKEN, {
@@ -388,7 +389,7 @@ export default defineAction({
         clientInfo: { name: "test", version: "1.0.0" },
       },
     });
-    expect(noMcpRes.status).toBe(404);
+    assert.strictEqual(noMcpRes.status, 404);
 
     // 3. 验证视图间鉴权边界：Token 不匹配或跨视图访问拦截 401
     // 3.1 携带 admin token 请求 restricted 视图 MCP 端点，拦截 401
@@ -402,7 +403,7 @@ export default defineAction({
         params: {},
       }
     );
-    expect(crossTokenMcpRes.status).toBe(401);
+    assert.strictEqual(crossTokenMcpRes.status, 401);
 
     // 3.2 携带 restricted token 请求 admin 视图 MCP 端点，拦截 401
     const reverseCrossTokenMcpRes = await sendMcpRequest(
@@ -415,7 +416,7 @@ export default defineAction({
         params: {},
       }
     );
-    expect(reverseCrossTokenMcpRes.status).toBe(401);
+    assert.strictEqual(reverseCrossTokenMcpRes.status, 401);
 
     // 3.3 携带错误 Token 请求 restricted 视图 MCP 端点，拦截 401
     const wrongTokenMcpRes = await sendMcpRequest(
@@ -428,42 +429,42 @@ export default defineAction({
         params: {},
       }
     );
-    expect(wrongTokenMcpRes.status).toBe(401);
+    assert.strictEqual(wrongTokenMcpRes.status, 401);
 
     // 3.4 携带 admin token 请求 restricted 视图 HTTP API 端点，拦截 401
     const crossTokenHttpRes = await fetch(`${serverUrl}/views/restricted/api/v2/actions`, {
       headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
     });
-    expect(crossTokenHttpRes.status).toBe(401);
+    assert.strictEqual(crossTokenHttpRes.status, 401);
 
     // 3.5 携带 restricted token 请求 admin 视图 HTTP API 端点，拦截 401
     const reverseCrossTokenHttpRes = await fetch(`${serverUrl}/views/admin/api/v2/actions`, {
       headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
     });
-    expect(reverseCrossTokenHttpRes.status).toBe(401);
+    assert.strictEqual(reverseCrossTokenHttpRes.status, 401);
 
     // 4. 验证 HTTP API 路由维度的多视图隔离与权限策略
     // 4.1 admin 视图可见全部动作
     const adminActionsRes = await fetch(`${serverUrl}/views/admin/api/v2/actions`, {
       headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
     });
-    expect(adminActionsRes.status).toBe(200);
+    assert.strictEqual(adminActionsRes.status, 200);
     const adminActionsData = (await adminActionsRes.json()) as any[];
     const adminActionIds = adminActionsData.map((a: any) => a.id);
-    expect(adminActionIds.some((id: string) => id.includes("calc-add"))).toBe(true);
-    expect(adminActionIds.some((id: string) => id.includes("calc-secret"))).toBe(true);
-    expect(adminActionIds.some((id: string) => id.includes("manage"))).toBe(true);
+    assert.strictEqual(adminActionIds.some((id: string) => id.includes("calc-add")), true);
+    assert.strictEqual(adminActionIds.some((id: string) => id.includes("calc-secret")), true);
+    assert.strictEqual(adminActionIds.some((id: string) => id.includes("manage")), true);
 
     // 4.2 restricted 视图仅可见白名单内的 calc-add
     const restrictedActionsRes = await fetch(`${serverUrl}/views/restricted/api/v2/actions`, {
       headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
     });
-    expect(restrictedActionsRes.status).toBe(200);
+    assert.strictEqual(restrictedActionsRes.status, 200);
     const restrictedActionsData = (await restrictedActionsRes.json()) as any[];
     const restrictedActionIds = restrictedActionsData.map((a: any) => a.id);
-    expect(restrictedActionIds.some((id: string) => id.includes("calc-add"))).toBe(true);
-    expect(restrictedActionIds.some((id: string) => id.includes("calc-secret"))).toBe(false);
-    expect(restrictedActionIds.some((id: string) => id.includes("manage"))).toBe(false);
+    assert.strictEqual(restrictedActionIds.some((id: string) => id.includes("calc-add")), true);
+    assert.strictEqual(restrictedActionIds.some((id: string) => id.includes("calc-secret")), false);
+    assert.strictEqual(restrictedActionIds.some((id: string) => id.includes("manage")), false);
 
     // 4.3 访问白名单外的动作详情返回 403
     const forbiddenActionDetail = await fetch(
@@ -472,9 +473,9 @@ export default defineAction({
         headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
       }
     );
-    expect(forbiddenActionDetail.status).toBe(403);
+    assert.strictEqual(forbiddenActionDetail.status, 403);
     const forbiddenActionJson = await forbiddenActionDetail.json();
-    expect(forbiddenActionJson.error.code).toBe("ACTION_FORBIDDEN");
+    assert.strictEqual(forbiddenActionJson.error.code, "ACTION_FORBIDDEN");
 
     // 4.4 访问白名单外的包下动作返回 403
     const forbiddenPkgDetail = await fetch(
@@ -483,13 +484,13 @@ export default defineAction({
         headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
       }
     );
-    expect(forbiddenPkgDetail.status).toBe(403);
+    assert.strictEqual(forbiddenPkgDetail.status, 403);
 
     // 4.5 管理端点控制：admin 开启返回 200，restricted 关闭返回 403
     const adminConfigRes = await fetch(`${serverUrl}/views/admin/api/v2/config?package=test.admin-pkg`, {
       headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
     });
-    expect(adminConfigRes.status).toBe(200);
+    assert.strictEqual(adminConfigRes.status, 200);
 
     const restrictedConfigRes = await fetch(
       `${serverUrl}/views/restricted/api/v2/config?package=test.admin-pkg`,
@@ -497,7 +498,7 @@ export default defineAction({
         headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
       }
     );
-    expect(restrictedConfigRes.status).toBe(403);
+    assert.strictEqual(restrictedConfigRes.status, 403);
 
     // 5. 验证动作执行与拦截流
     // 5.1 在受限视图下成功执行允许动作
@@ -512,10 +513,10 @@ export default defineAction({
         body: JSON.stringify({ input: { a: 15, b: 25 } }),
       }
     );
-    expect(allowedRunRes.status).toBe(200);
+    assert.strictEqual(allowedRunRes.status, 200);
     const allowedRunData = await allowedRunRes.json();
-    expect(allowedRunData.ok).toBe(true);
-    expect(allowedRunData.data.sum).toBe(40);
+    assert.strictEqual(allowedRunData.ok, true);
+    assert.strictEqual(allowedRunData.data.sum, 40);
 
     // 5.2 在受限视图下尝试执行未授权动作拦截 403
     const forbiddenRunRes = await fetch(
@@ -529,17 +530,17 @@ export default defineAction({
         body: JSON.stringify({ input: {} }),
       }
     );
-    expect(forbiddenRunRes.status).toBe(403);
+    assert.strictEqual(forbiddenRunRes.status, 403);
 
     // 6. 验证根路径智能 Token 分发机制
     // 6.1 访问根路径 /api/v2/actions 携带 restricted token 自动匹配受限策略
     const rootRestrictedRes = await fetch(`${serverUrl}/api/v2/actions`, {
       headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
     });
-    expect(rootRestrictedRes.status).toBe(200);
+    assert.strictEqual(rootRestrictedRes.status, 200);
     const rootRestrictedActions = (await rootRestrictedRes.json()) as any[];
-    expect(rootRestrictedActions.length).toBe(1);
-    expect(rootRestrictedActions[0].id).toContain("calc-add");
+    assert.strictEqual(rootRestrictedActions.length, 1);
+    assert.ok((rootRestrictedActions[0].id).includes("calc-add"));
 
     // 6.2 访问根路径 /mcp 携带 restricted token 自动隔离 MCP 工具列表
     const rootMcpInit = await sendMcpRequest(`${serverUrl}/mcp`, RESTRICTED_TOKEN, {
@@ -552,7 +553,7 @@ export default defineAction({
         clientInfo: { name: "root-client", version: "1.0.0" },
       },
     });
-    expect(rootMcpInit.status).toBe(200);
+    assert.strictEqual(rootMcpInit.status, 200);
 
     const rootMcpTools = await sendMcpRequest(
       `${serverUrl}/mcp`,
@@ -565,11 +566,11 @@ export default defineAction({
       },
       rootMcpInit.sessionId
     );
-    expect(rootMcpTools.status).toBe(200);
+    assert.strictEqual(rootMcpTools.status, 200);
     const rootToolNames = rootMcpTools.data?.result?.tools?.map((t: any) => t.name) || [];
-    expect(rootToolNames).toContain("calc-add");
-    expect(rootToolNames).not.toContain("calc-secret");
-    expect(rootToolNames).not.toContain("manage");
+    assert.ok((rootToolNames).includes("calc-add"));
+    assert.ok(!(rootToolNames).includes("calc-secret"));
+    assert.ok(!(rootToolNames).includes("manage"));
   });
 
   it("当通过 --views-file 指定的文件不存在时抛出错误并以非零状态码退出", async () => {
@@ -609,7 +610,7 @@ export default defineAction({
       proc.once("exit", (code) => resolveCode(code));
     });
 
-    expect(exitCode).not.toBe(0);
-    expect(stderrOutput).toContain("Views file not found");
+    assert.notStrictEqual(exitCode, 0);
+    assert.ok((stderrOutput).includes("Views file not found"));
   });
 });

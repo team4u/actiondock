@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   mapInputValidationFailure,
   InputError,
@@ -21,10 +22,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Unexpected token",
         path: "/foo",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(INVALID_JSON_LITERAL);
-      expect((err.details as any)?.reason).toBe("SYNTAX_ERROR");
-      expect((err.details as any)?.path).toBe("/foo");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, INVALID_JSON_LITERAL);
+      assert.strictEqual((err.details as any)?.reason, "SYNTAX_ERROR");
+      assert.strictEqual((err.details as any)?.path, "/foo");
     });
 
     it("非有限数值映射为 INVALID_JSON_LITERAL + NON_FINITE_NUMBER", () => {
@@ -34,10 +35,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Number is non-finite or NaN (Infinity)",
         path: "/num",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(INVALID_JSON_LITERAL);
-      expect((err.details as any)?.reason).toBe("NON_FINITE_NUMBER");
-      expect((err.details as any)?.path).toBe("/num");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, INVALID_JSON_LITERAL);
+      assert.strictEqual((err.details as any)?.reason, "NON_FINITE_NUMBER");
+      assert.strictEqual((err.details as any)?.path, "/num");
     });
 
     it("最大深度超限映射为 INVALID_JSON_LITERAL + MAX_JSON_DEPTH", () => {
@@ -47,10 +48,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Max JSON depth limit exceeded",
         path: "/deep",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(INVALID_JSON_LITERAL);
-      expect((err.details as any)?.reason).toBe("MAX_JSON_DEPTH");
-      expect((err.details as any)?.path).toBe("/deep");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, INVALID_JSON_LITERAL);
+      assert.strictEqual((err.details as any)?.reason, "MAX_JSON_DEPTH");
+      assert.strictEqual((err.details as any)?.path, "/deep");
     });
 
     it("其他非法 JsonValue 映射为 INVALID_JSON_LITERAL + INVALID_JSON_VALUE", () => {
@@ -60,10 +61,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Object prototype must be Object.prototype or null",
         path: "/date",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(INVALID_JSON_LITERAL);
-      expect((err.details as any)?.reason).toBe("INVALID_JSON_VALUE");
-      expect((err.details as any)?.path).toBe("/date");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, INVALID_JSON_LITERAL);
+      assert.strictEqual((err.details as any)?.reason, "INVALID_JSON_VALUE");
+      assert.strictEqual((err.details as any)?.path, "/date");
     });
   });
 
@@ -74,28 +75,28 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "SYNTAX_ERROR",
         reason: "JSON syntax error",
       });
-      expect(errInline).toBeInstanceOf(InputError);
-      expect(errInline.code).toBe(INVALID_JSON);
-      expect((errInline.details as any)?.reason).toBe("SYNTAX_ERROR");
-      expect((errInline.details as any)?.source).toBe("inline-json");
+      assert.ok(errInline instanceof InputError);
+      assert.strictEqual(errInline.code, INVALID_JSON);
+      assert.strictEqual((errInline.details as any)?.reason, "SYNTAX_ERROR");
+      assert.strictEqual((errInline.details as any)?.source, "inline-json");
 
       const errFile = mapInputValidationFailure("full-json-file", {
         valid: false,
         code: "SYNTAX_ERROR",
         reason: "JSON syntax error",
       });
-      expect(errFile.code).toBe(INVALID_JSON);
-      expect((errFile.details as any)?.reason).toBe("SYNTAX_ERROR");
-      expect((errFile.details as any)?.source).toBe("file");
+      assert.strictEqual(errFile.code, INVALID_JSON);
+      assert.strictEqual((errFile.details as any)?.reason, "SYNTAX_ERROR");
+      assert.strictEqual((errFile.details as any)?.source, "file");
 
       const errStdin = mapInputValidationFailure("full-json-stdin", {
         valid: false,
         code: "SYNTAX_ERROR",
         reason: "JSON syntax error",
       });
-      expect(errStdin.code).toBe(INVALID_JSON);
-      expect((errStdin.details as any)?.reason).toBe("SYNTAX_ERROR");
-      expect((errStdin.details as any)?.source).toBe("stdin");
+      assert.strictEqual(errStdin.code, INVALID_JSON);
+      assert.strictEqual((errStdin.details as any)?.reason, "SYNTAX_ERROR");
+      assert.strictEqual((errStdin.details as any)?.source, "stdin");
     });
 
     it("非法 UTF-8 映射为 INVALID_JSON + INVALID_UTF8", () => {
@@ -104,9 +105,9 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "INVALID_UTF8",
         reason: "Invalid UTF-8 byte sequence",
       });
-      expect(err.code).toBe(INVALID_JSON);
-      expect((err.details as any)?.reason).toBe("INVALID_UTF8");
-      expect((err.details as any)?.source).toBe("file");
+      assert.strictEqual(err.code, INVALID_JSON);
+      assert.strictEqual((err.details as any)?.reason, "INVALID_UTF8");
+      assert.strictEqual((err.details as any)?.source, "file");
     });
 
     it("非有限数值映射为 INVALID_JSON + NON_FINITE_NUMBER", () => {
@@ -116,10 +117,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "NaN detected",
         path: "/val",
       });
-      expect(err.code).toBe(INVALID_JSON);
-      expect((err.details as any)?.reason).toBe("NON_FINITE_NUMBER");
-      expect((err.details as any)?.path).toBe("/val");
-      expect((err.details as any)?.source).toBe("inline-json");
+      assert.strictEqual(err.code, INVALID_JSON);
+      assert.strictEqual((err.details as any)?.reason, "NON_FINITE_NUMBER");
+      assert.strictEqual((err.details as any)?.path, "/val");
+      assert.strictEqual((err.details as any)?.source, "inline-json");
     });
 
     it("最大深度超限映射为 INVALID_JSON + MAX_JSON_DEPTH", () => {
@@ -128,8 +129,8 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "MAX_JSON_DEPTH",
         reason: "Depth limit exceeded",
       });
-      expect(err.code).toBe(INVALID_JSON);
-      expect((err.details as any)?.reason).toBe("MAX_JSON_DEPTH");
+      assert.strictEqual(err.code, INVALID_JSON);
+      assert.strictEqual((err.details as any)?.reason, "MAX_JSON_DEPTH");
     });
 
     it("其他非法 JsonValue 映射为 INVALID_JSON + INVALID_JSON_VALUE", () => {
@@ -138,8 +139,8 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "CIRCULAR_REFERENCE",
         reason: "Circular reference detected",
       });
-      expect(err.code).toBe(INVALID_JSON);
-      expect((err.details as any)?.reason).toBe("INVALID_JSON_VALUE");
+      assert.strictEqual(err.code, INVALID_JSON);
+      assert.strictEqual((err.details as any)?.reason, "INVALID_JSON_VALUE");
     });
   });
 
@@ -151,10 +152,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Depth exceeded",
         path: "/nested",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
-      expect((err.details as any)?.reason).toBe("MAX_MATERIALIZED_JSON_DEPTH");
-      expect((err.details as any)?.path).toBe("/nested");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, FLAT_INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual((err.details as any)?.reason, "MAX_MATERIALIZED_JSON_DEPTH");
+      assert.strictEqual((err.details as any)?.path, "/nested");
     });
 
     it("物化后字节超限映射为 FLAT_INPUT_LIMIT_EXCEEDED + MAX_MATERIALIZED_BYTES", () => {
@@ -163,9 +164,9 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "MAX_MATERIALIZED_BYTES",
         reason: "Size exceeded",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
-      expect((err.details as any)?.reason).toBe("MAX_MATERIALIZED_BYTES");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, FLAT_INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual((err.details as any)?.reason, "MAX_MATERIALIZED_BYTES");
     });
 
     it("其他物化非法 JsonValue 映射为 FLAT_INPUT_LIMIT_EXCEEDED + INVALID_JSON_VALUE", () => {
@@ -174,9 +175,9 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         code: "INVALID_JSON_OBJECT",
         reason: "Invalid object structure",
       });
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
-      expect((err.details as any)?.reason).toBe("INVALID_JSON_VALUE");
+      assert.ok(err instanceof FlatInputError);
+      assert.strictEqual(err.code, FLAT_INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual((err.details as any)?.reason, "INVALID_JSON_VALUE");
     });
   });
 
@@ -190,11 +191,11 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         path: "/user/constructor",
         reason: 'Forbidden property "constructor" is not allowed in Action input',
       });
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_POLICY_VIOLATION);
-      expect((err.details as any)?.reason).toBe("FORBIDDEN_PROPERTY");
-      expect((err.details as any)?.property).toBe("constructor");
-      expect((err.details as any)?.path).toBe("/user/constructor");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_POLICY_VIOLATION);
+      assert.strictEqual((err.details as any)?.reason, "FORBIDDEN_PROPERTY");
+      assert.strictEqual((err.details as any)?.property, "constructor");
+      assert.strictEqual((err.details as any)?.path, "/user/constructor");
     });
 
     it("最大深度超限映射为 INPUT_LIMIT_EXCEEDED + MAX_JSON_DEPTH", () => {
@@ -204,9 +205,9 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Depth limit exceeded",
         path: "/deep",
       });
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
-      expect((err.details as any)?.reason).toBe("MAX_JSON_DEPTH");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual((err.details as any)?.reason, "MAX_JSON_DEPTH");
     });
 
     it("CLI 预处理输入中非有限数值映射为 INVALID_JSON + NON_FINITE_NUMBER", () => {
@@ -216,8 +217,8 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "NaN detected",
         path: "/num",
       });
-      expect(err.code).toBe(INVALID_JSON);
-      expect((err.details as any)?.reason).toBe("NON_FINITE_NUMBER");
+      assert.strictEqual(err.code, INVALID_JSON);
+      assert.strictEqual((err.details as any)?.reason, "NON_FINITE_NUMBER");
     });
   });
 
@@ -230,10 +231,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         reason: "Circular reference detected in object structure",
         path: "/self",
       });
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_NOT_JSON);
-      expect((err.details as any)?.reason).toBe("CIRCULAR_REFERENCE");
-      expect((err.details as any)?.path).toBe("/self");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_NOT_JSON);
+      assert.strictEqual((err.details as any)?.reason, "CIRCULAR_REFERENCE");
+      assert.strictEqual((err.details as any)?.path, "/self");
     });
 
     it("禁止属性违规映射为 INPUT_VALIDATION_FAILED 且 details 保持 string[]", () => {
@@ -245,10 +246,10 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
         path: "/__proto__",
         reason: 'Forbidden property "__proto__" is not allowed in Action input',
       });
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_VALIDATION_FAILED);
-      expect(Array.isArray(err.details)).toBe(true);
-      expect(err.details).toEqual([
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_VALIDATION_FAILED);
+      assert.strictEqual(Array.isArray(err.details), true);
+      assert.deepStrictEqual(err.details, [
         'Forbidden property "__proto__" is not allowed in Action input',
       ]);
     });

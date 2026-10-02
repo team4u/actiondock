@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,7 +16,7 @@ const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 let tempHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -63,69 +65,59 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
       ["action", "create", "calc", "--desc", "Calculator action", "--file", "calc.ts"],
       tempDir
     );
-    expect(createAct.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "actions", "calc.ts"))).toBe(true);
+    assert.strictEqual(createAct.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "calc.ts")), true);
 
     const manifestAfterAct = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(manifestAfterAct.actions.calc).toBeDefined();
-    expect(manifestAfterAct.actions.calc.entry).toBe("actions/calc.ts");
+    assert.notStrictEqual(manifestAfterAct.actions.calc, undefined);
+    assert.strictEqual(manifestAfterAct.actions.calc.entry, "actions/calc.ts");
 
     const createPb = runCli(
       ["playbook", "create", "calc-flow", "--desc", "Calculation SOP", "--actions", "calc"],
       tempDir
     );
-    expect(createPb.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "playbooks", "calc-flow.md"))).toBe(true);
+    assert.strictEqual(createPb.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "playbooks", "calc-flow.md")), true);
 
     const manifestAfterPb = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(manifestAfterPb.playbooks["calc-flow"]).toBeDefined();
-    expect(manifestAfterPb.playbooks["calc-flow"].actions).toEqual(["calc"]);
+    assert.notStrictEqual(manifestAfterPb.playbooks["calc-flow"], undefined);
+    assert.deepStrictEqual(manifestAfterPb.playbooks["calc-flow"].actions, ["calc"]);
 
     const valPb = runCli(["playbook", "validate", "calc-flow", "--json"], tempDir);
-    expect(valPb.exitCode).toBe(0);
+    assert.strictEqual(valPb.exitCode, 0);
   });
 
   it("builds delivery bundle and packages distribution tarball", () => {
     // 9. build
     const buildProc = runCli(["build"], tempDir);
-    expect(buildProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "dist", "github-ops-build", "entry.mjs"))).toBe(true);
-    expect(existsSync(join(tempDir, "dist", "github-ops-build", "package.json"))).toBe(true);
-    expect(existsSync(join(tempDir, "dist", "github-ops-build", "artifact.json"))).toBe(true);
+    assert.strictEqual(buildProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-build", "entry.mjs")), true);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-build", "package.json")), true);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-build", "artifact.json")), true);
 
     // 9b. pack: tarball aligns with package ID team.github-ops
     const packProc = runCli(["pack"], tempDir);
-    expect(packProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "dist", "team.github-ops-0.1.0.tgz"))).toBe(true);
+    assert.strictEqual(packProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "team.github-ops-0.1.0.tgz")), true);
   });
 
   it("exports skills in source and node modes, composite bundles, and validates constraints", async () => {
     // 10. export skill (default: source skill)
     const exportProc = runCli(["export", "skill"], tempDir);
-    expect(exportProc.exitCode).toBe(0);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "SKILL.md"))
-    ).toBe(true);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.json"))
-    ).toBe(true);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "package.json"))
-    ).toBe(true);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "actions", "greet.ts"))
-    ).toBe(true);
+    assert.strictEqual(exportProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "SKILL.md")), true);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.json")), true);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "package.json")), true);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "actions", "greet.ts")), true);
 
     // 10b. export skill --mode node
     const exportNodeProc = runCli(["export", "skill", "--mode", "node"], tempDir);
-    expect(exportNodeProc.exitCode).toBe(0);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "entry.mjs"))
-    ).toBe(true);
+    assert.strictEqual(exportNodeProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "entry.mjs")), true);
 
     // 10c. export skill rejects --standalone
     const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
-    expect(exportStandaloneProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(exportStandaloneProc.exitCode, 0);
 
     // 10d. export skill with --playbook selective flag
     const selectiveOut = join(tempDir, "dist", "custom-skill");
@@ -133,10 +125,10 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
       ["export", "skill", "--playbook", "greet-user", "-o", selectiveOut],
       tempDir
     );
-    expect(exportSelectiveProc.exitCode).toBe(0);
-    expect(existsSync(join(selectiveOut, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(selectiveOut, "playbooks", "greet-user.md"))).toBe(true);
-    expect(existsSync(join(selectiveOut, "actions", "greet.ts"))).toBe(true);
+    assert.strictEqual(exportSelectiveProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(selectiveOut, "SKILL.md")), true);
+    assert.strictEqual(existsSync(join(selectiveOut, "playbooks", "greet-user.md")), true);
+    assert.strictEqual(existsSync(join(selectiveOut, "actions", "greet.ts")), true);
 
     // 10d. export skill --bundle composite mode
     const bundleOut = join(tempDir, "dist", "my-composite-suite");
@@ -144,35 +136,35 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
       ["export", "skill", "--bundle", "my-composite-suite", "-o", bundleOut],
       tempDir
     );
-    expect(exportBundleProc.exitCode).toBe(0);
-    expect(existsSync(join(bundleOut, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(bundleOut, "actiondock.skill.json"))).toBe(false);
-    expect(existsSync(join(bundleOut, "packages", "github-ops"))).toBe(true);
-    expect(existsSync(join(bundleOut, "packages", "github-ops", "SKILL.md"))).toBe(false);
+    assert.strictEqual(exportBundleProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(bundleOut, "SKILL.md")), true);
+    assert.strictEqual(existsSync(join(bundleOut, "actiondock.skill.json")), false);
+    assert.strictEqual(existsSync(join(bundleOut, "packages", "github-ops")), true);
+    assert.strictEqual(existsSync(join(bundleOut, "packages", "github-ops", "SKILL.md")), false);
 
     // Roundtrip verification: loadActions on each exported package must have zero errors
     const exportedPackagesDir = join(bundleOut, "packages");
     const subpkgs = readdirSync(exportedPackagesDir);
-    expect(subpkgs.length).toBeGreaterThan(0);
+    assert.ok((subpkgs.length) > 0);
     for (const subpkg of subpkgs) {
       const subpkgDir = join(exportedPackagesDir, subpkg);
       if (statSync(subpkgDir).isDirectory()) {
         const loaded = await loadActions(subpkgDir);
-        expect(loaded.size).toBeGreaterThan(0);
+        assert.ok((loaded.size) > 0);
         for (const [id] of loaded) {
-          expect(ACTION_ID_REGEX.test(id)).toBe(true);
+          assert.strictEqual(ACTION_ID_REGEX.test(id), true);
         }
       }
     }
 
     // 10e. export skill validation tests: conflict rejection
     const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--mode", "node"], tempDir);
-    expect(conflictProc.exitCode).not.toBe(0);
-    expect(conflictProc.stderr.toString()).toContain("Composite Skill export (--bundle) currently only supports source mode");
+    assert.notStrictEqual(conflictProc.exitCode, 0);
+    assert.ok((conflictProc.stderr.toString()).includes("Composite Skill export (--bundle) currently only supports source mode"));
 
     const conflictSourceProc = runCli(["export", "skill", "--all", "--workspace"], tempDir);
-    expect(conflictSourceProc.exitCode).not.toBe(0);
-    expect(conflictSourceProc.stderr.toString()).toContain("mutually exclusive");
+    assert.notStrictEqual(conflictSourceProc.exitCode, 0);
+    assert.ok((conflictSourceProc.stderr.toString()).includes("mutually exclusive"));
 
     // 10f. export skill with pre-existing SKILL.md reuse
     const preExistingSkillPath = join(tempDir, "SKILL.md");
@@ -180,10 +172,10 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
     try {
       const reuseOut = join(tempDir, "dist", "reuse-skill");
       const reuseProc = runCli(["export", "skill", "-o", reuseOut], tempDir);
-      expect(reuseProc.exitCode).toBe(0);
-      expect(reuseProc.stdout.toString()).toContain("Reused existing file from");
+      assert.strictEqual(reuseProc.exitCode, 0);
+      assert.ok((reuseProc.stdout.toString()).includes("Reused existing file from"));
       const content = readFileSync(join(reuseOut, "SKILL.md"), "utf-8");
-      expect(content).toContain("Custom Pre-existing CLI Skill");
+      assert.ok((content).includes("Custom Pre-existing CLI Skill"));
     } finally {
       rmSync(preExistingSkillPath, { force: true });
     }

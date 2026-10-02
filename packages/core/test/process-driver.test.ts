@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import {
@@ -66,15 +67,15 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       }
     );
 
-    expect(handle.id).toBeDefined();
-    expect(typeof handle.pid).toBe("number");
+    assert.notStrictEqual(handle.id, undefined);
+    assert.strictEqual(typeof handle.pid, "number");
 
     await closePromise;
 
-    expect(stdoutChunks.join("")).toContain("hello-stdout");
-    expect(stderrChunks.join("")).toContain("hello-stderr");
-    expect(exitResult?.code).toBe(0);
-    expect(outputClosedReason).toBe("natural");
+    assert.ok((stdoutChunks.join("")).includes("hello-stdout"));
+    assert.ok((stderrChunks.join("")).includes("hello-stderr"));
+    assert.strictEqual(exitResult?.code, 0);
+    assert.strictEqual(outputClosedReason, "natural");
 
     await driver.dispose(handle);
   });
@@ -91,15 +92,15 @@ describe("NodeProcessDriver 平台驱动测试", () => {
         unset: ["PATH"],
       });
 
-      expect(envAllowlisted[originalHostVar]).toBeUndefined();
-      expect(envAllowlisted["MY_INJECTED_VAR"]).toBe("injected_val");
-      expect(envAllowlisted["PATH"]).toBeUndefined();
+      assert.strictEqual(envAllowlisted[originalHostVar], undefined);
+      assert.strictEqual(envAllowlisted["MY_INJECTED_VAR"], "injected_val");
+      assert.strictEqual(envAllowlisted["PATH"], undefined);
 
       const envNone = resolveProcessEnv({
         inherit: "none",
         set: { FOO: "bar" },
       });
-      expect(Object.keys(envNone)).toEqual(["FOO"]);
+      assert.deepStrictEqual(Object.keys(envNone), ["FOO"]);
 
       // 验证真实子进程中的环境变量表现
       const driver = new NodeProcessDriver();
@@ -138,8 +139,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
       await closePromise;
       const parsed = JSON.parse(outputParts.join(""));
-      expect(parsed.hasLeak).toBe(false);
-      expect(parsed.custom).toBe("explicit_value");
+      assert.strictEqual(parsed.hasLeak, false);
+      assert.strictEqual(parsed.custom, "explicit_value");
 
       await driver.dispose(handle);
     } finally {
@@ -186,7 +187,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     await driver.inputEOF(handle);
 
     await closePromise;
-    expect(receivedOutput.join("")).toBe("ECHO:part1-part2");
+    assert.strictEqual(receivedOutput.join(""), "ECHO:part1-part2");
 
     await driver.dispose(handle);
   });
@@ -221,8 +222,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       await driver.write(handle, new TextEncoder().encode("late-write"));
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ProcessError);
-      expect(err.code).toBe(INPUT_CLOSED);
+      assert.ok(err instanceof ProcessError);
+      assert.strictEqual(err.code, INPUT_CLOSED);
     }
 
     await driver.dispose(handle);
@@ -254,13 +255,13 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       }
     );
 
-    expect(handle.pid).toBeDefined();
+    assert.notStrictEqual(handle.pid, undefined);
 
     // 优雅终止子进程
     await driver.terminate(handle, 200);
     await closePromise;
 
-    expect(exitedResult).toBeDefined();
+    assert.notStrictEqual(exitedResult, undefined);
     await driver.dispose(handle);
   });
 
@@ -305,7 +306,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     // 等待排空超时计时器触发
     await closePromise;
-    expect(closedReason).toBe("drain-timeout");
+    assert.strictEqual(closedReason, "drain-timeout");
 
     await driver.dispose(handle);
   });
@@ -333,8 +334,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       );
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ProcessError);
-      expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
+      assert.ok(err instanceof ProcessError);
+      assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
     }
   });
 
@@ -365,8 +366,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       await driver.resize(handle, 100, 40);
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ProcessError);
-      expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
+      assert.ok(err instanceof ProcessError);
+      assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
     }
 
     await closePromise;
@@ -378,7 +379,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     if (!driver.capabilities.interruptForeground) {
       // 在不支持前台中断的平台（如 Windows 平台 pipe 模式），验证能力标识与拦截抛错
-      expect(driver.capabilities.interruptForeground).toBe(false);
+      assert.strictEqual(driver.capabilities.interruptForeground, false);
       const handle = await driver.spawn(
         {
           executable: process.execPath,
@@ -395,8 +396,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
         await driver.interruptForeground(handle);
         expect.unreachable();
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ProcessError);
-        expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
+        assert.ok(err instanceof ProcessError);
+        assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
       } finally {
         await driver.terminate(handle, 200);
         await driver.dispose(handle);
@@ -438,7 +439,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     await driver.interruptForeground(handle);
     await closePromise;
 
-    expect(stdoutParts.join("")).toContain("SIGINT_CAUGHT");
+    assert.ok((stdoutParts.join("")).includes("SIGINT_CAUGHT"));
     await driver.dispose(handle);
   });
 
@@ -485,7 +486,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     const writePromise = driver.write(handle, new TextEncoder().encode("backpressure-test"));
     await writePromise;
 
-    expect(writeCount).toBe(1);
+    assert.strictEqual(writeCount, 1);
     await driver.dispose(handle);
   });
 
@@ -497,7 +498,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     });
 
     let faultReported = false;
-    await expect(
+    await assert.rejects(
       driver.spawn(
         { executable: "non_existent_binary", args: [], io: { mode: "pipe" } },
         {
@@ -509,9 +510,9 @@ describe("NodeProcessDriver 平台驱动测试", () => {
           },
         }
       )
-    ).rejects.toThrow("simulated spawn failure");
+    , /simulated spawn failure/);
 
-    expect(faultReported).toBe(true);
+    assert.strictEqual(faultReported, true);
   });
 
   it("dispose 清理句柄后后续操作抛出明确异常", async () => {
@@ -535,8 +536,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       await driver.write(handle, new Uint8Array([1]));
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ProcessError);
-      expect(err.code).toBe(INPUT_CLOSED);
+      assert.ok(err instanceof ProcessError);
+      assert.strictEqual(err.code, INPUT_CLOSED);
     }
   });
 
@@ -548,15 +549,15 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     const third = driver.getCapabilities();
 
     // 三次调用返回一致的能力快照，且均为独立副本（修改互不影响）
-    expect(second).toEqual(first);
-    expect(third).toEqual(first);
-    expect(first).not.toBe(second);
+    assert.deepStrictEqual(second, first);
+    assert.deepStrictEqual(third, first);
+    assert.notStrictEqual(first, second);
 
     // 能力字段契约保持完整
-    expect(typeof first.pty).toBe("boolean");
-    expect(typeof first.resize).toBe("boolean");
-    expect(first.inputEOF).toBe(true);
-    expect(first.terminationScope).toBe("process-tree");
+    assert.strictEqual(typeof first.pty, "boolean");
+    assert.strictEqual(typeof first.resize, "boolean");
+    assert.strictEqual(first.inputEOF, true);
+    assert.strictEqual(first.terminationScope, "process-tree");
   });
 
   it("多次 terminate 同一实例不会累积 exit 监听器", async () => {
@@ -593,7 +594,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       { executable: "mock-bin-2", args: [], io: { mode: "pipe" } },
       { output() {}, exited() {}, outputClosed() {} }
     );
-    expect(handleAgain.id).toBeDefined();
+    assert.notStrictEqual(handleAgain.id, undefined);
 
     await driver.dispose(handle);
     await driver.dispose(handleAgain);
@@ -620,12 +621,12 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       }
     );
 
-    expect(instances.size).toBe(1);
+    assert.strictEqual(instances.size, 1);
 
     await closePromise;
 
     // exit 与 outputClosed 双条件满足后实例应自动从受管表移除，无需显式 dispose
-    expect(instances.size).toBe(0);
+    assert.strictEqual(instances.size, 0);
 
     // 高频模拟一次性 run 链路：多次 spawn 后表仍应回落归零，不随调用量单调增长
     for (let i = 0; i < 5; i++) {
@@ -645,11 +646,11 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       );
       await eachClose;
     }
-    expect(instances.size).toBe(0);
+    assert.strictEqual(instances.size, 0);
 
     // dispose 已自清理的实例应为无害空操作
     await driver.dispose(handle);
-    expect(instances.size).toBe(0);
+    assert.strictEqual(instances.size, 0);
   });
 
   it("drain 超时路径同样触发实例自清理", async () => {
@@ -681,12 +682,12 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       }
     );
 
-    expect(instances.size).toBe(1);
+    assert.strictEqual(instances.size, 1);
 
     // 触发 exit 但刻意不关闭 stdio，等待 drain 超时后输出关闭也应触发自清理
     mockChild.emit("exit", 0, null);
     await closePromise;
 
-    expect(instances.size).toBe(0);
+    assert.strictEqual(instances.size, 0);
   });
 });

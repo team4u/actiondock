@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -40,38 +41,38 @@ describe("Project Loader & Init", () => {
       description: "Sample project for testing",
     });
 
-    expect(existsSync(join(tempDir, "actiondock.json"))).toBe(true);
-    expect(existsSync(join(tempDir, "actiondock.manifest.json"))).toBe(false);
-    expect(existsSync(join(tempDir, "package.json"))).toBe(true);
-    expect(existsSync(join(tempDir, "actions", "greet.ts"))).toBe(true);
-    expect(existsSync(join(tempDir, "playbooks", "greet-user.md"))).toBe(true);
+    assert.strictEqual(existsSync(join(tempDir, "actiondock.json")), true);
+    assert.strictEqual(existsSync(join(tempDir, "actiondock.manifest.json")), false);
+    assert.strictEqual(existsSync(join(tempDir, "package.json")), true);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "greet.ts")), true);
+    assert.strictEqual(existsSync(join(tempDir, "playbooks", "greet-user.md")), true);
 
     const config = loadProjectConfig(tempDir);
-    expect(config.id).toBe("org.test-project");
-    expect(config.name).toBe("Test Project");
-    expect(config.schemaVersion).toBe(2);
-    expect(config.actions?.["sample.greet"]).toBeDefined();
-    expect(config.playbooks?.["greet-user"]).toBeDefined();
+    assert.strictEqual(config.id, "org.test-project");
+    assert.strictEqual(config.name, "Test Project");
+    assert.strictEqual(config.schemaVersion, 2);
+    assert.notStrictEqual(config.actions?.["sample.greet"], undefined);
+    assert.notStrictEqual(config.playbooks?.["greet-user"], undefined);
 
     const actionFiles = discoverActionFiles(tempDir, config.actionsDir);
-    expect(actionFiles.length).toBe(1);
+    assert.strictEqual(actionFiles.length, 1);
 
     const actions = await loadActions(tempDir, config.actionsDir);
-    expect(actions.size).toBe(1);
-    expect(actions.has("sample.greet")).toBe(true);
+    assert.strictEqual(actions.size, 1);
+    assert.strictEqual(actions.has("sample.greet"), true);
     const greetAction = actions.get("sample.greet");
-    expect(greetAction).toBeDefined();
-    expect(typeof greetAction?.run).toBe("function");
+    assert.notStrictEqual(greetAction, undefined);
+    assert.strictEqual(typeof greetAction?.run, "function");
 
     const greetSpec = config.actions?.["sample.greet"];
-    expect(greetSpec?.description).toBe("Greeting action demonstrating basic input, config, and state usage");
-    expect(greetSpec?.inputSchema).toBeDefined();
+    assert.strictEqual(greetSpec?.description, "Greeting action demonstrating basic input, config, and state usage");
+    assert.notStrictEqual(greetSpec?.inputSchema, undefined);
 
     const playbooks = loadPlaybooks(tempDir, config.playbooksDir);
-    expect(playbooks.size).toBe(1);
-    expect(playbooks.has("greet-user")).toBe(true);
-    expect(playbooks.get("greet-user")?.actions).toEqual(["sample.greet"]);
-    expect(playbooks.get("greet-user")?.content).toContain("# Greeting SOP");
+    assert.strictEqual(playbooks.size, 1);
+    assert.strictEqual(playbooks.has("greet-user"), true);
+    assert.deepStrictEqual(playbooks.get("greet-user")?.actions, ["sample.greet"]);
+    assert.ok((playbooks.get("greet-user")?.content).includes("# Greeting SOP"));
   });
 
   it("parses pure markdown playbook correctly without YAML frontmatter", () => {
@@ -83,16 +84,16 @@ Follow these steps carefully.
       description: "Deploy service to production",
       actions: ["k8s.apply", "health.check"],
     });
-    expect(pb.id).toBe("deploy-service");
-    expect(pb.description).toBe("Deploy service to production");
-    expect(pb.actions).toEqual(["k8s.apply", "health.check"]);
-    expect(pb.content).toBe("# Deploy Service SOP\n\nFollow these steps carefully.");
+    assert.strictEqual(pb.id, "deploy-service");
+    assert.strictEqual(pb.description, "Deploy service to production");
+    assert.deepStrictEqual(pb.actions, ["k8s.apply", "health.check"]);
+    assert.strictEqual(pb.content, "# Deploy Service SOP\n\nFollow these steps carefully.");
 
     // Windows backslash path fallback test
     const winPb = parsePlaybookContent("# Just content", "C:\\Users\\dev\\playbooks\\quick-start.md");
-    expect(winPb.id).toBe("quick-start");
-    expect(winPb.content).toBe("# Just content");
-    expect(winPb.actions).toEqual([]);
+    assert.strictEqual(winPb.id, "quick-start");
+    assert.strictEqual(winPb.content, "# Just content");
+    assert.deepStrictEqual(winPb.actions, []);
   });
 
   it("loads playbook metadata strictly from actiondock.json as single source of truth without merging frontmatter", () => {
@@ -132,16 +133,16 @@ Perform audit steps.
     );
 
     const playbooks = loadPlaybooks(tempDir);
-    expect(playbooks.size).toBe(1);
-    expect(playbooks.has("run-audit")).toBe(true);
-    expect(playbooks.has("malicious-override")).toBe(false);
-    expect(playbooks.has("unmanifested")).toBe(false);
+    assert.strictEqual(playbooks.size, 1);
+    assert.strictEqual(playbooks.has("run-audit"), true);
+    assert.strictEqual(playbooks.has("malicious-override"), false);
+    assert.strictEqual(playbooks.has("unmanifested"), false);
 
     const pb = playbooks.get("run-audit")!;
-    expect(pb.id).toBe("run-audit");
-    expect(pb.description).toBe("Audit task from manifest");
-    expect(pb.actions).toEqual(["sec.scan"]);
-    expect(pb.content).toBe("# Security Audit SOP\n\nPerform audit steps.");
+    assert.strictEqual(pb.id, "run-audit");
+    assert.strictEqual(pb.description, "Audit task from manifest");
+    assert.deepStrictEqual(pb.actions, ["sec.scan"]);
+    assert.strictEqual(pb.content, "# Security Audit SOP\n\nPerform audit steps.");
   });
 
   it("loads action metadata strictly from actiondock.json as single source of truth", async () => {
@@ -168,24 +169,24 @@ Perform audit steps.
     );
 
     const loadedActions = await loadActions(tempDir);
-    expect(loadedActions.size).toBe(1);
+    assert.strictEqual(loadedActions.size, 1);
     const addAction = loadedActions.get("calc.add");
-    expect(addAction).toBeDefined();
-    expect(typeof addAction?.run).toBe("function");
+    assert.notStrictEqual(addAction, undefined);
+    assert.strictEqual(typeof addAction?.run, "function");
 
     const manifest = loadManifest(tempDir);
     const addSpec = manifest?.actions?.["calc.add"];
-    expect(addSpec?.description).toBe("Add numbers (from actiondock.json)");
-    expect(addSpec?.tags).toEqual(["math", "fast"]);
-    expect(addSpec?.uses).toEqual(["other.pkg/act"]);
-    expect(addSpec?.inputSchema).toEqual({ type: "object", properties: { a: { type: "number" } } });
+    assert.strictEqual(addSpec?.description, "Add numbers (from actiondock.json)");
+    assert.deepStrictEqual(addSpec?.tags, ["math", "fast"]);
+    assert.deepStrictEqual(addSpec?.uses, ["other.pkg/act"]);
+    assert.deepStrictEqual(addSpec?.inputSchema, { type: "object", properties: { a: { type: "number" } } });
   });
 
   it("converges allowed installers strictly to npm and bun", () => {
-    expect(ALLOWED_INSTALLERS.has("npm")).toBe(true);
-    expect(ALLOWED_INSTALLERS.has("bun")).toBe(true);
-    expect(ALLOWED_INSTALLERS.has("pnpm")).toBe(false);
-    expect(ALLOWED_INSTALLERS.has("yarn")).toBe(false);
+    assert.strictEqual(ALLOWED_INSTALLERS.has("npm"), true);
+    assert.strictEqual(ALLOWED_INSTALLERS.has("bun"), true);
+    assert.strictEqual(ALLOWED_INSTALLERS.has("pnpm"), false);
+    assert.strictEqual(ALLOWED_INSTALLERS.has("yarn"), false);
   });
 
   it("resolves install commands respecting npm and bun priority and lockfiles", async () => {
@@ -194,15 +195,15 @@ Perform audit steps.
     try {
       // 1. Explicit ACTIONDOCK_INSTALLER
       process.env.ACTIONDOCK_INSTALLER = "bun";
-      expect(await getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+      assert.deepStrictEqual(await getInstallCommand(pkgDir), ["bun", "install"]);
 
       process.env.ACTIONDOCK_INSTALLER = "npm";
-      expect(await getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+      assert.deepStrictEqual(await getInstallCommand(pkgDir), ["npm", "install"]);
 
       // Disallowed installers should be ignored and fall back
       process.env.ACTIONDOCK_INSTALLER = "pnpm";
       const pnpmFallback = await getInstallCommand(pkgDir);
-      expect(["npm", "bun"]).toContain(pnpmFallback[0]);
+      assert.ok((["npm", "bun"]).includes(pnpmFallback[0]));
 
       delete process.env.ACTIONDOCK_INSTALLER;
 
@@ -210,16 +211,16 @@ Perform audit steps.
       // pnpm-lock.yaml and yarn.lock are ignored
       writeFileSync(join(pkgDir, "pnpm-lock.yaml"), "lockfileVersion: 5.4");
       const ignoredLock = await getInstallCommand(pkgDir);
-      expect(ignoredLock[0]).not.toBe("pnpm");
+      assert.notStrictEqual(ignoredLock[0], "pnpm");
 
       // bun.lock / bun.lockb matches bun
       writeFileSync(join(pkgDir, "bun.lockb"), "");
-      expect(await getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+      assert.deepStrictEqual(await getInstallCommand(pkgDir), ["bun", "install"]);
 
       // package-lock.json matches npm
       rmSync(join(pkgDir, "bun.lockb"), { force: true });
       writeFileSync(join(pkgDir, "package-lock.json"), "{}");
-      expect(await getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+      assert.deepStrictEqual(await getInstallCommand(pkgDir), ["npm", "install"]);
     } finally {
       if (origEnv === undefined) {
         delete process.env.ACTIONDOCK_INSTALLER;
@@ -237,21 +238,21 @@ Perform audit steps.
         join(tempDir, "actiondock.json"),
         JSON.stringify({ id: "safe-pkg", actionsDir: "/etc/passwd" })
       );
-      expect(() => loadProjectConfig(tempDir)).toThrow(/cannot be an absolute path/);
+      assert.throws(() => loadProjectConfig(tempDir), /cannot be an absolute path/);
 
       // 相对路径越界 ..
       writeFileSync(
         join(tempDir, "actiondock.json"),
         JSON.stringify({ id: "safe-pkg", actionsDir: "../secret" })
       );
-      expect(() => loadProjectConfig(tempDir)).toThrow(/escapes boundary/);
+      assert.throws(() => loadProjectConfig(tempDir), /escapes boundary/);
 
       // playbooksDir 越界
       writeFileSync(
         join(tempDir, "actiondock.json"),
         JSON.stringify({ id: "safe-pkg", playbooksDir: "../../outside" })
       );
-      expect(() => loadProjectConfig(tempDir)).toThrow(/escapes boundary/);
+      assert.throws(() => loadProjectConfig(tempDir), /escapes boundary/);
     });
 
     it("rejects symlinks that resolve outside of project boundary", () => {
@@ -264,7 +265,7 @@ Perform audit steps.
           join(tempDir, "actiondock.json"),
           JSON.stringify({ id: "safe-pkg", actionsDir: "symlink-actions" })
         );
-        expect(() => loadProjectConfig(tempDir)).toThrow(/symlink resolves outside boundary/);
+        assert.throws(() => loadProjectConfig(tempDir), /symlink resolves outside boundary/);
       } finally {
         rmSync(outsideDir, { recursive: true, force: true });
       }
@@ -278,9 +279,8 @@ Perform audit steps.
 
         // The target file does not exist yet, but its parent directory is a symlink pointing outside
         const nonExistentTarget = join(symlinkDir, "sub", "deep", "nonexistent.ts");
-        expect(() =>
-          assertPathWithinRoot(tempDir, nonExistentTarget, "testFile")
-        ).toThrow(/symlink resolves outside boundary/);
+        assert.throws(() =>
+          assertPathWithinRoot(tempDir, nonExistentTarget, "testFile"), /symlink resolves outside boundary/);
       } finally {
         rmSync(outsideDir, { recursive: true, force: true });
       }
@@ -300,11 +300,11 @@ Perform audit steps.
         const targetPath = join(rootDir, "pkg", "runtime.db");
 
         // Should not throw because canonical target is inside canonical root
-        expect(() => assertPathWithinRoot(rootDir, targetPath, "storagePath")).not.toThrow();
+        assert.doesNotThrow(() => assertPathWithinRoot(rootDir, targetPath, "storagePath"));
 
         // But escaping the canonical root should still throw
         const escapingTarget = join(rootDir, "..", "..", "outside.db");
-        expect(() => assertPathWithinRoot(rootDir, escapingTarget, "storagePath")).toThrow();
+        assert.throws(() => assertPathWithinRoot(rootDir, escapingTarget, "storagePath"));
       } finally {
         rmSync(externalBase, { recursive: true, force: true });
       }

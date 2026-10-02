@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -271,44 +272,44 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 1. 验证横幅展示 Actions 白名单信息
-    expect(bannerOutput).toContain("* Actions:         test.pkg-a/echo-a");
+    assert.ok((bannerOutput).includes("* Actions:         test.pkg-a/echo-a"));
 
     // 2. 验证 GET /api/v2/actions 仅返回 echo-a
     const actionsRes = await fetch(`${serverUrl}/api/v2/actions`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(actionsRes.status).toBe(200);
+    assert.strictEqual(actionsRes.status, 200);
     const actionsData = (await actionsRes.json()) as any[];
     const actionIds = actionsData.map((a: any) => a.id);
-    expect(actionIds.some((id: string) => id.includes("echo-a"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("secret-a"))).toBe(false);
-    expect(actionIds.some((id: string) => id.includes("echo-b"))).toBe(false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-a")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("secret-a")), false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-b")), false);
 
     // 3. 验证 GET /packages/:packageId/actions/:actionId 拦截与放行
     const showAllowedRes = await fetch(
       `${serverUrl}/api/v2/packages/test.pkg-a/actions/echo-a`,
       { headers: { Authorization: `Bearer ${SECRET}` } }
     );
-    expect(showAllowedRes.status).toBe(200);
+    assert.strictEqual(showAllowedRes.status, 200);
 
     const showForbiddenSamePkgRes = await fetch(
       `${serverUrl}/api/v2/packages/test.pkg-a/actions/secret-a`,
       { headers: { Authorization: `Bearer ${SECRET}` } }
     );
-    expect(showForbiddenSamePkgRes.status).toBe(403);
+    assert.strictEqual(showForbiddenSamePkgRes.status, 403);
     const showForbiddenSamePkgData = await showForbiddenSamePkgRes.json();
-    expect(showForbiddenSamePkgData.error.code).toBe("ACTION_FORBIDDEN");
+    assert.strictEqual(showForbiddenSamePkgData.error.code, "ACTION_FORBIDDEN");
 
     const showForbiddenOtherPkgRes = await fetch(
       `${serverUrl}/api/v2/packages/test.pkg-b/actions/echo-b`,
       { headers: { Authorization: `Bearer ${SECRET}` } }
     );
-    expect(showForbiddenOtherPkgRes.status).toBe(403);
+    assert.strictEqual(showForbiddenOtherPkgRes.status, 403);
     const showForbiddenOtherPkgData = await showForbiddenOtherPkgRes.json();
-    expect(showForbiddenOtherPkgData.error.code).toBe("ACTION_FORBIDDEN");
+    assert.strictEqual(showForbiddenOtherPkgData.error.code, "ACTION_FORBIDDEN");
 
     // 4. 验证 POST run 路由阻断与放行
     const runAllowedRes = await fetch(
@@ -319,13 +320,13 @@ export default defineAction({
           Authorization: `Bearer ${SECRET}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ input: { message: "hello-cli" } }),
+        body: JSON.stringify({ input: "hello-cli" }),
       }
     );
-    expect(runAllowedRes.status).toBe(200);
+    assert.strictEqual(runAllowedRes.status, 200);
     const runAllowedData = await runAllowedRes.json();
-    expect(runAllowedData.ok).toBe(true);
-    expect(runAllowedData.data.echo).toBe("hello-cli");
+    assert.strictEqual(runAllowedData.ok, true);
+    assert.strictEqual(runAllowedData.data.echo, "hello-cli");
 
     const runForbiddenRes = await fetch(
       `${serverUrl}/api/v2/packages/test.pkg-a/actions/secret-a/run`,
@@ -338,9 +339,9 @@ export default defineAction({
         body: JSON.stringify({ input: {} }),
       }
     );
-    expect(runForbiddenRes.status).toBe(403);
+    assert.strictEqual(runForbiddenRes.status, 403);
     const runForbiddenData = await runForbiddenRes.json();
-    expect(runForbiddenData.error.code).toBe("ACTION_FORBIDDEN");
+    assert.strictEqual(runForbiddenData.error.code, "ACTION_FORBIDDEN");
 
     // 5. 验证 MCP 端点工具过滤
     const mcpInitRes = await fetch(`${serverUrl}/mcp`, {
@@ -361,7 +362,7 @@ export default defineAction({
         },
       }),
     });
-    expect(mcpInitRes.status).toBe(200);
+    assert.strictEqual(mcpInitRes.status, 200);
 
     const sessionId = mcpInitRes.headers.get("mcp-session-id");
     const mcpHeaders: Record<string, string> = {
@@ -383,7 +384,7 @@ export default defineAction({
         params: {},
       }),
     });
-    expect(mcpToolsRes.status).toBe(200);
+    assert.strictEqual(mcpToolsRes.status, 200);
     const listRawText = await mcpToolsRes.text();
     let mcpToolsData: any;
     if (listRawText.startsWith("event:")) {
@@ -393,9 +394,9 @@ export default defineAction({
       mcpToolsData = JSON.parse(listRawText);
     }
     const toolNames = mcpToolsData.result?.tools?.map((t: any) => t.name) || [];
-    expect(toolNames).toContain("echo-a");
-    expect(toolNames).not.toContain("secret-a");
-    expect(toolNames).not.toContain("echo-b");
+    assert.ok((toolNames).includes("echo-a"));
+    assert.ok(!(toolNames).includes("secret-a"));
+    assert.ok(!(toolNames).includes("echo-b"));
   });
 
   it("支持多次指定与逗号分隔的 -A 参数配置", async () => {
@@ -451,10 +452,10 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 验证横幅展示
-    expect(bannerOutput).toContain("test.pkg-a/echo-a, test.pkg-b/echo-b, test.pkg-a/secret-a");
+    assert.ok((bannerOutput).includes("test.pkg-a/echo-a, test.pkg-b/echo-b, test.pkg-a/secret-a"));
 
     // 验证授权的 actions 均可执行
     const runARes = await fetch(
@@ -465,7 +466,7 @@ export default defineAction({
         body: JSON.stringify({ input: {} }),
       }
     );
-    expect(runARes.status).toBe(200);
+    assert.strictEqual(runARes.status, 200);
 
     const runBRes = await fetch(
       `${serverUrl}/api/v2/packages/test.pkg-b/actions/echo-b/run`,
@@ -475,7 +476,7 @@ export default defineAction({
         body: JSON.stringify({ input: {} }),
       }
     );
-    expect(runBRes.status).toBe(200);
+    assert.strictEqual(runBRes.status, 200);
 
     // 验证未包含在白名单中的 echo-c 被拦截
     const runCRes = await fetch(
@@ -486,9 +487,9 @@ export default defineAction({
         body: JSON.stringify({ input: {} }),
       }
     );
-    expect(runCRes.status).toBe(403);
+    assert.strictEqual(runCRes.status, 403);
     const runCData = await runCRes.json();
-    expect(runCData.error.code).toBe("ACTION_FORBIDDEN");
+    assert.strictEqual(runCData.error.code, "ACTION_FORBIDDEN");
   });
 
   it("当 -A 参数指定不存在的包时输出告警信息至 stderr", async () => {
@@ -542,9 +543,9 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
-    expect(stderrOutput).toContain(
+    assert.strictEqual(ready, true);
+    assert.ok((stderrOutput).includes(
       "Warning: Package 'nonexistent-pkg' specified in action 'nonexistent-pkg/my-action' was not found."
-    );
+    ));
   });
 });

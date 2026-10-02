@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -98,9 +99,9 @@ describe("CLI Machine-Mode Fallback Consistency", () => {
 
     for (const c of cases) {
       const proc = await runCliAsync(c.args, tempDir);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const parsed = JSON.parse(proc.stdout.toString());
-      expect(parsed).toEqual(c.empty as any);
+      assert.deepStrictEqual(parsed, c.empty as any);
     }
 
     // 显式 --fallback 时各命令一致回退（isFallback 标记或非空全量）
@@ -139,18 +140,18 @@ describe("CLI Machine-Mode Fallback Consistency", () => {
 
     for (const c of fallbackCases) {
       const proc = await runCliAsync(c.args, tempDir);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const parsed = JSON.parse(proc.stdout.toString());
-      expect(c.check(parsed)).toBe(true);
+      assert.strictEqual(c.check(parsed), true);
     }
 
     // 人类模式默认回退（无 --json）：list 与 state list 均输出全量（非空输出且退出码 0）
     const humanList = await runCliAsync(["list", "--intent", noMatch], tempDir);
-    expect(humanList.exitCode).toBe(0);
-    expect(humanList.stdout.toString()).toContain("sample.greet");
+    assert.strictEqual(humanList.exitCode, 0);
+    assert.ok((humanList.stdout.toString()).includes("sample.greet"));
 
     const humanState = await runCliAsync(["state", "list", "--intent", noMatch], tempDir);
-    expect(humanState.exitCode).toBe(0);
-    expect(humanState.stdout.toString()).toContain("greet_count");
+    assert.strictEqual(humanState.exitCode, 0);
+    assert.ok((humanState.stdout.toString()).includes("greet_count"));
   });
 });

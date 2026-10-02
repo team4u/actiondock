@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -15,7 +17,7 @@ function runCli(
   stdinInput?: string | Buffer,
   env?: Record<string, string>
 ) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -31,7 +33,7 @@ function runCli(
 describe("CLI Action Input Resolution - Shell Pipes and Platforms", () => {
   let tempDir: string;
 
-  beforeAll(() => {
+  before(() => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-input-shells-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-input-shells-home-"));
 
@@ -44,7 +46,7 @@ describe("CLI Action Input Resolution - Shell Pipes and Platforms", () => {
 
     // Initialize project
     const initProc = runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
-    expect(initProc.exitCode).toBe(0);
+    assert.strictEqual(initProc.exitCode, 0);
 
     // Create an echo action that returns the exact received input
     const echoActionSource = `import { defineAction } from "@actiondock/sdk";
@@ -67,7 +69,7 @@ export default defineAction(async (input: any) => {
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -88,15 +90,15 @@ export default defineAction(async (input: any) => {
 
   // 15. PowerShell 调用
   it("supports PowerShell pipe invocation when pwsh / powershell is available", () => {
-    const pwshBin = Bun.which("pwsh") || Bun.which("powershell");
+    const pwshBin = whichExecutable("pwsh") || whichExecutable("powershell");
     if (!pwshBin) {
       // If PowerShell is not installed in the environment, test child process piped simulation
       const pipedData = JSON.stringify({ powerShell: true, author: "PowerShellSimulated" });
       const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, pipedData);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const res = JSON.parse(proc.stdout.toString());
-      expect(res.ok).toBe(true);
-      expect(res.data.received.author).toBe("PowerShellSimulated");
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(res.data.received.author, "PowerShellSimulated");
       return;
     }
 
@@ -106,23 +108,23 @@ export default defineAction(async (input: any) => {
       env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
       encoding: "utf-8",
     });
-    expect(res.status).toBe(0);
+    assert.strictEqual(res.status, 0);
     const parsed = JSON.parse(res.stdout);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.received.author).toBe("PowerShellUser");
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.received.author, "PowerShellUser");
   });
 
   // 16. cmd.exe 调用
   it("supports cmd.exe invocation when cmd is available", () => {
-    const cmdBin = Bun.which("cmd.exe") || Bun.which("cmd");
+    const cmdBin = whichExecutable("cmd.exe") || whichExecutable("cmd");
     if (!cmdBin || process.platform !== "win32") {
       // If cmd.exe is not available (e.g. on Linux), verify pipe simulation behavior
       const cmdData = JSON.stringify({ cmd: true, author: "CmdSimulated" });
       const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, cmdData);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const res = JSON.parse(proc.stdout.toString());
-      expect(res.ok).toBe(true);
-      expect(res.data.received.author).toBe("CmdSimulated");
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(res.data.received.author, "CmdSimulated");
       return;
     }
 
@@ -135,10 +137,10 @@ export default defineAction(async (input: any) => {
       encoding: "utf-8",
       windowsVerbatimArguments: true,
     });
-    expect(res.status).toBe(0);
+    assert.strictEqual(res.status, 0);
     const parsed = JSON.parse(res.stdout);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.received.author).toBe("CmdUser");
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.received.author, "CmdUser");
   });
 
   // 17. Bash / zsh 调用
@@ -147,23 +149,23 @@ export default defineAction(async (input: any) => {
       // Bash and zsh are POSIX shells; on Windows verify pipe simulation behavior
       const shellData = JSON.stringify({ fromShell: true, simulated: true });
       const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, shellData);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const res = JSON.parse(proc.stdout.toString());
-      expect(res.ok).toBe(true);
-      expect(res.data.received.fromShell).toBe(true);
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(res.data.received.fromShell, true);
       return;
     }
 
-    const bashBin = Bun.which("bash");
-    const zshBin = Bun.which("zsh");
+    const bashBin = whichExecutable("bash");
+    const zshBin = whichExecutable("zsh");
 
     if (!bashBin && !zshBin) {
       const shellData = JSON.stringify({ fromShell: true, simulated: true });
       const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, shellData);
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const res = JSON.parse(proc.stdout.toString());
-      expect(res.ok).toBe(true);
-      expect(res.data.received.fromShell).toBe(true);
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(res.data.received.fromShell, true);
       return;
     }
 
@@ -178,10 +180,10 @@ export default defineAction(async (input: any) => {
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
         encoding: "utf-8",
       });
-      expect(bashInlineRes.status).toBe(0);
+      assert.strictEqual(bashInlineRes.status, 0);
       const parsedInline = JSON.parse(bashInlineRes.stdout);
-      expect(parsedInline.ok).toBe(true);
-      expect(parsedInline.data.received.shell).toBe("bash-inline");
+      assert.strictEqual(parsedInline.ok, true);
+      assert.strictEqual(parsedInline.data.received.shell, "bash-inline");
 
       // Stdin pipe in Bash
       const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file - --json`;
@@ -190,10 +192,10 @@ export default defineAction(async (input: any) => {
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
         encoding: "utf-8",
       });
-      expect(bashPipeRes.status).toBe(0);
+      assert.strictEqual(bashPipeRes.status, 0);
       const parsedPipe = JSON.parse(bashPipeRes.stdout);
-      expect(parsedPipe.ok).toBe(true);
-      expect(parsedPipe.data.received.fromShell).toBe(true);
+      assert.strictEqual(parsedPipe.ok, true);
+      assert.strictEqual(parsedPipe.data.received.fromShell, true);
     }
 
     if (zshBin) {
@@ -204,10 +206,10 @@ export default defineAction(async (input: any) => {
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
         encoding: "utf-8",
       });
-      expect(zshInlineRes.status).toBe(0);
+      assert.strictEqual(zshInlineRes.status, 0);
       const parsedInline = JSON.parse(zshInlineRes.stdout);
-      expect(parsedInline.ok).toBe(true);
-      expect(parsedInline.data.received.shell).toBe("zsh-inline");
+      assert.strictEqual(parsedInline.ok, true);
+      assert.strictEqual(parsedInline.data.received.shell, "zsh-inline");
 
       // Stdin pipe in Zsh
       const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file - --json`;
@@ -216,10 +218,10 @@ export default defineAction(async (input: any) => {
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
         encoding: "utf-8",
       });
-      expect(zshPipeRes.status).toBe(0);
+      assert.strictEqual(zshPipeRes.status, 0);
       const parsedPipe = JSON.parse(zshPipeRes.stdout);
-      expect(parsedPipe.ok).toBe(true);
-      expect(parsedPipe.data.received.fromShell).toBe(true);
+      assert.strictEqual(parsedPipe.ok, true);
+      assert.strictEqual(parsedPipe.data.received.fromShell, true);
     }
   });
 });

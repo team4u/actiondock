@@ -1,5 +1,6 @@
+import assert from "node:assert/strict";
 import http from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { after, before, describe, it } from "node:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
@@ -14,7 +15,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
   let service: any;
   let target: any;
 
-  beforeAll(async () => {
+  before(async () => {
     const calcAction = defineAction({
       run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
     });
@@ -108,7 +109,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (serverInstance) {
       await serverInstance.stop();
     }
@@ -120,12 +121,12 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${serverUrl}${endpoint}`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const data = await res.json();
-        expect(data.ok).toBe(true);
-        expect(data.status).toBe("healthy");
-        expect(typeof data.timestamp).toBe("string");
-        expect(data.version).toBeDefined();
+        assert.strictEqual(data.ok, true);
+        assert.strictEqual(data.status, "healthy");
+        assert.strictEqual(typeof data.timestamp, "string");
+        assert.notStrictEqual(data.version, undefined);
       }
     });
   });
@@ -136,11 +137,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${serverUrl}${endpoint}`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const data = await res.json();
-        expect(data.ok).toBe(true);
-        expect(data.packages).toBeDefined();
-        expect(data.packages.length).toBe(2);
+        assert.strictEqual(data.ok, true);
+        assert.notStrictEqual(data.packages, undefined);
+        assert.strictEqual(data.packages.length, 2);
       }
     });
 
@@ -149,11 +150,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${serverUrl}${endpoint}`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const data = await res.json();
-        expect(data.ok).toBe(true);
-        expect(Array.isArray(data.packages)).toBe(true);
-        expect(data.packages.length).toBe(2);
+        assert.strictEqual(data.ok, true);
+        assert.strictEqual(Array.isArray(data.packages), true);
+        assert.strictEqual(data.packages.length, 2);
       }
     });
   });
@@ -164,10 +165,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${serverUrl}${endpoint}`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const data = await res.json();
-        expect(Array.isArray(data)).toBe(true);
-        expect(data.some((a: any) => a.id.endsWith("calc"))).toBe(true);
+        assert.strictEqual(Array.isArray(data), true);
+        assert.strictEqual(data.some((a: any) => a.id.endsWith("calc")), true);
       }
     });
 
@@ -175,11 +176,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const res = await fetch(`${serverUrl}/api/v2/actions/pkg.math/calc`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const data = await res.json();
-      expect(data.id).toBe("calc");
-      expect(data.description).toBe("算术计算动作");
-      expect(data.inputSchema).toBeDefined();
+      assert.strictEqual(data.id, "calc");
+      assert.strictEqual(data.description, "算术计算动作");
+      assert.notStrictEqual(data.inputSchema, undefined);
     });
 
     it("POST /api/v2/actions/:id/run 同步委托 target.runAction()", async () => {
@@ -193,10 +194,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           input: { x: 15, y: 27 },
         }),
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const data = await res.json();
-      expect(data.ok).toBe(true);
-      expect(data.data).toEqual({ result: 42 });
+      assert.strictEqual(data.ok, true);
+      assert.deepStrictEqual(data.data, { result: 42 });
     });
 
     it("POST /api/v2/packages/:packageId/actions/:actionId/run 多包前缀路由支持", async () => {
@@ -210,10 +211,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           input: { x: 100, y: 200 },
         }),
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const data = await res.json();
-      expect(data.ok).toBe(true);
-      expect(data.data).toEqual({ result: 300 });
+      assert.strictEqual(data.ok, true);
+      assert.deepStrictEqual(data.data, { result: 300 });
     });
 
     it("POST /api/v2/actions/:id/start 异步任务派发", async () => {
@@ -225,10 +226,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({}),
       });
-      expect(res.status).toBe(202);
+      assert.strictEqual(res.status, 202);
       const data = await res.json();
-      expect(data.ok).toBe(true);
-      expect(data.runId).toBeDefined();
+      assert.strictEqual(data.ok, true);
+      assert.notStrictEqual(data.runId, undefined);
 
       const runId = data.runId;
 
@@ -236,9 +237,9 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const runRes = await fetch(`${serverUrl}/api/v2/runs/${runId}`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(runRes.status).toBe(200);
+      assert.strictEqual(runRes.status, 200);
       const runData = await runRes.json();
-      expect(runData.id).toBe(runId);
+      assert.strictEqual(runData.id, runId);
 
       // POST /api/v2/runs/:id/cancel 取消任务
       const cancelRes = await fetch(`${serverUrl}/api/v2/runs/${runId}/cancel`, {
@@ -249,10 +250,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({ reason: "测试取消" }),
       });
-      expect(cancelRes.status).toBe(200);
+      assert.strictEqual(cancelRes.status, 200);
       const cancelData = await cancelRes.json();
-      expect(cancelData.ok).toBe(true);
-      expect(cancelData.status).toBe("cancelled");
+      assert.strictEqual(cancelData.ok, true);
+      assert.strictEqual(cancelData.status, "cancelled");
     });
   });
 
@@ -262,10 +263,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${serverUrl}${endpoint}`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const data = await res.json();
-        expect(Array.isArray(data)).toBe(true);
-        expect(data.some((p: any) => p.id.endsWith("calc-sop"))).toBe(true);
+        assert.strictEqual(Array.isArray(data), true);
+        assert.strictEqual(data.some((p: any) => p.id.endsWith("calc-sop")), true);
       }
     });
 
@@ -273,11 +274,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const res = await fetch(`${serverUrl}/api/v2/playbooks/pkg.math/calc-sop`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const data = await res.json();
-      expect(data.id).toBe("calc-sop");
-      expect(data.description).toBe("计算规程");
-      expect(data.content).toContain("# Calc SOP");
+      assert.strictEqual(data.id, "calc-sop");
+      assert.strictEqual(data.description, "计算规程");
+      assert.ok((data.content).includes("# Calc SOP"));
     });
   });
 
@@ -297,14 +298,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const sseRes = await fetch(`${serverUrl}/api/v2/runs/${runId}/events`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(sseRes.status).toBe(200);
-      expect(sseRes.headers.get("content-type")).toContain("text/event-stream");
+      assert.strictEqual(sseRes.status, 200);
+      assert.ok((sseRes.headers.get("content-type")).includes("text/event-stream"));
 
       const reader = sseRes.body?.getReader();
       if (reader) {
         const { value } = await reader.read();
         const text = new TextDecoder().decode(value);
-        expect(text).toContain("event:");
+        assert.ok((text).includes("event:"));
         await reader.cancel();
       }
 
@@ -337,10 +338,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           },
           body: ep.body ? JSON.stringify(ep.body) : undefined,
         });
-        expect(res.status).toBe(403);
+        assert.strictEqual(res.status, 403);
         const data = await res.json();
-        expect(data.ok).toBe(false);
-        expect(data.error.code).toBe("CAPABILITY_UNAVAILABLE");
+        assert.strictEqual(data.ok, false);
+        assert.strictEqual(data.error.code, "CAPABILITY_UNAVAILABLE");
       }
     });
 
@@ -369,16 +370,16 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const stateRes = await fetch(`${url}/api/v2/state`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(stateRes.status).toBe(200);
+        assert.strictEqual(stateRes.status, 200);
         const stateData = await stateRes.json();
-        expect(stateData.ok).toBe(true);
+        assert.strictEqual(stateData.ok, true);
 
         const configRes = await fetch(`${url}/api/v2/config`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(configRes.status).toBe(200);
+        assert.strictEqual(configRes.status, 200);
         const configData = await configRes.json();
-        expect(configData.ok).toBe(true);
+        assert.strictEqual(configData.ok, true);
       } finally {
         await mgmtServer.stop();
       }
@@ -389,7 +390,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     let allowlistServer: any;
     let allowlistUrl: string;
 
-    beforeAll(async () => {
+    before(async () => {
       allowlistServer = await startActionDockServer({
         port: 0,
         hostname: "127.0.0.1",
@@ -401,7 +402,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       allowlistUrl = `http://127.0.0.1:${allowlistServer.port}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (allowlistServer) {
         await allowlistServer.stop();
       }
@@ -412,43 +413,43 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const listRes = await fetch(`${allowlistUrl}/api/v2/playbooks`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(listRes.status).toBe(200);
+      assert.strictEqual(listRes.status, 200);
       const listData = await listRes.json();
-      expect(Array.isArray(listData)).toBe(true);
-      expect(listData.every((p: any) => p.packageId === "pkg.math")).toBe(true);
+      assert.strictEqual(Array.isArray(listData), true);
+      assert.strictEqual(listData.every((p: any) => p.packageId === "pkg.math"), true);
 
       // 显式查询非白名单包的规程列表返回 403
       const forbiddenListRes = await fetch(`${allowlistUrl}/api/v2/playbooks?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(forbiddenListRes.status).toBe(403);
+      assert.strictEqual(forbiddenListRes.status, 403);
       const forbiddenListData = await forbiddenListRes.json();
-      expect(forbiddenListData.ok).toBe(false);
-      expect(forbiddenListData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(forbiddenListData.ok, false);
+      assert.strictEqual(forbiddenListData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 多包路径查询非白名单包返回 403
       const pkgPbRes = await fetch(`${allowlistUrl}/api/v2/packages/pkg.extra/playbooks/calc-sop`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(pkgPbRes.status).toBe(403);
+      assert.strictEqual(pkgPbRes.status, 403);
       const pkgPbData = await pkgPbRes.json();
-      expect(pkgPbData.ok).toBe(false);
-      expect(pkgPbData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(pkgPbData.ok, false);
+      assert.strictEqual(pkgPbData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 短路径带包前缀查询非白名单包返回 403
       const shortPbRes = await fetch(`${allowlistUrl}/api/v2/playbooks/pkg.extra/calc-sop`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(shortPbRes.status).toBe(403);
+      assert.strictEqual(shortPbRes.status, 403);
       const shortPbData = await shortPbRes.json();
-      expect(shortPbData.ok).toBe(false);
-      expect(shortPbData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(shortPbData.ok, false);
+      assert.strictEqual(shortPbData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 白名单包内的规程正常访问
       const allowedPbRes = await fetch(`${allowlistUrl}/api/v2/playbooks/pkg.math/calc-sop`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(allowedPbRes.status).toBe(200);
+      assert.strictEqual(allowedPbRes.status, 200);
     });
 
     it("单 PackageRuntime 启动服务并配置白名单，请求短规程路由验证严格受到 packageAllowlist 拦截", async () => {
@@ -481,18 +482,18 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const res = await fetch(`${targetOnlyUrl}/api/v2/playbooks/sop-single`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(res.status).toBe(403);
+        assert.strictEqual(res.status, 403);
         const data = await res.json();
-        expect(data.ok).toBe(false);
-        expect(data.error.code).toBe("PACKAGE_NOT_ALLOWED");
+        assert.strictEqual(data.ok, false);
+        assert.strictEqual(data.error.code, "PACKAGE_NOT_ALLOWED");
 
         const legacyRes = await fetch(`${targetOnlyUrl}/playbooks/sop-single`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(legacyRes.status).toBe(403);
+        assert.strictEqual(legacyRes.status, 403);
         const legacyData = await legacyRes.json();
-        expect(legacyData.ok).toBe(false);
-        expect(legacyData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+        assert.strictEqual(legacyData.ok, false);
+        assert.strictEqual(legacyData.error.code, "PACKAGE_NOT_ALLOWED");
       } finally {
         await targetOnlyServer.stop();
         await singleService.close();
@@ -504,53 +505,53 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const pkgsRes = await fetch(`${allowlistUrl}/api/v2/packages`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(pkgsRes.status).toBe(200);
+      assert.strictEqual(pkgsRes.status, 200);
       const pkgsData = await pkgsRes.json();
-      expect(pkgsData.packages.length).toBe(1);
-      expect(pkgsData.packages[0].id).toBe("pkg.math");
+      assert.strictEqual(pkgsData.packages.length, 1);
+      assert.strictEqual(pkgsData.packages[0].id, "pkg.math");
 
       // GET /info 仅返回白名单包
       const infoRes = await fetch(`${allowlistUrl}/api/v2/info`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(infoRes.status).toBe(200);
+      assert.strictEqual(infoRes.status, 200);
       const infoData = await infoRes.json();
-      expect(infoData.packages.length).toBe(1);
-      expect(infoData.packages[0].id).toBe("pkg.math");
+      assert.strictEqual(infoData.packages.length, 1);
+      assert.strictEqual(infoData.packages[0].id, "pkg.math");
 
       // GET /info 下钻非白名单包返回 403
       const extraInfoRes = await fetch(`${allowlistUrl}/api/v2/info?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(extraInfoRes.status).toBe(403);
+      assert.strictEqual(extraInfoRes.status, 403);
       const extraInfoData = await extraInfoRes.json();
-      expect(extraInfoData.ok).toBe(false);
-      expect(extraInfoData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(extraInfoData.ok, false);
+      assert.strictEqual(extraInfoData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // GET /info 下钻白名单包正常响应
       const mathInfoRes = await fetch(`${allowlistUrl}/api/v2/info?package=pkg.math`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(mathInfoRes.status).toBe(200);
+      assert.strictEqual(mathInfoRes.status, 200);
       const mathInfoData = await mathInfoRes.json();
-      expect(mathInfoData.id).toBe("pkg.math");
+      assert.strictEqual(mathInfoData.id, "pkg.math");
     });
 
     it("Doctor 路由对非白名单包返回 403", async () => {
       const forbiddenDocRes = await fetch(`${allowlistUrl}/api/v2/doctor?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(forbiddenDocRes.status).toBe(403);
+      assert.strictEqual(forbiddenDocRes.status, 403);
       const forbiddenDocData = await forbiddenDocRes.json();
-      expect(forbiddenDocData.ok).toBe(false);
-      expect(forbiddenDocData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(forbiddenDocData.ok, false);
+      assert.strictEqual(forbiddenDocData.error.code, "PACKAGE_NOT_ALLOWED");
 
       const allowedDocRes = await fetch(`${allowlistUrl}/api/v2/doctor?package=pkg.math`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(allowedDocRes.status).toBe(200);
+      assert.strictEqual(allowedDocRes.status, 200);
       const allowedDocData = await allowedDocRes.json();
-      expect(allowedDocData.ok).toBe(true);
+      assert.strictEqual(allowedDocData.ok, true);
     });
 
     it("Doctor 路由通过 target-only App 解析目标包的真实根目录并执行诊断", async () => {
@@ -585,12 +586,12 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           const res = await fetch(`${docUrl}/api/v2/doctor?package=pkg.doctor-target`, {
             headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
           });
-          expect(res.status).toBe(200);
+          assert.strictEqual(res.status, 200);
           const data = await res.json();
-          expect(data.ok).toBe(true);
-          expect(data.report.hasProject).toBe(true);
-          expect(data.report.packageId).toBe("pkg.doctor-target");
-          expect(data.report.projectRoot).toBe(tempDir);
+          assert.strictEqual(data.ok, true);
+          assert.strictEqual(data.report.hasProject, true);
+          assert.strictEqual(data.report.packageId, "pkg.doctor-target");
+          assert.strictEqual(data.report.projectRoot, tempDir);
         } finally {
           await docServer.stop();
           await docService.close();
@@ -605,17 +606,17 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const listRes = await fetch(`${allowlistUrl}/api/v2/state?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(listRes.status).toBe(403);
+      assert.strictEqual(listRes.status, 403);
       const listData = await listRes.json();
-      expect(listData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(listData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 单键查询非白名单包
       const keyRes = await fetch(`${allowlistUrl}/api/v2/state/any_key?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(keyRes.status).toBe(403);
+      assert.strictEqual(keyRes.status, 403);
       const keyData = await keyRes.json();
-      expect(keyData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(keyData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 清空操作非白名单包
       const clearRes = await fetch(`${allowlistUrl}/api/v2/state/clear?package=pkg.extra`, {
@@ -626,17 +627,17 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({}),
       });
-      expect(clearRes.status).toBe(403);
+      assert.strictEqual(clearRes.status, 403);
       const clearData = await clearRes.json();
-      expect(clearData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(clearData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 默认解析白名单内的包正常放行
       const defaultRes = await fetch(`${allowlistUrl}/api/v2/state`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(defaultRes.status).toBe(200);
+      assert.strictEqual(defaultRes.status, 200);
       const defaultData = await defaultRes.json();
-      expect(defaultData.packageId).toBe("pkg.math");
+      assert.strictEqual(defaultData.packageId, "pkg.math");
     });
 
     it("Config 路由对非白名单包操作返回 403", async () => {
@@ -644,17 +645,17 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const queryRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(queryRes.status).toBe(403);
+      assert.strictEqual(queryRes.status, 403);
       const queryData = await queryRes.json();
-      expect(queryData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(queryData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 环境检查非白名单包
       const envRes = await fetch(`${allowlistUrl}/api/v2/config/env?package=pkg.extra`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(envRes.status).toBe(403);
+      assert.strictEqual(envRes.status, 403);
       const envData = await envRes.json();
-      expect(envData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(envData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 设置配置非白名单包
       const setRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.extra`, {
@@ -665,24 +666,24 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({ key: "k", value: "v" }),
       });
-      expect(setRes.status).toBe(403);
+      assert.strictEqual(setRes.status, 403);
       const setData = await setRes.json();
-      expect(setData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(setData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 删除配置非白名单包
       const delRes = await fetch(`${allowlistUrl}/api/v2/config/some_key?package=pkg.extra`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(delRes.status).toBe(403);
+      assert.strictEqual(delRes.status, 403);
       const delData = await delRes.json();
-      expect(delData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(delData.error.code, "PACKAGE_NOT_ALLOWED");
 
       // 白名单包正常放行
       const allowedRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.math`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(allowedRes.status).toBe(200);
+      assert.strictEqual(allowedRes.status, 200);
     });
 
     it("默认解析包若均不在 packageAllowlist 中时返回 403", async () => {
@@ -700,16 +701,16 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const stateRes = await fetch(`${emptyUrl}/api/v2/state`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(stateRes.status).toBe(403);
+        assert.strictEqual(stateRes.status, 403);
         const stateData = await stateRes.json();
-        expect(stateData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+        assert.strictEqual(stateData.error.code, "PACKAGE_NOT_ALLOWED");
 
         const configRes = await fetch(`${emptyUrl}/api/v2/config`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(configRes.status).toBe(403);
+        assert.strictEqual(configRes.status, 403);
         const configData = await configRes.json();
-        expect(configData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+        assert.strictEqual(configData.error.code, "PACKAGE_NOT_ALLOWED");
       } finally {
         await emptyAllowedServer.stop();
       }
@@ -719,10 +720,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const globalDocRes = await fetch(`${allowlistUrl}/api/v2/doctor`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(globalDocRes.status).toBe(403);
+      assert.strictEqual(globalDocRes.status, 403);
       const globalDocData = await globalDocRes.json();
-      expect(globalDocData.ok).toBe(false);
-      expect(globalDocData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      assert.strictEqual(globalDocData.ok, false);
+      assert.strictEqual(globalDocData.error.code, "PACKAGE_NOT_ALLOWED");
     });
   });
 
@@ -730,7 +731,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     let emptyListServer: any;
     let emptyListUrl: string;
 
-    beforeAll(async () => {
+    before(async () => {
       const calcAction = defineAction({
         run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
       });
@@ -805,7 +806,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       emptyListUrl = `http://127.0.0.1:${emptyListServer.port}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (emptyListServer) {
         await emptyListServer.stop();
       }
@@ -816,26 +817,26 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const pkgsRes = await fetch(`${emptyListUrl}/api/v2/packages`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(pkgsRes.status).toBe(200);
+      assert.strictEqual(pkgsRes.status, 200);
       const pkgsData = await pkgsRes.json();
-      expect(pkgsData.packages.length).toBe(2);
+      assert.strictEqual(pkgsData.packages.length, 2);
 
       // 2. GET /info 返回所有包
       const infoRes = await fetch(`${emptyListUrl}/api/v2/info`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(infoRes.status).toBe(200);
+      assert.strictEqual(infoRes.status, 200);
       const infoData = await infoRes.json();
-      expect(infoData.packages.length).toBe(2);
+      assert.strictEqual(infoData.packages.length, 2);
 
       // 3. GET /playbooks 正常返回规程
       const pbsRes = await fetch(`${emptyListUrl}/api/v2/playbooks`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(pbsRes.status).toBe(200);
+      assert.strictEqual(pbsRes.status, 200);
       const pbsData = await pbsRes.json();
-      expect(Array.isArray(pbsData)).toBe(true);
-      expect(pbsData.some((p: any) => p.id.endsWith("calc-sop"))).toBe(true);
+      assert.strictEqual(Array.isArray(pbsData), true);
+      assert.strictEqual(pbsData.some((p: any) => p.id.endsWith("calc-sop")), true);
 
       // 4. Action 运行正常放行
       const runRes = await fetch(`${emptyListUrl}/api/v2/actions/pkg.math/calc/run`, {
@@ -846,18 +847,18 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({ input: { x: 2, y: 3 } }),
       });
-      expect(runRes.status).toBe(200);
+      assert.strictEqual(runRes.status, 200);
       const runData = await runRes.json();
-      expect(runData.ok).toBe(true);
-      expect(runData.data).toEqual({ result: 5 });
+      assert.strictEqual(runData.ok, true);
+      assert.deepStrictEqual(runData.data, { result: 5 });
 
       // 5. 全局 doctor 正常放行
       const docRes = await fetch(`${emptyListUrl}/api/v2/doctor`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      expect(docRes.status).toBe(200);
+      assert.strictEqual(docRes.status, 200);
       const docData = await docRes.json();
-      expect(docData.ok).toBe(true);
+      assert.strictEqual(docData.ok, true);
     });
   });
 
@@ -875,11 +876,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       });
 
       const infoWithoutDebug = await debugApp.info();
-      expect(infoWithoutDebug.packageRoot).toBeUndefined();
+      assert.strictEqual(infoWithoutDebug.packageRoot, undefined);
 
       // 运行时动态传入覆盖
       const infoWithOverride = await debugApp.info({ exposeDebugInfo: true });
-      expect(infoWithOverride.packageRoot).toBe("/root/code/test-pkg");
+      assert.strictEqual(infoWithOverride.packageRoot, "/root/code/test-pkg");
 
       const defaultApp = await createPackageRuntime({
         packageRoot: "/root/code/test-pkg-default",
@@ -891,10 +892,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
       const defaultInfo = await defaultApp.info();
-      expect(defaultInfo.packageRoot).toBe("/root/code/test-pkg-default");
+      assert.strictEqual(defaultInfo.packageRoot, "/root/code/test-pkg-default");
 
       const infoExplicitFalse = await defaultApp.info({ exposeDebugInfo: false });
-      expect(infoExplicitFalse.packageRoot).toBeUndefined();
+      assert.strictEqual(infoExplicitFalse.packageRoot, undefined);
     });
 
     it("HTTP Server 在 exposeDebugInfo: false 时彻底脱敏 packageRoot 与 path", async () => {
@@ -913,23 +914,23 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         const pkgsRes = await fetch(`${noDebugUrl}/api/v2/packages`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(pkgsRes.status).toBe(200);
+        assert.strictEqual(pkgsRes.status, 200);
         const pkgsData = await pkgsRes.json();
         for (const pkg of pkgsData.packages) {
-          expect(pkg.packageRoot).toBeUndefined();
-          expect(pkg.path).toBeUndefined();
+          assert.strictEqual(pkg.packageRoot, undefined);
+          assert.strictEqual(pkg.path, undefined);
         }
 
         // GET /api/v2/info
         const infoRes = await fetch(`${noDebugUrl}/api/v2/info`, {
           headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
         });
-        expect(infoRes.status).toBe(200);
+        assert.strictEqual(infoRes.status, 200);
         const infoData = await infoRes.json();
-        expect(infoData.projectRoot).toBeUndefined();
+        assert.strictEqual(infoData.projectRoot, undefined);
         for (const pkg of infoData.packages) {
-          expect(pkg.packageRoot).toBeUndefined();
-          expect(pkg.path).toBeUndefined();
+          assert.strictEqual(pkg.packageRoot, undefined);
+          assert.strictEqual(pkg.path, undefined);
         }
       } finally {
         await noDebugServer.stop();
@@ -941,7 +942,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     let corsServer: any;
     let corsUrl: string;
 
-    beforeAll(async () => {
+    before(async () => {
       corsServer = await startActionDockServer({
         port: 0,
         hostname: "127.0.0.1",
@@ -953,7 +954,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       corsUrl = `http://127.0.0.1:${corsServer.port}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (corsServer) {
         await corsServer.stop();
       }
@@ -968,12 +969,12 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           "Access-Control-Request-Headers": "Content-Type, Authorization",
         },
       });
-      expect(res.status).toBe(204);
-      expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      assert.strictEqual(res.status, 204);
+      assert.strictEqual(res.headers.get("access-control-allow-origin"), "http://localhost:3000");
       const allowMethods = res.headers.get("access-control-allow-methods");
-      expect(allowMethods).toBeDefined();
-      expect(allowMethods).toContain("PUT");
-      expect(allowMethods).toBe("GET, POST, PUT, DELETE, OPTIONS");
+      assert.notStrictEqual(allowMethods, undefined);
+      assert.ok((allowMethods).includes("PUT"));
+      assert.strictEqual(allowMethods, "GET, POST, PUT, DELETE, OPTIONS");
     });
 
     it("OPTIONS 预检请求针对 DELETE 方法返回允许方法头", async () => {
@@ -985,12 +986,12 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           "Access-Control-Request-Headers": "Authorization",
         },
       });
-      expect(res.status).toBe(204);
-      expect(res.headers.get("access-control-allow-origin")).toBe("https://app.actiondock.com");
+      assert.strictEqual(res.status, 204);
+      assert.strictEqual(res.headers.get("access-control-allow-origin"), "https://app.actiondock.com");
       const allowMethods = res.headers.get("access-control-allow-methods");
-      expect(allowMethods).toBeDefined();
-      expect(allowMethods).toContain("DELETE");
-      expect(allowMethods).toBe("GET, POST, PUT, DELETE, OPTIONS");
+      assert.notStrictEqual(allowMethods, undefined);
+      assert.ok((allowMethods).includes("DELETE"));
+      assert.strictEqual(allowMethods, "GET, POST, PUT, DELETE, OPTIONS");
     });
 
     it("OPTIONS 预检请求针对 Idempotency-Key、X-Request-Id 与 Last-Event-ID 返回允许请求头", async () => {
@@ -1003,14 +1004,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
             "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID",
         },
       });
-      expect(res.status).toBe(204);
-      expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      assert.strictEqual(res.status, 204);
+      assert.strictEqual(res.headers.get("access-control-allow-origin"), "http://localhost:3000");
       const allowHeaders = res.headers.get("access-control-allow-headers");
-      expect(allowHeaders).toBeDefined();
-      expect(allowHeaders).toContain("Idempotency-Key");
-      expect(allowHeaders).toContain("X-Request-Id");
-      expect(allowHeaders).toContain("Last-Event-ID");
-      expect(allowHeaders).toBe(
+      assert.notStrictEqual(allowHeaders, undefined);
+      assert.ok((allowHeaders).includes("Idempotency-Key"));
+      assert.ok((allowHeaders).includes("X-Request-Id"));
+      assert.ok((allowHeaders).includes("Last-Event-ID"));
+      assert.strictEqual(allowHeaders, 
         "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID"
       );
     });
@@ -1042,14 +1043,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       });
 
       try {
-        expect(server.service).toBe(customService);
+        assert.strictEqual(server.service, customService);
 
         const res = await fetch(`${server.url}/api/v2/actions`, {
           headers: { Authorization: "Bearer test-token" },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
         const actions = await res.json();
-        expect(actions.some((a: any) => a.id === "ping" || a.id.endsWith("ping"))).toBe(true);
+        assert.strictEqual(actions.some((a: any) => a.id === "ping" || a.id.endsWith("ping")), true);
       } finally {
         await server.stop();
         await customService.close();
@@ -1082,8 +1083,8 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       });
 
       try {
-        expect(server.service).toBe(customService);
-        expect(server.url).toContain("127.0.0.1");
+        assert.strictEqual(server.service, customService);
+        assert.ok((server.url).includes("127.0.0.1"));
       } finally {
         await server.stop();
         await customService.close();
@@ -1093,14 +1094,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
 
   describe("IPv6 服务 URL 拼接与 formatHostForUrl 验证", () => {
     it("formatHostForUrl 正确为未包裹的 IPv6 地址添加中括号", () => {
-      expect(formatHostForUrl("::1")).toBe("[::1]");
-      expect(formatHostForUrl("::")).toBe("[::]");
-      expect(formatHostForUrl("2001:db8::1")).toBe("[2001:db8::1]");
-      expect(formatHostForUrl("[::1]")).toBe("[::1]");
-      expect(formatHostForUrl("[2001:db8::1]")).toBe("[2001:db8::1]");
-      expect(formatHostForUrl("127.0.0.1")).toBe("127.0.0.1");
-      expect(formatHostForUrl("localhost")).toBe("localhost");
-      expect(formatHostForUrl("0.0.0.0")).toBe("0.0.0.0");
+      assert.strictEqual(formatHostForUrl("::1"), "[::1]");
+      assert.strictEqual(formatHostForUrl("::"), "[::]");
+      assert.strictEqual(formatHostForUrl("2001:db8::1"), "[2001:db8::1]");
+      assert.strictEqual(formatHostForUrl("[::1]"), "[::1]");
+      assert.strictEqual(formatHostForUrl("[2001:db8::1]"), "[2001:db8::1]");
+      assert.strictEqual(formatHostForUrl("127.0.0.1"), "127.0.0.1");
+      assert.strictEqual(formatHostForUrl("localhost"), "localhost");
+      assert.strictEqual(formatHostForUrl("0.0.0.0"), "0.0.0.0");
     });
 
     it("服务端绑定 IPv6 回环地址 ::1 时生成合法 URL", async () => {
@@ -1112,13 +1113,13 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       });
 
       try {
-        expect(server.url).toMatch(/^http:\/\/\[::1\]:\d+$/);
-        expect(() => new URL(server.url)).not.toThrow();
+        assert.ok(/^http:\/\/\[::1\]:\d+$/.test(server.url));
+        assert.doesNotThrow(() => new URL(server.url));
 
         const res = await fetch(`${server.url}/api/v2/health`, {
           headers: { Authorization: "Bearer test-token" },
         });
-        expect(res.status).toBe(200);
+        assert.strictEqual(res.status, 200);
       } finally {
         await server.stop();
       }
@@ -1208,7 +1209,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           await new Promise((r) => setTimeout(r, 20));
         }
 
-        expect(aborted).toBe(true);
+        assert.strictEqual(aborted, true);
       } finally {
         await server.stop();
       }
@@ -1231,7 +1232,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       await server.stop();
 
       // service.close 必须在 server 停止之后执行
-      expect(order).toEqual(["service.close"]);
+      assert.deepStrictEqual(order, ["service.close"]);
     });
   });
 });

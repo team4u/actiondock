@@ -1,6 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { runCommandSync, startCommand } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 // Windows 下端到端流程会多次冷启动 Bun 子进程，默认 5s 超时不够
-setDefaultTimeout(120000);
+
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,7 +13,7 @@ const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 let tempHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -57,7 +59,7 @@ describe("CLI End-to-End", () => {
     }
   });
 
-  it("manages execution profiles and dispatches remote runs via ad serve", async () => {
+  it("manages execution profiles and dispatches remote runs via ad serve", { timeout: 120000 }, async () => {
     // 1. Initialize project in tempDir
     runCli(["init", "--id", "cloud.remote-node", "."], tempDir);
 
@@ -67,7 +69,7 @@ describe("CLI End-to-End", () => {
     const serverUrl = `http://127.0.0.1:${port}`;
     const serverHome = mkdtempSync(join(tmpdir(), "actiondock-server-home-"));
 
-    const serveProc = Bun.spawn(
+    const serveProc = startCommand(
       ["bun", cliPath, "serve", "--port", String(port), "--host", "127.0.0.1", "--token", SECRET],
       {
         cwd: tempDir,
@@ -93,8 +95,8 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(addProfileProc.exitCode).toBe(0);
-      expect(addProfileProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' configured");
+      assert.strictEqual(addProfileProc.exitCode, 0);
+      assert.ok((addProfileProc.stdout.toString()).includes("[OK] Profile 'cloud-aliyun' configured"));
 
       // Add profile with --token-env
       const addTokenEnvProc = runCli(
@@ -102,68 +104,68 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(addTokenEnvProc.exitCode).toBe(0);
-      expect(addTokenEnvProc.stdout.toString()).toContain("[OK] Profile 'cloud-token-env' configured");
+      assert.strictEqual(addTokenEnvProc.exitCode, 0);
+      assert.ok((addTokenEnvProc.stdout.toString()).includes("[OK] Profile 'cloud-token-env' configured"));
 
       const showProfileProc = runCli(["profile", "show", "cloud-aliyun", "--json"], tmpdir(), env);
-      expect(showProfileProc.exitCode).toBe(0);
+      assert.strictEqual(showProfileProc.exitCode, 0);
       const profileData = JSON.parse(showProfileProc.stdout.toString());
-      expect(profileData.name).toBe("cloud-aliyun");
-      expect(profileData.serverUrl).toBe(serverUrl);
-      expect(profileData.tokenConfigured).toBe(true);
-      expect(profileData.tokenSource).toBe("profile");
-      expect(profileData.token).toBe("********");
+      assert.strictEqual(profileData.name, "cloud-aliyun");
+      assert.strictEqual(profileData.serverUrl, serverUrl);
+      assert.strictEqual(profileData.tokenConfigured, true);
+      assert.strictEqual(profileData.tokenSource, "profile");
+      assert.strictEqual(profileData.token, "********");
 
       const showRevealProc = runCli(["profile", "show", "cloud-aliyun", "--reveal", "--json"], tmpdir(), env);
-      expect(showRevealProc.exitCode).toBe(0);
+      assert.strictEqual(showRevealProc.exitCode, 0);
       const revealData = JSON.parse(showRevealProc.stdout.toString());
-      expect(revealData.token).toBe(SECRET);
+      assert.strictEqual(revealData.token, SECRET);
 
       const showTokenEnvProc = runCli(
         ["profile", "show", "cloud-token-env", "--reveal", "--json"],
         tmpdir(),
         { ...env, REMOTE_TEST_TOKEN: SECRET }
       );
-      expect(showTokenEnvProc.exitCode).toBe(0);
+      assert.strictEqual(showTokenEnvProc.exitCode, 0);
       const tokenEnvData = JSON.parse(showTokenEnvProc.stdout.toString());
-      expect(tokenEnvData.tokenSource).toBe("tokenEnv");
-      expect(tokenEnvData.token).toBe(SECRET);
+      assert.strictEqual(tokenEnvData.tokenSource, "tokenEnv");
+      assert.strictEqual(tokenEnvData.token, SECRET);
 
       const listProfileProc = runCli(["profile", "list", "--json"], tmpdir(), env);
-      expect(listProfileProc.exitCode).toBe(0);
+      assert.strictEqual(listProfileProc.exitCode, 0);
       const listProfilesData = JSON.parse(listProfileProc.stdout.toString());
-      expect(listProfilesData.some((p: any) => p.name === "cloud-aliyun")).toBe(true);
-      expect(listProfilesData.some((p: any) => p.name === "cloud-token-env")).toBe(true);
+      assert.strictEqual(listProfilesData.some((p: any) => p.name === "cloud-aliyun"), true);
+      assert.strictEqual(listProfilesData.some((p: any) => p.name === "cloud-token-env"), true);
 
       const listProfileIntent = runCli(["profile", "list", "--intent", "aliyun|tencent", "--json"], tmpdir(), env);
-      expect(listProfileIntent.exitCode).toBe(0);
-      expect(JSON.parse(listProfileIntent.stdout.toString()).some((p: any) => p.name === "cloud-aliyun")).toBe(true);
+      assert.strictEqual(listProfileIntent.exitCode, 0);
+      assert.strictEqual(JSON.parse(listProfileIntent.stdout.toString()).some((p: any) => p.name === "cloud-aliyun"), true);
 
       // 4. Test connection via ad profile test
       const testProc = runCli(["profile", "test", "cloud-aliyun", "--json"], tmpdir(), env);
-      expect(testProc.exitCode).toBe(0);
+      assert.strictEqual(testProc.exitCode, 0);
       const testResult = JSON.parse(testProc.stdout.toString());
-      expect(testResult.ok).toBe(true);
-      expect(["ok", "healthy"]).toContain(testResult.status);
+      assert.strictEqual(testResult.ok, true);
+      assert.ok((["ok", "healthy"]).includes(testResult.status));
 
       // 5. Query remote actions and info via --profile
       const remoteInfoProc = runCli(["info", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
-      expect(remoteInfoProc.exitCode).toBe(0);
+      assert.strictEqual(remoteInfoProc.exitCode, 0);
       const remoteInfo = JSON.parse(remoteInfoProc.stdout.toString());
-      expect(remoteInfo.id).toBe("cloud.remote-node");
+      assert.strictEqual(remoteInfo.id, "cloud.remote-node");
 
       const remoteListProc = runCli(["list", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
-      expect(remoteListProc.exitCode).toBe(0);
+      assert.strictEqual(remoteListProc.exitCode, 0);
       const remoteActions = JSON.parse(remoteListProc.stdout.toString());
-      expect(remoteActions.items.some((a: any) => a.id === "sample.greet")).toBe(true);
+      assert.strictEqual(remoteActions.items.some((a: any) => a.id === "sample.greet"), true);
 
       const remoteListIntentProc = runCli(
         ["list", "--profile", "cloud-aliyun", "--intent", "sample.greet", "--json"],
         tmpdir(),
         env
       );
-      expect(remoteListIntentProc.exitCode).toBe(0);
-      expect(JSON.parse(remoteListIntentProc.stdout.toString()).items.length).toBe(1);
+      assert.strictEqual(remoteListIntentProc.exitCode, 0);
+      assert.strictEqual(JSON.parse(remoteListIntentProc.stdout.toString()).items.length, 1);
 
       // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
       const remoteListNoMatchProc = runCli(
@@ -171,8 +173,8 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(remoteListNoMatchProc.exitCode).toBe(0);
-      expect(JSON.parse(remoteListNoMatchProc.stdout.toString()).items).toEqual([]);
+      assert.strictEqual(remoteListNoMatchProc.exitCode, 0);
+      assert.deepStrictEqual(JSON.parse(remoteListNoMatchProc.stdout.toString()).items, []);
 
       // 6. Execute action on remote server via ad run --profile
       const remoteRunProc = runCli(
@@ -190,11 +192,11 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(remoteRunProc.exitCode).toBe(0);
+      assert.strictEqual(remoteRunProc.exitCode, 0);
       const runResult = JSON.parse(remoteRunProc.stdout.toString());
-      expect(runResult.ok).toBe(true);
-      expect(runResult.runId).toBeDefined();
-      expect(runResult.data.message).toBe("Greetings from Cloud, RemoteAgent!");
+      assert.strictEqual(runResult.ok, true);
+      assert.notStrictEqual(runResult.runId, undefined);
+      assert.strictEqual(runResult.data.message, "Greetings from Cloud, RemoteAgent!");
 
       // 6b. Remote Async Run & Remote Runs Show & Remote Runs Cancel
       const remoteAsyncProc = runCli(
@@ -211,11 +213,11 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(remoteAsyncProc.exitCode).toBe(0);
+      assert.strictEqual(remoteAsyncProc.exitCode, 0);
       const asyncRunResult = JSON.parse(remoteAsyncProc.stdout.toString());
-      expect(asyncRunResult.ok).toBe(true);
-      expect(asyncRunResult.runId).toBeDefined();
-      expect(asyncRunResult.status).toBe("running");
+      assert.strictEqual(asyncRunResult.ok, true);
+      assert.notStrictEqual(asyncRunResult.runId, undefined);
+      assert.strictEqual(asyncRunResult.status, "running");
 
       // Query remote run via ad runs show --profile
       const remoteShowProc = runCli(
@@ -223,9 +225,9 @@ describe("CLI End-to-End", () => {
         tmpdir(),
         env
       );
-      expect(remoteShowProc.exitCode).toBe(0);
+      assert.strictEqual(remoteShowProc.exitCode, 0);
       const remoteRunRecord = JSON.parse(remoteShowProc.stdout.toString());
-      expect(remoteRunRecord.id).toBe(asyncRunResult.runId);
+      assert.strictEqual(remoteRunRecord.id, asyncRunResult.runId);
 
       // Cancel remote run via ad runs cancel --profile
       const remoteCancelProc = runCli(
@@ -234,12 +236,12 @@ describe("CLI End-to-End", () => {
         env
       );
       // It might be 0 if cancelled or 1 if already finished by the time CLI ran
-      expect([0, 1]).toContain(remoteCancelProc.exitCode);
+      assert.ok(([0, 1]).includes(remoteCancelProc.exitCode));
 
       // 7. Remove profile
       const rmProc = runCli(["profile", "rm", "cloud-aliyun"], tmpdir(), env);
-      expect(rmProc.exitCode).toBe(0);
-      expect(rmProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' removed");
+      assert.strictEqual(rmProc.exitCode, 0);
+      assert.ok((rmProc.stdout.toString()).includes("[OK] Profile 'cloud-aliyun' removed"));
 
     } finally {
       try {
@@ -261,7 +263,7 @@ describe("CLI End-to-End", () => {
         }
       }
     }
-  }, 120000);
+  });
 
   it("links workspace directory and unlinks via CLI", () => {
     const wsHome = mkdtempSync(join(tmpdir(), "actiondock-link-home-"));
@@ -274,9 +276,9 @@ describe("CLI End-to-End", () => {
       const sub2 = join(wsDir, "packages", "pkg2");
 
       const init1 = runCli(["init", "--id", "team.link-sub1", "--name", "Sub 1", sub1], wsDir, env);
-      expect(init1.exitCode).toBe(0);
+      assert.strictEqual(init1.exitCode, 0);
       const init2 = runCli(["init", "--id", "team.link-sub2", "--name", "Sub 2", sub2], wsDir, env);
-      expect(init2.exitCode).toBe(0);
+      assert.strictEqual(init2.exitCode, 0);
 
       if (existsSync(rootNodeModules)) {
         symlinkSync(rootNodeModules, join(sub1, "node_modules"), "junction");
@@ -285,50 +287,50 @@ describe("CLI End-to-End", () => {
 
       // Link the workspace root
       const linkProc = runCli(["link", wsDir], tmpdir(), env);
-      expect(linkProc.exitCode).toBe(0);
+      assert.strictEqual(linkProc.exitCode, 0);
       const linkOut = linkProc.stdout.toString();
-      expect(linkOut).toContain("Linked workspace");
-      expect(linkOut).toContain("team.link-sub1");
-      expect(linkOut).toContain("team.link-sub2");
+      assert.ok((linkOut).includes("Linked workspace"));
+      assert.ok((linkOut).includes("team.link-sub1"));
+      assert.ok((linkOut).includes("team.link-sub2"));
 
       // Test ad info (default behavior maintains summary list)
       const infoProc = runCli(["info"], tmpdir(), env);
-      expect(infoProc.exitCode).toBe(0);
-      expect(infoProc.stdout.toString()).toContain("ActionDock Linked Packages");
-      expect(infoProc.stdout.toString()).toContain("team.link-sub1");
+      assert.strictEqual(infoProc.exitCode, 0);
+      assert.ok((infoProc.stdout.toString()).includes("ActionDock Linked Packages"));
+      assert.ok((infoProc.stdout.toString()).includes("team.link-sub1"));
 
       // Test ad info --tree (hierarchical tree view)
       const treeProc = runCli(["info", "--tree"], tmpdir(), env);
-      expect(treeProc.exitCode).toBe(0);
-      expect(treeProc.stdout.toString()).toContain("ActionDock Workspace & Package Tree");
-      expect(treeProc.stdout.toString()).toContain("team.link-sub1");
-      expect(treeProc.stdout.toString()).toContain("Workspaces:");
+      assert.strictEqual(treeProc.exitCode, 0);
+      assert.ok((treeProc.stdout.toString()).includes("ActionDock Workspace & Package Tree"));
+      assert.ok((treeProc.stdout.toString()).includes("team.link-sub1"));
+      assert.ok((treeProc.stdout.toString()).includes("Workspaces:"));
 
       // Test ad info --tree --json
       const treeJsonProc = runCli(["info", "--tree", "--json"], tmpdir(), env);
-      expect(treeJsonProc.exitCode).toBe(0);
+      assert.strictEqual(treeJsonProc.exitCode, 0);
       const treeJson = JSON.parse(treeJsonProc.stdout.toString());
-      expect(treeJson.workspaces.length).toBe(1);
-      expect(treeJson.totalPackagesCount).toBe(2);
+      assert.strictEqual(treeJson.workspaces.length, 1);
+      assert.strictEqual(treeJson.totalPackagesCount, 2);
 
       // Test ad doctor --json
       const doctorProc = runCli(["doctor", "--json"], sub1, env);
-      expect(doctorProc.exitCode).toBe(0);
+      assert.strictEqual(doctorProc.exitCode, 0);
       const doctorData = JSON.parse(doctorProc.stdout.toString());
-      expect(doctorData.ok).toBe(true);
-      expect(doctorData.hasProject).toBe(true);
-      expect(doctorData.packageId).toBe("team.link-sub1");
+      assert.strictEqual(doctorData.ok, true);
+      assert.strictEqual(doctorData.hasProject, true);
+      assert.strictEqual(doctorData.packageId, "team.link-sub1");
 
       // Delete sub2 directory to simulate stale link and test prune
       rmSync(sub2, { recursive: true, force: true });
       const pruneProc = runCli(["unlink", "--prune"], tmpdir(), env);
-      expect(pruneProc.exitCode).toBe(0);
-      expect(pruneProc.stdout.toString()).toContain("[OK]");
+      assert.strictEqual(pruneProc.exitCode, 0);
+      assert.ok((pruneProc.stdout.toString()).includes("[OK]"));
 
       // Unlink workspace
       const unlinkProc = runCli(["unlink", wsDir], tmpdir(), env);
-      expect(unlinkProc.exitCode).toBe(0);
-      expect(unlinkProc.stdout.toString()).toContain("Unlinked workspace");
+      assert.strictEqual(unlinkProc.exitCode, 0);
+      assert.ok((unlinkProc.stdout.toString()).includes("Unlinked workspace"));
 
     } finally {
       if (existsSync(wsHome)) {
@@ -375,21 +377,21 @@ describe("CLI End-to-End", () => {
       );
 
       const infoProc = runCli(["info", "--json"], noManifestDir);
-      expect(infoProc.exitCode).toBe(0);
+      assert.strictEqual(infoProc.exitCode, 0);
       const info = JSON.parse(infoProc.stdout.toString());
-      expect(info.id).toBe("team.no-manifest");
-      expect(info.actions.length).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(info.id, "team.no-manifest");
+      assert.strictEqual(info.actions.length, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionListProc = runCli(["list", "--json"], noManifestDir);
-      expect(actionListProc.exitCode).toBe(0);
+      assert.strictEqual(actionListProc.exitCode, 0);
       const actionList = JSON.parse(actionListProc.stdout.toString());
-      expect(actionList.items.length).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionList.items.length, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const doctorProc = runCli(["doctor", "--json"], noManifestDir);
-      expect(doctorProc.exitCode).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(doctorProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       writeFileSync(
         join(noManifestDir, "actiondock.json"),
@@ -412,29 +414,29 @@ describe("CLI End-to-End", () => {
       );
 
       const infoWithManifestProc = runCli(["info", "--json"], noManifestDir);
-      expect(infoWithManifestProc.exitCode).toBe(0);
+      assert.strictEqual(infoWithManifestProc.exitCode, 0);
       const infoWithManifest = JSON.parse(infoWithManifestProc.stdout.toString());
-      expect(infoWithManifest.actions.length).toBe(1);
-      expect(infoWithManifest.actions[0].id).toBe("team.foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(infoWithManifest.actions.length, 1);
+      assert.strictEqual(infoWithManifest.actions[0].id, "team.foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionListWithManifestProc = runCli(["list", "--json"], noManifestDir);
-      expect(actionListWithManifestProc.exitCode).toBe(0);
+      assert.strictEqual(actionListWithManifestProc.exitCode, 0);
       const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
-      expect(actionListWithManifest.items.length).toBe(1);
-      expect(actionListWithManifest.items[0].id).toBe("team.foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionListWithManifest.items.length, 1);
+      assert.strictEqual(actionListWithManifest.items[0].id, "team.foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionShowProc = runCli(["describe", "team.foo", "--json"], noManifestDir);
-      expect(actionShowProc.exitCode).toBe(0);
+      assert.strictEqual(actionShowProc.exitCode, 0);
       const actionShow = JSON.parse(actionShowProc.stdout.toString());
-      expect(actionShow.id).toBe("team.foo");
-      expect(actionShow.description).toBe("Test action foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionShow.id, "team.foo");
+      assert.strictEqual(actionShow.description, "Test action foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const doctorWithManifestProc = runCli(["doctor", "--json"], noManifestDir);
-      expect(doctorWithManifestProc.exitCode).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(doctorWithManifestProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
     } finally {
       if (existsSync(noManifestDir)) {
         rmSync(noManifestDir, { recursive: true, force: true });

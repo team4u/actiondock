@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -28,10 +29,10 @@ describe("traverseDirectory 单一事实源契约", () => {
       writeFileSync(join(dir, "beta", "two.ts"), "2");
 
       const files = traverseDirectory(dir).map((e) => e.relPath);
-      expect(files).toEqual(["alpha/one.ts", "beta/two.ts", "root.txt"]);
+      assert.deepStrictEqual(files, ["alpha/one.ts", "beta/two.ts", "root.txt"]);
 
       const withDirs = traverseDirectory(dir, { includeDirs: true }).map((e) => e.relPath);
-      expect(withDirs).toEqual(["alpha", "alpha/one.ts", "beta", "beta/two.ts", "root.txt"]);
+      assert.deepStrictEqual(withDirs, ["alpha", "alpha/one.ts", "beta", "beta/two.ts", "root.txt"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -50,7 +51,7 @@ describe("traverseDirectory 单一事实源契约", () => {
         ignore: (relPath) => relPath.startsWith("node_modules/") || relPath.endsWith(".test.ts"),
       }).map((e) => e.relPath);
 
-      expect(files).toEqual(["src/main.ts"]);
+      assert.deepStrictEqual(files, ["src/main.ts"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -68,7 +69,7 @@ describe("traverseDirectory 单一事实源契约", () => {
       symlinkSync(join(base, "outside"), join(dir, "escape"), process.platform === "win32" ? "junction" : "dir");
 
       const files = traverseDirectory(dir).map((e) => e.relPath);
-      expect(files).toEqual(["inside.txt"]);
+      assert.deepStrictEqual(files, ["inside.txt"]);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
@@ -84,14 +85,14 @@ describe("traverseDirectory 单一事实源契约", () => {
       symlinkSync(dir, join(dir, "sub", "loop"), process.platform === "win32" ? "junction" : "dir");
 
       const files = traverseDirectory(dir).map((e) => e.relPath);
-      expect(files).toEqual(["sub/file.txt"]);
+      assert.deepStrictEqual(files, ["sub/file.txt"]);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
   });
 
   it("不存在的目录返回空结果", () => {
-    expect(traverseDirectory(join(tmpdir(), "ad-traverse-nonexistent-dir"))).toEqual([]);
+    assert.deepStrictEqual(traverseDirectory(join(tmpdir(), "ad-traverse-nonexistent-dir")), []);
   });
 });
 
@@ -140,11 +141,11 @@ describe("消费方链路一致性契约", () => {
         .filter((e) => e.rel.length > 0 && !e.rel.startsWith("node_modules") && !e.isDir)
         .map((e) => e.rel);
 
-      expect(primitive.sort()).toEqual(collected.sort());
-      expect(collected.sort()).toEqual(archived.sort());
+      assert.deepStrictEqual(primitive.sort(), collected.sort());
+      assert.deepStrictEqual(collected.sort(), archived.sort());
       // 越界软链接条目与目标内容均不出现
-      expect(primitive).not.toContain("assets/escape/secret.txt");
-      expect(primitive).toContain("actions/greet.ts");
+      assert.ok(!(primitive).includes("assets/escape/secret.txt"));
+      assert.ok((primitive).includes("actions/greet.ts"));
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
@@ -162,7 +163,7 @@ describe("消费方链路一致性契约", () => {
 
       const { collectRelativeFiles } = await import("../../builder/src/fs-utils");
       const collected = collectRelativeFiles(root).filter((f) => !f.startsWith("node_modules/"));
-      expect(primitive.sort()).toEqual(collected.sort());
+      assert.deepStrictEqual(primitive.sort(), collected.sort());
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
@@ -182,9 +183,9 @@ describe("消费方链路一致性契约", () => {
 
       // loader 仅收集 .ts 且排除测试文件，对应原语的过滤子集
       const primitiveTs = primitive.filter((f) => f.endsWith(".ts"));
-      expect(loaderRels.sort()).toEqual(primitiveTs.sort());
+      assert.deepStrictEqual(loaderRels.sort(), primitiveTs.sort());
       // node_modules 内的 .js 不进入任何链路
-      expect(loaderRels).toEqual(["actions/greet.ts"]);
+      assert.deepStrictEqual(loaderRels, ["actions/greet.ts"]);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }

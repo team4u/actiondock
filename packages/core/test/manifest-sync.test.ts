@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -29,20 +30,20 @@ describe("Manifest v2 (actiondock.json) Module", () => {
 
   it("loads initialized project actiondock.json as valid Manifest v2", () => {
     const manifest = loadManifest(tempDir);
-    expect(manifest).not.toBeNull();
-    expect(manifest?.id).toBe("org.manifest-test");
-    expect(manifest?.schemaVersion).toBe(2);
-    expect(manifest?.actions?.["sample.greet"]).toBeDefined();
-    expect(manifest?.actions?.["sample.greet"].entry).toBe("actions/greet.ts");
-    expect(manifest?.playbooks?.["greet-user"]).toBeDefined();
-    expect(manifest?.playbooks?.["greet-user"].entry).toBe("playbooks/greet-user.md");
+    assert.notStrictEqual(manifest, null);
+    assert.strictEqual(manifest?.id, "org.manifest-test");
+    assert.strictEqual(manifest?.schemaVersion, 2);
+    assert.notStrictEqual(manifest?.actions?.["sample.greet"], undefined);
+    assert.strictEqual(manifest?.actions?.["sample.greet"].entry, "actions/greet.ts");
+    assert.notStrictEqual(manifest?.playbooks?.["greet-user"], undefined);
+    assert.strictEqual(manifest?.playbooks?.["greet-user"].entry, "playbooks/greet-user.md");
 
     // 确保绝对不生成旧版 actiondock.manifest.json
-    expect(existsSync(join(tempDir, "actiondock.manifest.json"))).toBe(false);
+    assert.strictEqual(existsSync(join(tempDir, "actiondock.manifest.json")), false);
 
     const validation = validateManifest(manifest, { projectRoot: tempDir });
-    expect(validation.valid).toBe(true);
-    expect(validation.errors).toBeUndefined();
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(validation.errors, undefined);
   });
 
   it("validates action entries, path security, and playbook entries", () => {
@@ -57,8 +58,8 @@ describe("Manifest v2 (actiondock.json) Module", () => {
       },
     };
     const res1 = validateManifest(traversalManifest, { projectRoot: tempDir });
-    expect(res1.valid).toBe(false);
-    expect(res1.errors?.some((e) => e.includes("path traversal") || e.includes("escapes project root"))).toBe(true);
+    assert.strictEqual(res1.valid, false);
+    assert.strictEqual(res1.errors?.some((e) => e.includes("path traversal") || e.includes("escapes project root")), true);
 
     // 绝对路径检测
     const absoluteManifest: ActionDockManifest = {
@@ -71,8 +72,8 @@ describe("Manifest v2 (actiondock.json) Module", () => {
       },
     };
     const res2 = validateManifest(absoluteManifest, { projectRoot: tempDir });
-    expect(res2.valid).toBe(false);
-    expect(res2.errors?.some((e) => e.includes("cannot be an absolute path"))).toBe(true);
+    assert.strictEqual(res2.valid, false);
+    assert.strictEqual(res2.errors?.some((e) => e.includes("cannot be an absolute path")), true);
 
     // 非法 Action ID 检测
     const invalidIdManifest: ActionDockManifest = {
@@ -85,8 +86,8 @@ describe("Manifest v2 (actiondock.json) Module", () => {
       },
     };
     const res3 = validateManifest(invalidIdManifest, { projectRoot: tempDir });
-    expect(res3.valid).toBe(false);
-    expect(res3.errors?.some((e) => e.includes("Invalid action ID"))).toBe(true);
+    assert.strictEqual(res3.valid, false);
+    assert.strictEqual(res3.errors?.some((e) => e.includes("Invalid action ID")), true);
 
     // 非法 Playbook ID 检测
     const invalidPbManifest: ActionDockManifest = {
@@ -99,8 +100,8 @@ describe("Manifest v2 (actiondock.json) Module", () => {
       },
     };
     const res4 = validateManifest(invalidPbManifest, { projectRoot: tempDir });
-    expect(res4.valid).toBe(false);
-    expect(res4.errors?.some((e) => e.includes("Invalid playbook ID"))).toBe(true);
+    assert.strictEqual(res4.valid, false);
+    assert.strictEqual(res4.errors?.some((e) => e.includes("Invalid playbook ID")), true);
   });
 
   it("saves and reloads manifest to actiondock.json", () => {
@@ -117,30 +118,30 @@ describe("Manifest v2 (actiondock.json) Module", () => {
     saveManifest(tempDir, original);
 
     const reloaded = loadManifest(tempDir);
-    expect(reloaded?.description).toBe("Updated description");
-    expect(reloaded?.actions?.["custom.action"]).toBeDefined();
-    expect(reloaded?.actions?.["custom.action"].description).toBe("A custom action");
-    expect(reloaded?.actions?.["custom.action"].tags).toEqual(["custom"]);
+    assert.strictEqual(reloaded?.description, "Updated description");
+    assert.notStrictEqual(reloaded?.actions?.["custom.action"], undefined);
+    assert.strictEqual(reloaded?.actions?.["custom.action"].description, "A custom action");
+    assert.deepStrictEqual(reloaded?.actions?.["custom.action"].tags, ["custom"]);
   });
 
   it("loadManifest 在文件不存在时返回 null，在 JSON 损坏或 schemaVersion 不合法时抛出异常", () => {
     const nonExistentDir = join(tempDir, "non-existent-sub");
-    expect(loadManifest(nonExistentDir)).toBeNull();
+    assert.strictEqual(loadManifest(nonExistentDir), null);
 
     // 损坏的 JSON
     writeFileSync(join(tempDir, "actiondock.json"), "{ invalid json: here");
-    expect(() => loadManifest(tempDir)).toThrow(/Corrupted JSON/);
+    assert.throws(() => loadManifest(tempDir), /Corrupted JSON/);
 
     // 非法 schemaVersion
     writeFileSync(
       join(tempDir, "actiondock.json"),
       JSON.stringify({ schemaVersion: 999, id: "test", actions: {} })
     );
-    expect(() => loadManifest(tempDir)).toThrow(/Unsupported manifest schemaVersion/);
+    assert.throws(() => loadManifest(tempDir), /Unsupported manifest schemaVersion/);
 
     // 不是对象
     writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify(["not", "an", "object"]));
-    expect(() => loadManifest(tempDir)).toThrow(/Invalid manifest format/);
+    assert.throws(() => loadManifest(tempDir), /Invalid manifest format/);
   });
 
   it("allows paths in directories prefixed with double dots like ..cache without false boundary escape", () => {
@@ -167,7 +168,7 @@ describe("Manifest v2 (actiondock.json) Module", () => {
     };
 
     const res = validateManifest(dotManifest, { projectRoot: tempDir });
-    expect(res.valid).toBe(true);
-    expect(res.errors).toBeUndefined();
+    assert.strictEqual(res.valid, true);
+    assert.strictEqual(res.errors, undefined);
   });
 });

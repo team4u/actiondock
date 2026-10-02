@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,15 +56,15 @@ describe("ActionRunner", () => {
     });
 
     const res = await runner.execute("math.add", { a: 10, b: 20 });
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
-      expect(res.data).toEqual({ sum: 30 });
+      assert.deepStrictEqual(res.data, { sum: 30 });
     }
 
     const runs = storage.listRuns();
-    expect(runs.length).toBe(1);
-    expect(runs[0].status).toBe("success");
-    expect(runs[0].output).toEqual({ sum: 30 });
+    assert.strictEqual(runs.length, 1);
+    assert.strictEqual(runs[0].status, "success");
+    assert.deepStrictEqual(runs[0].output, { sum: 30 });
   });
 
   it("handles input validation failures gracefully", async () => {
@@ -100,10 +101,10 @@ describe("ActionRunner", () => {
     });
 
     const res = await runner.execute("test.strict", { wrong: "field" });
-    expect(res.ok).toBe(false);
+    assert.strictEqual(res.ok, false);
     if (!res.ok) {
-      expect(res.error.code).toBe("INPUT_VALIDATION_FAILED");
-      expect(res.error.details).toBeDefined();
+      assert.strictEqual(res.error.code, "INPUT_VALIDATION_FAILED");
+      assert.notStrictEqual(res.error.details, undefined);
     }
   });
 
@@ -148,9 +149,9 @@ describe("ActionRunner", () => {
     });
 
     const res = await runner.execute("test.config", {});
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
-      expect(res.data).toEqual({
+      assert.deepStrictEqual(res.data, {
         endpoint: "http://override.internal",
         stored: "from-storage",
         default: "from-default",
@@ -195,13 +196,13 @@ describe("ActionRunner", () => {
     });
 
     const res = await runner.execute("chain.step2", { n: 5 });
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
-      expect(res.data).toEqual({ final: 20 });
+      assert.deepStrictEqual(res.data, { final: 20 });
     }
 
     const runs = storage.listRuns();
-    expect(runs.length).toBe(2);
+    assert.strictEqual(runs.length, 2);
   });
 
   it("handles action invocation by string ID, ActionRef, and dynamic actionResolver", async () => {
@@ -261,9 +262,9 @@ describe("ActionRunner", () => {
     });
 
     const res = await runner.execute("orchestrator", { val: 5 });
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
-      expect(res.data).toEqual({
+      assert.deepStrictEqual(res.data, {
         calcRes: 10,
         refRes: 20,
         extRes: "Hello, ActionDock!",
@@ -272,9 +273,9 @@ describe("ActionRunner", () => {
 
     // 验证局部动态解析器 LocalActionResolver
     const dynRes = await runner.execute("local.dynamic", { x: 3 });
-    expect(dynRes.ok).toBe(true);
+    assert.strictEqual(dynRes.ok, true);
     if (dynRes.ok) {
-      expect(dynRes.data).toBe(30);
+      assert.strictEqual(dynRes.data, 30);
     }
   });
 
@@ -373,14 +374,14 @@ describe("ActionRunner", () => {
       owner: customOwner,
     });
 
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
       const data = res.data as any;
-      expect(data.parentOwner).toEqual(customOwner);
+      assert.deepStrictEqual(data.parentOwner, customOwner);
       // 同包子调用继承完整的 tenantId、principalId、packageInstanceId、generationId
-      expect(data.localIdentity.owner).toEqual(customOwner);
+      assert.deepStrictEqual(data.localIdentity.owner, customOwner);
       // 跨包子调用继承调用方 tenantId 与 principalId，并使用宿主目标包真实 packageInstanceId 与 generationId
-      expect(data.extIdentity.owner).toEqual({
+      assert.deepStrictEqual(data.extIdentity.owner, {
         tenantId: "tenant-custom-42",
         principalId: "user-alpha-99",
         packageInstanceId: "ext-pkg-instance-42",
@@ -444,9 +445,9 @@ describe("ActionRunner", () => {
     });
 
     const res = await host.runAction("local-pkg/caller", { x: 5 });
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     if (res.ok) {
-      expect(res.data).toEqual({
+      assert.deepStrictEqual(res.data, {
         local: 6,
         extStr: 50,
         extRef: 50,
@@ -458,8 +459,8 @@ describe("ActionRunner", () => {
 
   it("resolves scoped package action references (@scope/pkg/action)", () => {
     const parsed = parseActionRef("@team/tools/add");
-    expect(parsed.packageId).toBe("@team/tools");
-    expect(parsed.actionId).toBe("add");
+    assert.strictEqual(parsed.packageId, "@team/tools");
+    assert.strictEqual(parsed.actionId, "add");
   });
 
   it("handles environment variables: explicit env, package prefix, snake case, and type coercion", async () => {
@@ -532,9 +533,9 @@ describe("ActionRunner", () => {
       });
 
       const res = await runner.execute("demo.env-test", {});
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({
+        assert.deepStrictEqual(res.data, {
           token: "token_xyz_123",
           timeout: 5500, // Coerced to number
           debug: true, // Coerced to boolean
@@ -596,9 +597,9 @@ describe("ActionRunner", () => {
       });
 
       const res = await runner.execute("env-test", {});
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({
+        assert.deepStrictEqual(res.data, {
           apiKey: "scope_key_val",
           dbHost: "db.internal",
           slugKey: "slug_val",
@@ -664,9 +665,9 @@ describe("ActionRunner", () => {
       });
 
       const res = await runner.execute("tier.check", {});
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({
+        assert.deepStrictEqual(res.data, {
           override: "val_override",
           storage: "val_storage",
           storageVsEnv: "val_storage_wins",
@@ -706,15 +707,15 @@ describe("ActionRunner", () => {
     });
 
     const result = await runner.execute("test.sleep", {}, { timeoutMs: 50 });
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_TIMEOUT");
+      assert.strictEqual(result.error.code, "ACTION_TIMEOUT");
     }
 
     const runs = storage.listRuns();
-    expect(runs.length).toBe(1);
-    expect(runs[0].status).toBe("timed_out");
-    expect(runs[0].error?.code).toBe("ACTION_TIMEOUT");
+    assert.strictEqual(runs.length, 1);
+    assert.strictEqual(runs[0].status, "timed_out");
+    assert.strictEqual(runs[0].error?.code, "ACTION_TIMEOUT");
   });
 
   it("handles ExecutionHandle.cancel and active runs management correctly", async () => {
@@ -742,7 +743,7 @@ describe("ActionRunner", () => {
     });
 
     const handle = await runner.start("test.cancellable", {});
-    expect(handle.runId).toBeDefined();
+    assert.notStrictEqual(handle.runId, undefined);
 
     // Cancel execution after 30ms
     setTimeout(() => {
@@ -750,16 +751,16 @@ describe("ActionRunner", () => {
     }, 30);
 
     const result = await handle.result;
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_CANCELLED");
-      expect(result.error.details).toEqual({ reason: "user requested cancel" });
+      assert.strictEqual(result.error.code, "ACTION_CANCELLED");
+      assert.deepStrictEqual(result.error.details, { reason: "user requested cancel" });
     }
 
     const runRecord = storage.getRun(handle.runId);
-    expect(runRecord).toBeDefined();
-    expect(runRecord?.status).toBe("cancelled");
-    expect(runRecord?.error?.code).toBe("ACTION_CANCELLED");
+    assert.notStrictEqual(runRecord, undefined);
+    assert.strictEqual(runRecord?.status, "cancelled");
+    assert.strictEqual(runRecord?.error?.code, "ACTION_CANCELLED");
   });
 
   it("DefaultExecutionService correctly passes progressReporter and captures logs as events", async () => {
@@ -797,22 +798,22 @@ describe("ActionRunner", () => {
     service.registerAction("test.progress-log", progressAndLogAction);
 
     const result = await service.execute({ actionId: "test.progress-log" }, {}, createInvocationContext({ package: identity }));
-    expect(result.ok).toBe(true);
+    assert.strictEqual(result.ok, true);
 
     const logEvents = emittedEvents.filter((e) => e.type === "log");
-    expect(logEvents.length).toBe(2);
-    expect(logEvents[0].level).toBe("info");
-    expect(logEvents[0].message).toBe("Starting task");
-    expect(logEvents[0].data).toEqual({ step: 1 });
-    expect(logEvents[1].level).toBe("warn");
-    expect(logEvents[1].message).toBe("Caution on step 2");
+    assert.strictEqual(logEvents.length, 2);
+    assert.strictEqual(logEvents[0].level, "info");
+    assert.strictEqual(logEvents[0].message, "Starting task");
+    assert.deepStrictEqual(logEvents[0].data, { step: 1 });
+    assert.strictEqual(logEvents[1].level, "warn");
+    assert.strictEqual(logEvents[1].message, "Caution on step 2");
 
     const progressEvents = emittedEvents.filter((e) => e.type === "progress");
-    expect(progressEvents.length).toBe(2);
-    expect(progressEvents[0].current).toBe(50);
-    expect(progressEvents[0].total).toBe(100);
-    expect(progressEvents[0].message).toBe("halfway done");
-    expect(progressEvents[1].current).toBe(100);
+    assert.strictEqual(progressEvents.length, 2);
+    assert.strictEqual(progressEvents[0].current, 50);
+    assert.strictEqual(progressEvents[0].total, 100);
+    assert.strictEqual(progressEvents[0].message, "halfway done");
+    assert.strictEqual(progressEvents[1].current, 100);
   });
 
   it("persists runs in storage even when validation, cycle, or max depth fails", async () => {
@@ -887,11 +888,11 @@ describe("ActionRunner", () => {
 
     // 1. Validation failure should be persisted
     const valResult = await runner.execute("test.schema-action", { username: 123 as any });
-    expect(valResult.ok).toBe(false);
+    assert.strictEqual(valResult.ok, false);
     const valRun = storage.getRun(valResult.runId);
-    expect(valRun).toBeDefined();
-    expect(valRun?.status).toBe("failed");
-    expect(valRun?.error?.code).toBe("INPUT_VALIDATION_FAILED");
+    assert.notStrictEqual(valRun, undefined);
+    assert.strictEqual(valRun?.status, "failed");
+    assert.strictEqual(valRun?.error?.code, "INPUT_VALIDATION_FAILED");
 
     // 2. Cycle detection failure should be persisted
     const cycleAction = defineAction({
@@ -902,11 +903,11 @@ describe("ActionRunner", () => {
     runner.registerAction("test.cycle-action", cycleAction);
 
     const cycleResult = await runner.execute("test.cycle-action", {});
-    expect(cycleResult.ok).toBe(false);
+    assert.strictEqual(cycleResult.ok, false);
     const runs = storage.listRuns();
     const cycleRun = runs.find((r) => r.error?.code === "ACTION_CALL_CYCLE");
-    expect(cycleRun).toBeDefined();
-    expect(cycleRun?.status).toBe("failed");
+    assert.notStrictEqual(cycleRun, undefined);
+    assert.strictEqual(cycleRun?.status, "failed");
 
     // 3. Max call depth failure should be persisted
     const recursiveActionA = defineAction({
@@ -936,20 +937,20 @@ describe("ActionRunner", () => {
     runner.registerAction("test.rec-d", recursiveActionD);
 
     const depthResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 3 });
-    expect(depthResult.ok).toBe(false);
+    assert.strictEqual(depthResult.ok, false);
     const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_CALL_CYCLE");
-    expect(depthRun).toBeDefined();
-    expect(depthRun?.status).toBe("failed");
+    assert.notStrictEqual(depthRun, undefined);
+    assert.strictEqual(depthRun?.status, "failed");
 
     // 执行级 maxCallDepth 覆盖契约：构造级默认 3，执行级 1 应立即拦住嵌套调用
     const shallowResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 1 });
-    expect(shallowResult.ok).toBe(false);
+    assert.strictEqual(shallowResult.ok, false);
     const shallowError = (shallowResult as { ok: false; error?: { code?: string; details?: { reason?: string } } }).error;
-    expect(shallowError?.code).toBe("ACTION_CALL_CYCLE");
-    expect(shallowError?.details?.reason).toBe("depth_exceeded");
+    assert.strictEqual(shallowError?.code, "ACTION_CALL_CYCLE");
+    assert.strictEqual(shallowError?.details?.reason, "depth_exceeded");
     // 执行级覆盖为更大值时，同样四层链可正常递归完成（覆盖构造级 3）
     const deepOk = await runner.execute("test.rec-a", {}, { maxCallDepth: 8 });
-    expect(deepOk.ok).toBe(true);
+    assert.strictEqual(deepOk.ok, true);
   });
 
   it("handles cross-package execution switching to target package storage and context", async () => {
@@ -1014,21 +1015,21 @@ describe("ActionRunner", () => {
     if (!result.ok) {
       console.log("RESULT ERROR:", (result as any).error);
     }
-    expect(result.ok).toBe(true);
+    assert.strictEqual(result.ok, true);
     if (result.ok) {
-      expect(result.data).toEqual({ greeting: "hello from B", echoed: { foo: "bar" } });
+      assert.deepStrictEqual(result.data, { greeting: "hello from B", echoed: { foo: "bar" } });
     }
 
     // Verify pkg-b storage has the child run!
     const pkgBRuns = pkgBStorage.listRuns();
-    expect(pkgBRuns.length).toBe(1);
-    expect(pkgBRuns[0].packageId).toBe("pkg-b");
-    expect(pkgBRuns[0].actionId).toBe("b.worker");
-    expect(pkgBRuns[0].status).toBe("success");
+    assert.strictEqual(pkgBRuns.length, 1);
+    assert.strictEqual(pkgBRuns[0].packageId, "pkg-b");
+    assert.strictEqual(pkgBRuns[0].actionId, "b.worker");
+    assert.strictEqual(pkgBRuns[0].status, "success");
 
     // Verify pkg-b state was written in pkg-b storage!
     const stateVal = await pkgBStorage.getState("", "from_worker");
-    expect(stateVal).toBe("worker_val");
+    assert.strictEqual(stateVal, "worker_val");
   });
 
   it("handles unregistered or unresolvable cross-package invocation with clear error", async () => {
@@ -1057,9 +1058,9 @@ describe("ActionRunner", () => {
     });
 
     const result = await host.runAction("pkg-caller/caller.test", {});
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("PACKAGE_NOT_FOUND");
+      assert.strictEqual(result.error.code, "PACKAGE_NOT_FOUND");
     }
 
     await host.close();
@@ -1078,15 +1079,15 @@ describe("ActionRunner", () => {
     });
 
     const result = await service.execute({ actionId: "nonexistent.action" }, {}, createInvocationContext({ package: identity }));
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_NOT_FOUND");
+      assert.strictEqual(result.error.code, "ACTION_NOT_FOUND");
     }
 
     const record = await service.get(result.runId);
-    expect(record).toBeDefined();
-    expect(record?.status).toBe("failed");
-    expect(record?.error?.code).toBe("ACTION_NOT_FOUND");
+    assert.notStrictEqual(record, undefined);
+    assert.strictEqual(record?.status, "failed");
+    assert.strictEqual(record?.error?.code, "ACTION_NOT_FOUND");
   });
 
   it("ActionRunner strictly rejects external package reference without searching linked packages", async () => {
@@ -1101,12 +1102,12 @@ describe("ActionRunner", () => {
     });
 
     const result = await runner.execute("unlinked.pkg/some.action", {});
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_NOT_FOUND");
-      expect((result.error.details as any)?.reason).toContain(
+      assert.strictEqual(result.error.code, "ACTION_NOT_FOUND");
+      assert.ok(((result.error.details as any)?.reason).includes(
         "Cross-package action 'unlinked.pkg/some.action' cannot be resolved by ActionRunner"
-      );
+      ));
     }
   });
 
@@ -1128,20 +1129,20 @@ describe("ActionRunner", () => {
 
     // 字符串形式："work"
     const stringRes = await serviceA.execute("work", { task: "clean" }, createInvocationContext({ package: identityA }));
-    expect(stringRes.ok).toBe(true);
-    expect((stringRes as any).data).toEqual({ done: true, task: "clean", fromPkg: "pkg-a" });
+    assert.strictEqual(stringRes.ok, true);
+    assert.deepStrictEqual((stringRes as any).data, { done: true, task: "clean", fromPkg: "pkg-a" });
 
     // 完全限定字符串形式："pkg-a/work"
     const fqRes = await serviceA.execute("pkg-a/work", { task: "clean-fq" }, createInvocationContext({ package: identityA }));
-    expect(fqRes.ok).toBe(true);
-    expect((fqRes as any).data).toEqual({ done: true, task: "clean-fq", fromPkg: "pkg-a" });
+    assert.strictEqual(fqRes.ok, true);
+    assert.deepStrictEqual((fqRes as any).data, { done: true, task: "clean-fq", fromPkg: "pkg-a" });
 
     // 对象形式：{ packageId: "pkg-a", actionId: "work" }
     const objRes = await serviceA.execute({ packageId: "pkg-a", actionId: "work" }, { task: "build" }, createInvocationContext({ package: identityA }));
-    expect(objRes.ok).toBe(true);
-    expect((objRes as any).data).toEqual({ done: true, task: "build", fromPkg: "pkg-a" });
+    assert.strictEqual(objRes.ok, true);
+    assert.deepStrictEqual((objRes as any).data, { done: true, task: "build", fromPkg: "pkg-a" });
 
-    expect(storageA.listRuns().length).toBe(3);
+    assert.strictEqual(storageA.listRuns().length, 3);
   });
 
   it("DefaultExecutionService and ActionRunner strictly reject non-existent package without borrowing local actions or creating ghost storage", async () => {
@@ -1163,14 +1164,14 @@ describe("ActionRunner", () => {
 
     // Calling non-existent ghost-pkg/secret must NOT execute pkg-a's secret action
     const result = await serviceA.execute("ghost-pkg/secret", {}, createInvocationContext({ package: identityA }));
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_NOT_FOUND");
-      expect(result.error.message).toContain("ghost-pkg");
+      assert.strictEqual(result.error.code, "ACTION_NOT_FOUND");
+      assert.ok((result.error.message).includes("ghost-pkg"));
     }
 
     // Must not create empty runner in ghost storage
-    expect(ghostStorageCreated).toBe(false);
+    assert.strictEqual(ghostStorageCreated, false);
   });
 
   it("DefaultExecutionService enforces maxActiveRuns without concurrency race conditions under simultaneous parallel requests", async () => {
@@ -1213,25 +1214,25 @@ describe("ActionRunner", () => {
       const successes = results.filter((r) => r.success);
       const failures = results.filter((r) => !r.success);
 
-      expect(successes.length).toBe(maxActive);
-      expect(failures.length).toBe(totalRequests - maxActive);
+      assert.strictEqual(successes.length, maxActive);
+      assert.strictEqual(failures.length, totalRequests - maxActive);
       for (const failure of failures) {
-        expect(failure.error.message).toContain(`Concurrency limit reached: ${maxActive}/${maxActive} active runs`);
+        assert.ok((failure.error.message).includes(`Concurrency limit reached: ${maxActive}/${maxActive} active runs`));
       }
 
       // Finish pending runs
       resolvePendingAction!();
       for (const item of successes) {
         const res = await (item as any).ticket.result;
-        expect(res.ok).toBe(true);
+        assert.strictEqual(res.ok, true);
       }
 
       // After completions, new requests can succeed
       const followUpTicket = await service.start("slow", {}, createInvocationContext({ package: identity }));
-      expect(followUpTicket.status).toBe("running");
-      expect(followUpTicket.result).toBeDefined();
+      assert.strictEqual(followUpTicket.status, "running");
+      assert.notStrictEqual(followUpTicket.result, undefined);
       const followUpRes = await followUpTicket.result!;
-      expect(followUpRes.ok).toBe(true);
+      assert.strictEqual(followUpRes.ok, true);
     } finally {
       await service.close();
     }
@@ -1245,9 +1246,9 @@ describe("ActionRunner", () => {
     const sharedProcess = platform.process as any;
 
     // 校验共享实例特征：暴露 manager 派生入口且非 run 级作用域
-    expect(sharedProcess.manager).toBeDefined();
-    expect(typeof sharedProcess.manager.forOwner).toBe("function");
-    expect(sharedProcess.runScoped).not.toBe(true);
+    assert.notStrictEqual(sharedProcess.manager, undefined);
+    assert.strictEqual(typeof sharedProcess.manager.forOwner, "function");
+    assert.notStrictEqual(sharedProcess.runScoped, true);
 
     const observedRunIds = new Set<string>();
     const probeAction = defineAction({
@@ -1268,16 +1269,16 @@ describe("ActionRunner", () => {
     });
 
     const first = await runner.execute("probe", {});
-    expect(first.ok).toBe(true);
+    assert.strictEqual(first.ok, true);
     // run 上下文拿到的是派生的 run 级实例，而非平台共享实例本身
-    expect((first as any).data?.runScoped).toBe(true);
-    expect((first as any).data?.sameAsPlatform).toBe(false);
+    assert.strictEqual((first as any).data?.runScoped, true);
+    assert.strictEqual((first as any).data?.sameAsPlatform, false);
 
     // 共享实例不得被首个 run 的 finally 误 dispose（后续仍可继续派生与使用）
-    expect(typeof sharedProcess.manager.forOwner).toBe("function");
+    assert.strictEqual(typeof sharedProcess.manager.forOwner, "function");
     const second = await runner.execute("probe", {});
-    expect(second.ok).toBe(true);
-    expect((second as any).data?.runScoped).toBe(true);
-    expect(observedRunIds.size).toBe(2);
+    assert.strictEqual(second.ok, true);
+    assert.strictEqual((second as any).data?.runScoped, true);
+    assert.strictEqual(observedRunIds.size, 2);
   });
 });

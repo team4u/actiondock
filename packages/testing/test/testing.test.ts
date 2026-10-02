@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { decodeText, defineAction, type ActionDefinition } from "@actiondock/sdk";
 import {
   ActionRuntimeError,
@@ -16,8 +17,8 @@ describe("@actiondock/testing", () => {
       const fixedTime = new Date("2026-01-01T00:00:00.000Z");
       const clock = new FakeClock({ now: fixedTime, startMonotonic: 100 });
 
-      expect(clock.now().toISOString()).toBe("2026-01-01T00:00:00.000Z");
-      expect(clock.monotonic()).toBe(100);
+      assert.strictEqual(clock.now().toISOString(), "2026-01-01T00:00:00.000Z");
+      assert.strictEqual(clock.monotonic(), 100);
     });
 
     it("支持通过 advance 调度单调时间与定时器", async () => {
@@ -32,22 +33,22 @@ describe("@actiondock/testing", () => {
         triggered2 = true;
       });
 
-      expect(clock.pendingCount).toBe(2);
+      assert.strictEqual(clock.pendingCount, 2);
 
       await clock.advance(50);
-      expect(clock.monotonic()).toBe(50);
-      expect(triggered1).toBe(false);
-      expect(triggered2).toBe(false);
+      assert.strictEqual(clock.monotonic(), 50);
+      assert.strictEqual(triggered1, false);
+      assert.strictEqual(triggered2, false);
 
       await clock.advance(60);
-      expect(clock.monotonic()).toBe(110);
-      expect(triggered1).toBe(true);
-      expect(triggered2).toBe(false);
+      assert.strictEqual(clock.monotonic(), 110);
+      assert.strictEqual(triggered1, true);
+      assert.strictEqual(triggered2, false);
 
       await clock.advance(100);
-      expect(clock.monotonic()).toBe(210);
-      expect(triggered2).toBe(true);
-      expect(clock.pendingCount).toBe(0);
+      assert.strictEqual(clock.monotonic(), 210);
+      assert.strictEqual(triggered2, true);
+      assert.strictEqual(clock.pendingCount, 0);
     });
 
     it("单次 advance 内链式 sleep 逐层触发，无需多次推进", async () => {
@@ -71,8 +72,8 @@ describe("@actiondock/testing", () => {
       await clock.advance(20);
 
       // 链上全部节点必须在本次 advance 终点前触发完毕
-      expect(order).toEqual(["A", "B", "C"]);
-      expect(clock.pendingCount).toBe(0);
+      assert.deepStrictEqual(order, ["A", "B", "C"]);
+      assert.strictEqual(clock.pendingCount, 0);
       await chain;
     });
 
@@ -96,14 +97,14 @@ describe("@actiondock/testing", () => {
 
       await clock.advance(15);
 
-      expect(order).toEqual(["X", "Y", "Z"]);
-      expect(clock.pendingCount).toBe(0);
+      assert.deepStrictEqual(order, ["X", "Y", "Z"]);
+      assert.strictEqual(clock.pendingCount, 0);
       await chain;
     });
 
     it("推进负数时间时抛出异常", async () => {
       const clock = new FakeClock();
-      await expect(clock.advance(-10)).rejects.toThrow("Cannot advance clock by negative time");
+      await assert.rejects(clock.advance(-10), /Cannot advance clock by negative time/);
     });
   });
 
@@ -120,12 +121,12 @@ describe("@actiondock/testing", () => {
         timeoutMs: 1000,
         maxOutputBytes: 1024,
       });
-      expect(res.exit.code).toBe(0);
-      expect(decodeText(res.chunks)).toBe("On branch master\nnothing to commit");
+      assert.strictEqual(res.exit.code, 0);
+      assert.strictEqual(decodeText(res.chunks), "On branch master\nnothing to commit");
 
-      expect(proc.calls.length).toBe(1);
-      expect(proc.hasCalled("git")).toBe(true);
-      expect(proc.getLastCall()?.args).toEqual(["status"]);
+      assert.strictEqual(proc.calls.length, 1);
+      assert.strictEqual(proc.hasCalled("git"), true);
+      assert.deepStrictEqual(proc.getLastCall()?.args, ["status"]);
     });
 
     it("支持模拟超时与信号取消", async () => {
@@ -137,21 +138,21 @@ describe("@actiondock/testing", () => {
         cancelled: true,
       });
 
-      await expect(
+      await assert.rejects(
         proc.run({
           spec: { executable: "long-task", args: [], io: { mode: "pipe" } },
           timeoutMs: 1000,
           maxOutputBytes: 1024,
         })
-      ).rejects.toThrow(/timeout/i);
+      , /timeout/i);
 
-      await expect(
+      await assert.rejects(
         proc.run({
           spec: { executable: "cancel-task", args: [], io: { mode: "pipe" } },
           timeoutMs: 1000,
           maxOutputBytes: 1024,
         })
-      ).rejects.toThrow(/cancelled/i);
+      , /cancelled/i);
     });
 
     it("字符串匹配器不再前缀匹配，避免命令名误命中", async () => {
@@ -169,7 +170,7 @@ describe("@actiondock/testing", () => {
         timeoutMs: 1000,
         maxOutputBytes: 1024,
       });
-      expect(decodeText(res.chunks)).toBe("managed-path");
+      assert.strictEqual(decodeText(res.chunks), "managed-path");
     });
 
     it("开启 fallbackToReal 后未命中时回退真实异步子进程执行", async () => {
@@ -179,8 +180,8 @@ describe("@actiondock/testing", () => {
         timeoutMs: 5000,
         maxOutputBytes: 1024 * 1024,
       });
-      expect(res.exit.code).toBe(0);
-      expect(decodeText(res.chunks)).toContain("v");
+      assert.strictEqual(res.exit.code, 0);
+      assert.ok((decodeText(res.chunks)).includes("v"));
     });
 
     it("注册 A 命令 mock 后 run 未命中的 B 命令仍走受管进程路径", async () => {
@@ -202,11 +203,11 @@ describe("@actiondock/testing", () => {
       });
 
       // 受管路径返回结构化退出信封，而非抛出未命中异常
-      expect(result).toBeDefined();
-      expect(result.exit).toBeDefined();
-      expect(result.exit.code).toBe(0);
-      expect(Array.isArray(result.chunks)).toBe(true);
-      expect(decodeText(result.chunks)).toContain("managed-path");
+      assert.notStrictEqual(result, undefined);
+      assert.notStrictEqual(result.exit, undefined);
+      assert.strictEqual(result.exit.code, 0);
+      assert.strictEqual(Array.isArray(result.chunks), true);
+      assert.ok((decodeText(result.chunks)).includes("managed-path"));
 
       // 已注册的 A 命令 mock 命中时仍正常返回模拟输出
       const mocked = await proc.run({
@@ -214,7 +215,7 @@ describe("@actiondock/testing", () => {
         timeoutMs: 5000,
         maxOutputBytes: 1024 * 1024,
       });
-      expect(decodeText(mocked.chunks)).toContain("mocked");
+      assert.ok((decodeText(mocked.chunks)).includes("mocked"));
     });
 
     it("带延时控制执行完毕后妥善注销 AbortSignal 监听器", async () => {
@@ -239,8 +240,8 @@ describe("@actiondock/testing", () => {
         { spec: { executable: "delayed-cmd", args: [], io: { mode: "pipe" } }, timeoutMs: 5000, maxOutputBytes: 1024 },
         { signal: controller.signal }
       );
-      expect(res.exit.code).toBe(0);
-      expect(listenerCount).toBe(0);
+      assert.strictEqual(res.exit.code, 0);
+      assert.strictEqual(listenerCount, 0);
     });
 
     it("注入 FakeClock 后 delayMs 由时钟驱动，不占用真实时间", async () => {
@@ -261,16 +262,16 @@ describe("@actiondock/testing", () => {
       // 未推进时钟前命令保持挂起，验证延时完全由 FakeClock 驱动
       await Promise.resolve();
       await Promise.resolve();
-      expect(settled).toBe(false);
+      assert.strictEqual(settled, false);
 
       // 一次性推进起过延时窗口，命令立即完成，全程未占用真实时间
       const advanced = clock.advance(60000);
       const res = await runPromise;
       await advanced;
 
-      expect(res.exit.code).toBe(0);
-      expect(decodeText(res.chunks)).toBe("after-delay");
-      expect(settled).toBe(true);
+      assert.strictEqual(res.exit.code, 0);
+      assert.strictEqual(decodeText(res.chunks), "after-delay");
+      assert.strictEqual(settled, true);
     });
 
     it("未注入时钟时 delayMs 回退真实 setTimeout 语义保持可用", async () => {
@@ -283,9 +284,9 @@ describe("@actiondock/testing", () => {
         timeoutMs: 5000,
         maxOutputBytes: 1024,
       });
-      expect(res.exit.code).toBe(0);
+      assert.strictEqual(res.exit.code, 0);
       // 真实回退路径至少等待了设定的延时
-      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(15);
+      assert.ok((Date.now() - startedAt) >= 15);
     });
   });
 
@@ -298,11 +299,11 @@ describe("@actiondock/testing", () => {
       await scopedStore.set("token", "scoped-value");
 
       // 根命名空间直接读取：严格限定空命名空间，不隐式回扫 cache 命名空间
-      expect(await rootStore.get<string>("token")).toBeUndefined();
+      assert.strictEqual(await rootStore.get<string>("token"), undefined);
 
       // 根命名空间自身写入的同 key 条目可精确命中
       await rootStore.set("token", "root-value");
-      expect(await rootStore.get<string>("token")).toBe("root-value");
+      assert.strictEqual(await rootStore.get<string>("token"), "root-value");
     });
 
     it("跨命名空间同名 key 互不可见，不再抛出歧义异常", async () => {
@@ -313,9 +314,9 @@ describe("@actiondock/testing", () => {
       await rootStore.scope("ns-beta").set("dup", "beta");
 
       // 根命名空间读取严格限定空命名空间，各作用域条目互不可见
-      expect(await rootStore.get("dup")).toBeUndefined();
-      expect(await rootStore.scope("ns-alpha").get("dup")).toBe("alpha");
-      expect(await rootStore.scope("ns-beta").get("dup")).toBe("beta");
+      assert.strictEqual(await rootStore.get("dup"), undefined);
+      assert.strictEqual(await rootStore.scope("ns-alpha").get("dup"), "alpha");
+      assert.strictEqual(await rootStore.scope("ns-beta").get("dup"), "beta");
     });
 
     it("命名空间内过期条目失效后返回 undefined", async () => {
@@ -326,15 +327,15 @@ describe("@actiondock/testing", () => {
       await rootStore.scope("ttl-ns").set("ephemeral", "gone-soon", 5);
 
       // 未过期时作用域内可命中
-      expect(await rootStore.scope("ttl-ns").get("ephemeral")).toBe("gone-soon");
+      assert.strictEqual(await rootStore.scope("ttl-ns").get("ephemeral"), "gone-soon");
 
       // 推进 6 秒后条目过期，返回 undefined
       await clock.advance(6000);
-      expect(await rootStore.scope("ttl-ns").get("ephemeral")).toBeUndefined();
-      expect(await rootStore.get("ephemeral")).toBeUndefined();
+      assert.strictEqual(await rootStore.scope("ttl-ns").get("ephemeral"), undefined);
+      assert.strictEqual(await rootStore.get("ephemeral"), undefined);
 
       // 全无命中时返回 undefined
-      expect(await rootStore.get("never-exists")).toBeUndefined();
+      assert.strictEqual(await rootStore.get("never-exists"), undefined);
     });
 
     it("TTL 为 0 或负数时按契约表示永久有效", async () => {
@@ -345,13 +346,13 @@ describe("@actiondock/testing", () => {
       await store.set("zero-ttl", "kept-zero", 0);
       await store.set("negative-ttl", "kept-negative", -5);
 
-      expect(await store.get<string>("zero-ttl")).toBe("kept-zero");
-      expect(await store.get<string>("negative-ttl")).toBe("kept-negative");
+      assert.strictEqual(await store.get<string>("zero-ttl"), "kept-zero");
+      assert.strictEqual(await store.get<string>("negative-ttl"), "kept-negative");
 
       // 推进时间后仍永久有效
       await clock.advance(60_000);
-      expect(await store.get<string>("zero-ttl")).toBe("kept-zero");
-      expect(await store.get<string>("negative-ttl")).toBe("kept-negative");
+      assert.strictEqual(await store.get<string>("zero-ttl"), "kept-zero");
+      assert.strictEqual(await store.get<string>("negative-ttl"), "kept-negative");
     });
 
     it("非根命名空间保持严格隔离", async () => {
@@ -361,9 +362,9 @@ describe("@actiondock/testing", () => {
       await rootStore.scope("ns-a").set("key", "from-a");
 
       // ns-b 命名空间读取不应看到 ns-a 的条目
-      expect(await rootStore.scope("ns-b").get("key")).toBeUndefined();
+      assert.strictEqual(await rootStore.scope("ns-b").get("key"), undefined);
       // 根命名空间同样不做隐式回扫
-      expect(await rootStore.get("key")).toBeUndefined();
+      assert.strictEqual(await rootStore.get("key"), undefined);
     });
   });
 
@@ -371,11 +372,11 @@ describe("@actiondock/testing", () => {
     it("具备完整的配置存取与删除契约", () => {
       const storage = new MemoryStorage({ packageId: "unit-pkg" });
       storage.setConfig("API_URL", "https://api.internal");
-      expect(storage.getConfig<string>("API_URL")).toBe("https://api.internal");
-      expect(storage.listConfig()).toEqual({ API_URL: "https://api.internal" });
+      assert.strictEqual(storage.getConfig<string>("API_URL"), "https://api.internal");
+      assert.deepStrictEqual(storage.listConfig(), { API_URL: "https://api.internal" });
 
-      expect(storage.deleteConfig("API_URL")).toBe(true);
-      expect(storage.getConfig("API_URL")).toBeUndefined();
+      assert.strictEqual(storage.deleteConfig("API_URL"), true);
+      assert.strictEqual(storage.getConfig("API_URL"), undefined);
     });
 
     it("支持状态命名空间隔离与过期失效", async () => {
@@ -383,19 +384,19 @@ describe("@actiondock/testing", () => {
       const storage = new MemoryStorage({ packageId: "unit-pkg", clock });
 
       await storage.setState("cache", "token", "abc123xyz", 10);
-      expect(await storage.getState<string>("cache", "token")).toBe("abc123xyz");
+      assert.strictEqual(await storage.getState<string>("cache", "token"), "abc123xyz");
 
       const keysBefore = await storage.listStateKeys("cache");
-      expect(keysBefore).toContain("token");
+      assert.ok((keysBefore).includes("token"));
 
       // 推进 5 秒，尚未过期
       await clock.advance(5000);
-      expect(await storage.getState<string>("cache", "token")).toBe("abc123xyz");
+      assert.strictEqual(await storage.getState<string>("cache", "token"), "abc123xyz");
 
       // 再次推进 6 秒（总计 11 秒），已超过 10 秒 TTL
       await clock.advance(6000);
-      expect(await storage.getState("cache", "token")).toBeUndefined();
-      expect(await storage.listStateKeys("cache")).toEqual([]);
+      assert.strictEqual(await storage.getState("cache", "token"), undefined);
+      assert.deepStrictEqual(await storage.listStateKeys("cache"), []);
     });
 
     it("记录运行历史并符合终态契约", () => {
@@ -413,15 +414,15 @@ describe("@actiondock/testing", () => {
       });
 
       const initial = storage.getRun("run-101");
-      expect(initial?.status).toBe("running");
+      assert.strictEqual(initial?.status, "running");
 
       storage.updateRun("run-101", "success", { result: "ok" });
       const finished = storage.getRun("run-101");
-      expect(finished?.status).toBe("success");
-      expect(finished?.output).toEqual({ result: "ok" });
+      assert.strictEqual(finished?.status, "success");
+      assert.deepStrictEqual(finished?.output, { result: "ok" });
 
       const runs = storage.listRuns({ actionId: "demo.echo" });
-      expect(runs.length).toBe(1);
+      assert.strictEqual(runs.length, 1);
     });
   });
 
@@ -463,20 +464,20 @@ describe("@actiondock/testing", () => {
 
       // 验证 run 方法直接返回解包后的业务结果
       const direct = await runtime.run(sumAction, { x: 15, y: 25 });
-      expect(direct).toEqual({ total: 40 });
+      assert.deepStrictEqual(direct, { total: 40 });
 
       // 验证 execute 方法返回完整信封结构
       const envelope = await runtime.execute(sumAction, { x: 1, y: 2 });
-      expect(envelope.ok).toBe(true);
+      assert.strictEqual(envelope.ok, true);
       if (envelope.ok) {
-        expect(envelope.data).toEqual({ total: 3 });
-        expect(envelope.runId).toBeDefined();
+        assert.deepStrictEqual(envelope.data, { total: 3 });
+        assert.notStrictEqual(envelope.runId, undefined);
       }
 
       // 验证事件总线记录
       const events = runtime.events.getEvents();
-      expect(events.length).toBeGreaterThan(0);
-      expect(events.some((e) => e.type === "finish")).toBe(true);
+      assert.ok((events.length) > 0);
+      assert.strictEqual(events.some((e) => e.type === "finish"), true);
     });
 
     it("输入参数校验失败与输出结果校验失败抛出规范异常", async () => {
@@ -516,28 +517,28 @@ describe("@actiondock/testing", () => {
 
       // 输入校验失败
       const inputFailEnvelope = await runtime.execute(strictAction, { invalidKey: 123 } as any);
-      expect(inputFailEnvelope.ok).toBe(false);
-      expect((inputFailEnvelope as any).error.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(inputFailEnvelope.ok, false);
+      assert.strictEqual((inputFailEnvelope as any).error.code, "INPUT_VALIDATION_FAILED");
 
       try {
         await runtime.run(strictAction, { invalidKey: 123 } as any);
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err instanceof ActionRuntimeError).toBe(true);
-        expect(err.code).toBe("INPUT_VALIDATION_FAILED");
+        assert.strictEqual(err instanceof ActionRuntimeError, true);
+        assert.strictEqual(err.code, "INPUT_VALIDATION_FAILED");
       }
 
       // 输出校验失败
       const outputFailEnvelope = await runtime.execute(strictAction, { requiredKey: "ok" });
-      expect(outputFailEnvelope.ok).toBe(false);
-      expect((outputFailEnvelope as any).error.code).toBe("OUTPUT_VALIDATION_FAILED");
+      assert.strictEqual(outputFailEnvelope.ok, false);
+      assert.strictEqual((outputFailEnvelope as any).error.code, "OUTPUT_VALIDATION_FAILED");
 
       try {
         await runtime.run(strictAction, { requiredKey: "ok" });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err instanceof ActionRuntimeError).toBe(true);
-        expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
+        assert.strictEqual(err instanceof ActionRuntimeError, true);
+        assert.strictEqual(err.code, "OUTPUT_VALIDATION_FAILED");
       }
     });
 
@@ -551,10 +552,10 @@ describe("@actiondock/testing", () => {
       });
 
       // 调试配置接口
-      expect(runtime.config.get<string>("DEFAULT_URL")).toBe("https://origin.internal");
+      assert.strictEqual(runtime.config.get<string>("DEFAULT_URL"), "https://origin.internal");
       runtime.config.set("CUSTOM_KEY", "custom_val");
-      expect(runtime.config.get<string>("CUSTOM_KEY")).toBe("custom_val");
-      expect(runtime.config.has("CUSTOM_KEY")).toBe(true);
+      assert.strictEqual(runtime.config.get<string>("CUSTOM_KEY"), "custom_val");
+      assert.strictEqual(runtime.config.has("CUSTOM_KEY"), true);
 
       const stateAction = defineAction({
         async run(_input, ctx) {
@@ -568,13 +569,13 @@ describe("@actiondock/testing", () => {
 
       // 验证 Action 写入的状态
       const stateVal = await runtime.state.get<{ active: boolean; cfg: string }>("session");
-      expect(stateVal).toEqual({ active: true, cfg: "custom_val" });
+      assert.deepStrictEqual(stateVal, { active: true, cfg: "custom_val" });
 
       // 通过模拟时钟推进 6 秒，使 5 秒 TTL 的状态失效
       await runtime.clock.advance(6000);
 
       const expiredVal = await runtime.state.get("session");
-      expect(expiredVal).toBeUndefined();
+      assert.strictEqual(expiredVal, undefined);
     });
 
     it("Action 嵌套互调与环路死锁检测", async () => {
@@ -598,7 +599,7 @@ describe("@actiondock/testing", () => {
 
       // 正常嵌套互调
       const result = await runtime.run<{ val: number }, { final: number }>(parentAction, { val: 10 });
-      expect(result).toEqual({ final: 21 });
+      assert.deepStrictEqual(result, { final: 21 });
 
       // 环路死锁检测 A -> B -> A
       const loopA: ActionDefinition = defineAction({
@@ -617,10 +618,10 @@ describe("@actiondock/testing", () => {
       runtime.registerAction("loop.b", loopB);
 
       const loopRes = await runtime.execute(loopA, {});
-      expect(loopRes.ok).toBe(false);
+      assert.strictEqual(loopRes.ok, false);
       if (!loopRes.ok) {
-        expect(loopRes.error.code).toBe("ACTION_CALL_CYCLE");
-        expect(loopRes.error.message).toContain("loop.a");
+        assert.strictEqual(loopRes.error.code, "ACTION_CALL_CYCLE");
+        assert.ok((loopRes.error.message).includes("loop.a"));
       }
     });
 
@@ -641,16 +642,16 @@ describe("@actiondock/testing", () => {
 
       // 超时控制
       const timeoutRes = await runtime.execute(hangingAction, {}, { timeoutMs: 50 });
-      expect(timeoutRes.ok).toBe(false);
-      expect((timeoutRes as any).error.code).toBe("ACTION_TIMEOUT");
+      assert.strictEqual(timeoutRes.ok, false);
+      assert.strictEqual((timeoutRes as any).error.code, "ACTION_TIMEOUT");
 
       // 外部 AbortSignal 取消
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort("manual abort"), 30);
       try {
         const cancelRes = await runtime.execute(hangingAction, {}, { signal: controller.signal });
-        expect(cancelRes.ok).toBe(false);
-        expect((cancelRes as any).error.code).toBe("ACTION_CANCELLED");
+        assert.strictEqual(cancelRes.ok, false);
+        assert.strictEqual((cancelRes as any).error.code, "ACTION_CANCELLED");
       } finally {
         clearTimeout(timer);
       }
@@ -679,11 +680,11 @@ describe("@actiondock/testing", () => {
       });
 
       const out = await runtime.run<unknown, { stdout: string; hasNginx: boolean }>(cliAction, {});
-      expect(out.hasNginx).toBe(true);
-      expect(out.stdout).toContain("123abc456");
+      assert.strictEqual(out.hasNginx, true);
+      assert.ok((out.stdout).includes("123abc456"));
 
-      expect(runtime.process.hasCalled("docker")).toBe(true);
-      expect(runtime.process.getLastCall()?.args).toEqual(["ps"]);
+      assert.strictEqual(runtime.process.hasCalled("docker"), true);
+      assert.deepStrictEqual(runtime.process.getLastCall()?.args, ["ps"]);
     });
 
     it("支持测试捕获 ctx.log 输出日志", async () => {
@@ -699,20 +700,20 @@ describe("@actiondock/testing", () => {
       });
 
       const res = await runtime.run<unknown, { success: boolean }>(loggingAction, {});
-      expect(res.success).toBe(true);
+      assert.strictEqual(res.success, true);
 
-      expect(runtime.logger.logs.length).toBe(3);
-      expect(runtime.logger.logs[0]).toEqual({
+      assert.strictEqual(runtime.logger.logs.length, 3);
+      assert.deepStrictEqual(runtime.logger.logs[0], {
         level: "info",
         message: "Process started",
         data: { step: 1 },
       });
-      expect(runtime.logger.logs[1]).toEqual({
+      assert.deepStrictEqual(runtime.logger.logs[1], {
         level: "warn",
         message: "High memory notice",
         data: undefined,
       });
-      expect(runtime.logger.logs[2]).toEqual({
+      assert.deepStrictEqual(runtime.logger.logs[2], {
         level: "error",
         message: "Recoverable issue",
         data: { code: 500 },
@@ -747,7 +748,7 @@ describe("@actiondock/testing", () => {
         actions: { "calc.add": testAction },
       });
       const testingOut = await testingRuntime.run<{ a: number; b: number }, { sum: number }>(testAction, { a: 10, b: 20 });
-      expect(testingOut).toEqual({ sum: 30 });
+      assert.deepStrictEqual(testingOut, { sum: 30 });
 
       // 显式结合 createTestPlatform 执行
       const platform = createTestPlatform();
@@ -770,19 +771,19 @@ describe("@actiondock/testing", () => {
         actions: { "calc.add": testAction },
       });
       const platformOut = await platformRuntime.run<{ a: number; b: number }, { sum: number }>(testAction, { a: 15, b: 25 });
-      expect(platformOut).toEqual({ sum: 40 });
+      assert.deepStrictEqual(platformOut, { sum: 40 });
 
       // 对齐的 config 与状态管理
-      expect(testingRuntime.config.get("non_existent", "default")).toBe("default");
+      assert.strictEqual(testingRuntime.config.get("non_existent", "default"), "default");
       testingRuntime.config.set("newKey", "val2");
-      expect(testingRuntime.config.get<string>("newKey")).toBe("val2");
-      expect(testingRuntime.config.delete("newKey")).toBe(true);
-      expect(testingRuntime.config.has("newKey")).toBe(false);
+      assert.strictEqual(testingRuntime.config.get<string>("newKey"), "val2");
+      assert.strictEqual(testingRuntime.config.delete("newKey"), true);
+      assert.strictEqual(testingRuntime.config.has("newKey"), false);
 
       // 对齐的 execute 错误校验
       const execFail = await testingRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
-      expect(execFail.ok).toBe(false);
-      expect((execFail as any).error?.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(execFail.ok, false);
+      assert.strictEqual((execFail as any).error?.code, "INPUT_VALIDATION_FAILED");
     });
   });
 });

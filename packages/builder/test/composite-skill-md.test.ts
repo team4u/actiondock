@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -99,22 +100,21 @@ describe("Composite SKILL.md custom declaration", () => {
 末尾内容
 `);
 
-    expect(sections.map((s) => s.slot)).toEqual(["append", "after-init", "append"]);
-    expect(sections[0].content).toContain("首段无标记内容");
-    expect(sections[1].content).toContain("初始化后内容");
-    expect(sections[2].content).toContain("末尾内容");
+    assert.deepStrictEqual(sections.map((s) => s.slot), ["append", "after-init", "append"]);
+    assert.ok((sections[0].content).includes("首段无标记内容"));
+    assert.ok((sections[1].content).includes("初始化后内容"));
+    assert.ok((sections[2].content).includes("末尾内容"));
   });
 
   it("throws on unknown slot names", () => {
-    expect(() =>
-      parseCustomSections("<!-- actiondock:slot after-inti -->\n内容")
-    ).toThrow(/Valid slots/);
+    assert.throws(() =>
+      parseCustomSections("<!-- actiondock:slot after-inti -->\n内容"), /Valid slots/);
   });
 
   it("parses frontmatter description override", () => {
     const declaration = parseCustomSkillDeclaration(CUSTOM_DECLARATION);
-    expect(declaration.description).toBe("自定义复合套件描述");
-    expect(declaration.sections.map((s) => s.slot)).toEqual(["after-init", "append"]);
+    assert.strictEqual(declaration.description, "自定义复合套件描述");
+    assert.deepStrictEqual(declaration.sections.map((s) => s.slot), ["after-init", "append"]);
   });
 
   it("injects custom sections at their slots in generated SKILL.md", () => {
@@ -141,14 +141,14 @@ describe("Composite SKILL.md custom declaration", () => {
     const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxAppend = md.indexOf("## 参考文档");
 
-    expect(md).not.toContain("## ActionDock 运行时初始化");
-    expect(idxDescribe).toBeGreaterThan(-1);
-    expect(idxTroubleshoot).toBeGreaterThan(idxDescribe);
-    expect(idxSoftLink).toBeGreaterThan(idxTroubleshoot);
-    expect(idxAppend).toBeGreaterThan(idxSoftLink);
+    assert.ok(!(md).includes("## ActionDock 运行时初始化"));
+    assert.ok((idxDescribe) > -1);
+    assert.ok((idxTroubleshoot) > idxDescribe);
+    assert.ok((idxSoftLink) > idxTroubleshoot);
+    assert.ok((idxAppend) > idxSoftLink);
 
     // frontmatter description 为未覆盖的原始描述
-    expect(md).toContain("description: 套件描述");
+    assert.ok((md).includes("description: 套件描述"));
   });
 
   it("skillMdOnly regenerates only SKILL.md from manifests plus custom declaration", async () => {
@@ -165,26 +165,26 @@ describe("Composite SKILL.md custom declaration", () => {
       skillMdOnly: true,
     });
 
-    expect(result.skillMdFile).toBe(join(outDir, "SKILL.md"));
-    expect(existsSync(result.skillMdFile!)).toBe(true);
-    expect(existsSync(join(outDir, "packages"))).toBe(false);
-    expect(existsSync(join(outDir, "package.json"))).toBe(false);
-    expect(result.packagesCount).toBe(2);
-    expect(result.actionsCount).toBe(2);
-    expect(result.playbooksCount).toBe(1);
+    assert.strictEqual(result.skillMdFile, join(outDir, "SKILL.md"));
+    assert.strictEqual(existsSync(result.skillMdFile!), true);
+    assert.strictEqual(existsSync(join(outDir, "packages")), false);
+    assert.strictEqual(existsSync(join(outDir, "package.json")), false);
+    assert.strictEqual(result.packagesCount, 2);
+    assert.strictEqual(result.actionsCount, 2);
+    assert.strictEqual(result.playbooksCount, 1);
 
     const md = readFileSync(result.skillMdFile!, "utf-8");
-    expect(md).toContain("description: 自定义复合套件描述");
-    expect(md).toContain("`test.pkg-a/a.echo`: a.echo description");
-    expect(md).toContain("`test.pkg-b/b.ping`: b.ping description");
-    expect(md).toContain("- [pb-a](./pkg-a/playbooks/pb-a.md): pb-a description");
+    assert.ok((md).includes("description: 自定义复合套件描述"));
+    assert.ok((md).includes("`test.pkg-a/a.echo`: a.echo description"));
+    assert.ok((md).includes("`test.pkg-b/b.ping`: b.ping description"));
+    assert.ok((md).includes("- [pb-a](./pkg-a/playbooks/pb-a.md): pb-a description"));
 
     const idxDescribe = md.indexOf("## 动作参数契约按需调阅");
     const idxTroubleshoot = md.indexOf("## 故障排查与环境安装指引");
     const idxSoftLink = md.indexOf("### 数据目录持久化软链");
-    expect(md).not.toContain("## ActionDock 运行时初始化");
-    expect(idxSoftLink).toBeGreaterThan(idxTroubleshoot);
-    expect(md.indexOf("## 参考文档")).toBeGreaterThan(idxSoftLink);
+    assert.ok(!(md).includes("## ActionDock 运行时初始化"));
+    assert.ok((idxSoftLink) > idxTroubleshoot);
+    assert.ok((md.indexOf("## 参考文档")) > idxSoftLink);
   });
 
   it("full composite export bakes custom sections into the bundle SKILL.md", async () => {
@@ -200,11 +200,11 @@ describe("Composite SKILL.md custom declaration", () => {
       customMdPath: customPath,
     });
 
-    expect(result.usedExistingSkillMd).toBeUndefined();
+    assert.strictEqual(result.usedExistingSkillMd, undefined);
     const md = readFileSync(join(outDir, "SKILL.md"), "utf-8");
-    expect(md).toContain("description: 自定义复合套件描述");
-    expect(md).toContain("### 数据目录持久化软链");
-    expect(md).toContain("## 参考文档");
-    expect(existsSync(join(outDir, "packages", "pkg-a", "actiondock.json"))).toBe(true);
+    assert.ok((md).includes("description: 自定义复合套件描述"));
+    assert.ok((md).includes("### 数据目录持久化软链"));
+    assert.ok((md).includes("## 参考文档"));
+    assert.strictEqual(existsSync(join(outDir, "packages", "pkg-a", "actiondock.json")), true);
   });
 });

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   MemoryProcessMetadataStore,
   type ProcessMetadataStore,
@@ -22,7 +23,7 @@ describe("ProcessMetadataStore", () => {
 
       it("保存并查询受管进程元数据", async () => {
         const notFound = await store.getProcess("non-existent");
-        expect(notFound).toBeUndefined();
+        assert.strictEqual(notFound, undefined);
 
         const process: StoredProcessRecord = {
           processId: "proc-1",
@@ -49,22 +50,22 @@ describe("ProcessMetadataStore", () => {
         await store.saveProcess(process);
 
         const retrieved = await store.getProcess("proc-1");
-        expect(retrieved).toBeDefined();
-        expect(retrieved?.processId).toBe("proc-1");
-        expect(retrieved?.tenantId).toBe("tenant-a");
-        expect(retrieved?.principalId).toBe("user-1");
-        expect(retrieved?.packageInstanceId).toBe("pkg-inst-1");
-        expect(retrieved?.generationId).toBe("gen-1");
-        expect(retrieved?.hostEpoch).toBe("epoch-100");
-        expect(retrieved?.state).toBe("starting");
-        expect(retrieved?.controlState).toBe("open");
-        expect(retrieved?.control).toBe("open");
-        expect(retrieved?.ioConfig).toEqual({ pty: false, stdin: "pipe", stdout: "pipe" });
-        expect(retrieved?.capabilities).toEqual({ signals: ["SIGTERM", "SIGKILL"] });
-        expect(retrieved?.createdAt).toBe("2026-09-13T00:00:00.000Z");
-        expect(retrieved?.outputClosed).toBe(false);
-        expect(retrieved?.effectiveLimits).toEqual({ memoryBytes: 104857600 });
-        expect(retrieved?.startRequestId).toBe("req-start-001");
+        assert.notStrictEqual(retrieved, undefined);
+        assert.strictEqual(retrieved?.processId, "proc-1");
+        assert.strictEqual(retrieved?.tenantId, "tenant-a");
+        assert.strictEqual(retrieved?.principalId, "user-1");
+        assert.strictEqual(retrieved?.packageInstanceId, "pkg-inst-1");
+        assert.strictEqual(retrieved?.generationId, "gen-1");
+        assert.strictEqual(retrieved?.hostEpoch, "epoch-100");
+        assert.strictEqual(retrieved?.state, "starting");
+        assert.strictEqual(retrieved?.controlState, "open");
+        assert.strictEqual(retrieved?.control, "open");
+        assert.deepStrictEqual(retrieved?.ioConfig, { pty: false, stdin: "pipe", stdout: "pipe" });
+        assert.deepStrictEqual(retrieved?.capabilities, { signals: ["SIGTERM", "SIGKILL"] });
+        assert.strictEqual(retrieved?.createdAt, "2026-09-13T00:00:00.000Z");
+        assert.strictEqual(retrieved?.outputClosed, false);
+        assert.deepStrictEqual(retrieved?.effectiveLimits, { memoryBytes: 104857600 });
+        assert.strictEqual(retrieved?.startRequestId, "req-start-001");
 
         // 覆盖保存更新
         await store.saveProcess({
@@ -74,8 +75,8 @@ describe("ProcessMetadataStore", () => {
         });
 
         const updated = await store.getProcess("proc-1");
-        expect(updated?.state).toBe("running");
-        expect(updated?.outputClosed).toBe(true);
+        assert.strictEqual(updated?.state, "running");
+        assert.strictEqual(updated?.outputClosed, true);
       });
 
       it("局部更新受管进程状态字段", async () => {
@@ -102,24 +103,24 @@ describe("ProcessMetadataStore", () => {
         });
 
         const updated = await store.getProcess("proc-update-1");
-        expect(updated?.state).toBe("stopped");
-        expect(updated?.controlState).toBe("closed");
-        expect(updated?.control).toBe("closed");
-        expect(updated?.exitCode).toBe(0);
-        expect(updated?.endReason).toBe("exit");
-        expect(updated?.outputClosed).toBe(true);
-        expect(updated?.outputEndReason).toBe("exit");
+        assert.strictEqual(updated?.state, "stopped");
+        assert.strictEqual(updated?.controlState, "closed");
+        assert.strictEqual(updated?.control, "closed");
+        assert.strictEqual(updated?.exitCode, 0);
+        assert.strictEqual(updated?.endReason, "exit");
+        assert.strictEqual(updated?.outputClosed, true);
+        assert.strictEqual(updated?.outputEndReason, "exit");
 
         // 更新不存在的进程抛出异常
         let errorThrown = false;
         try {
           await store.updateProcessState("not-found-id", { state: "lost" });
-          expect.unreachable();
+          assert.fail("不应到达此分支");
         } catch (err: any) {
           errorThrown = true;
-          expect(err.message).toContain("not found");
+          assert.ok((err.message).includes("not found"));
         }
-        expect(errorThrown).toBe(true);
+        assert.strictEqual(errorThrown, true);
       });
 
       it("独立持久化 inputClosed 字段且不与 outputClosed 混淆", async () => {
@@ -138,8 +139,8 @@ describe("ProcessMetadataStore", () => {
 
         // 初始两者均为 false
         const initial = await store.getProcess("proc-input-closed-1");
-        expect(initial?.inputClosed).toBe(false);
-        expect(initial?.outputClosed).toBe(false);
+        assert.strictEqual(initial?.inputClosed, false);
+        assert.strictEqual(initial?.outputClosed, false);
 
         // 仅关闭输入通道
         await store.updateProcessState("proc-input-closed-1", {
@@ -147,8 +148,8 @@ describe("ProcessMetadataStore", () => {
         });
 
         const onlyInput = await store.getProcess("proc-input-closed-1");
-        expect(onlyInput?.inputClosed).toBe(true);
-        expect(onlyInput?.outputClosed).toBe(false);
+        assert.strictEqual(onlyInput?.inputClosed, true);
+        assert.strictEqual(onlyInput?.outputClosed, false);
 
         // 覆盖保存时携带 inputClosed
         await store.saveProcess({
@@ -158,8 +159,8 @@ describe("ProcessMetadataStore", () => {
         });
 
         const bothClosed = await store.getProcess("proc-input-closed-1");
-        expect(bothClosed?.inputClosed).toBe(true);
-        expect(bothClosed?.outputClosed).toBe(true);
+        assert.strictEqual(bothClosed?.inputClosed, true);
+        assert.strictEqual(bothClosed?.outputClosed, true);
       });
 
       it("根据所有者过滤并分页查询进程列表", async () => {
@@ -204,23 +205,23 @@ describe("ProcessMetadataStore", () => {
 
         // 第一页（limit = 2）
         const page1 = await store.listProcesses(ownerA, undefined, 2);
-        expect(page1.processes.length).toBe(2);
-        expect(page1.processes[0].processId).toBe("proc-a-5");
-        expect(page1.processes[1].processId).toBe("proc-a-4");
-        expect(page1.nextPageToken).toBeDefined();
+        assert.strictEqual(page1.processes.length, 2);
+        assert.strictEqual(page1.processes[0].processId, "proc-a-5");
+        assert.strictEqual(page1.processes[1].processId, "proc-a-4");
+        assert.notStrictEqual(page1.nextPageToken, undefined);
 
         // 第二页（limit = 2）
         const page2 = await store.listProcesses(ownerA, page1.nextPageToken, 2);
-        expect(page2.processes.length).toBe(2);
-        expect(page2.processes[0].processId).toBe("proc-a-3");
-        expect(page2.processes[1].processId).toBe("proc-a-2");
-        expect(page2.nextPageToken).toBeDefined();
+        assert.strictEqual(page2.processes.length, 2);
+        assert.strictEqual(page2.processes[0].processId, "proc-a-3");
+        assert.strictEqual(page2.processes[1].processId, "proc-a-2");
+        assert.notStrictEqual(page2.nextPageToken, undefined);
 
         // 第三页（limit = 2，最后一页仅有 1 条）
         const page3 = await store.listProcesses(ownerA, page2.nextPageToken, 2);
-        expect(page3.processes.length).toBe(1);
-        expect(page3.processes[0].processId).toBe("proc-a-1");
-        expect(page3.nextPageToken).toBeUndefined();
+        assert.strictEqual(page3.processes.length, 1);
+        assert.strictEqual(page3.processes[0].processId, "proc-a-1");
+        assert.strictEqual(page3.nextPageToken, undefined);
       });
 
       it("记录与获取幂等操作请求凭证", async () => {
@@ -238,22 +239,22 @@ describe("ProcessMetadataStore", () => {
         };
 
         const notFound = await store.getRequest(key);
-        expect(notFound).toBeUndefined();
+        assert.strictEqual(notFound, undefined);
 
         await store.recordRequest(key, receipt, "hash-abcdef");
 
         const recorded = await store.getRequest(key);
-        expect(recorded).toBeDefined();
-        expect(recorded?.receipt).toEqual(receipt);
-        expect(recorded?.payloadHash).toBe("hash-abcdef");
+        assert.notStrictEqual(recorded, undefined);
+        assert.deepStrictEqual(recorded?.receipt, receipt);
+        assert.strictEqual(recorded?.payloadHash, "hash-abcdef");
 
         // 覆盖更新凭证
         const updatedReceipt = { ...receipt, status: "completed" };
         await store.recordRequest(key, updatedReceipt, "hash-updated");
 
         const reloaded = await store.getRequest(key);
-        expect(reloaded?.receipt.status).toBe("completed");
-        expect(reloaded?.payloadHash).toBe("hash-updated");
+        assert.strictEqual(reloaded?.receipt.status, "completed");
+        assert.strictEqual(reloaded?.payloadHash, "hash-updated");
 
         // 支持可选 processId（通用作用域请求）
         const globalKey = {
@@ -263,7 +264,7 @@ describe("ProcessMetadataStore", () => {
         };
         await store.recordRequest(globalKey, { status: "success" });
         const globalRes = await store.getRequest(globalKey);
-        expect(globalRes?.receipt.status).toBe("success");
+        assert.strictEqual(globalRes?.receipt.status, "success");
       });
 
       it("宿主生命周期初始化原子性收敛旧宿主遗留的非终态进程为 lost", async () => {
@@ -334,29 +335,29 @@ describe("ProcessMetadataStore", () => {
 
         // 执行新宿主初始化
         const recoveredCount = await store.initializeHost(currentEpoch);
-        expect(recoveredCount).toBe(3);
+        assert.strictEqual(recoveredCount, 3);
 
         // 验证旧非终态进程收敛为 lost
         for (const pid of ["p-starting", "p-running", "p-stopping"]) {
           const proc = await store.getProcess(pid);
-          expect(proc?.state).toBe("lost");
-          expect(proc?.controlState).toBe("closed");
-          expect(proc?.control).toBe("closed");
-          expect(proc?.endReason).toBe("host-lost");
-          expect(proc?.outputClosed).toBe(true);
-          expect(proc?.outputEndReason).toBe("host-lost");
+          assert.strictEqual(proc?.state, "lost");
+          assert.strictEqual(proc?.controlState, "closed");
+          assert.strictEqual(proc?.control, "closed");
+          assert.strictEqual(proc?.endReason, "host-lost");
+          assert.strictEqual(proc?.outputClosed, true);
+          assert.strictEqual(proc?.outputEndReason, "host-lost");
         }
 
         // 验证旧终态进程不受影响
         const stoppedProc = await store.getProcess("p-stopped");
-        expect(stoppedProc?.state).toBe("stopped");
-        expect(stoppedProc?.exitCode).toBe(0);
-        expect(stoppedProc?.endReason).toBe("exit");
+        assert.strictEqual(stoppedProc?.state, "stopped");
+        assert.strictEqual(stoppedProc?.exitCode, 0);
+        assert.strictEqual(stoppedProc?.endReason, "exit");
 
         // 验证当前宿主进程不受影响
         const currentProc = await store.getProcess("p-current");
-        expect(currentProc?.state).toBe("running");
-        expect(currentProc?.controlState).toBe("open");
+        assert.strictEqual(currentProc?.state, "running");
+        assert.strictEqual(currentProc?.controlState, "open");
       });
     });
   };

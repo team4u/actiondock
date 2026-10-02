@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   validateJsonValue,
   validateActionInputValue,
@@ -11,18 +12,18 @@ import {
 describe("Iterative Strict JsonValue Validator", () => {
   describe("RFC 6901 JSON Pointer 转义与拼接", () => {
     it("正确转义 ~ 与 / 字符", () => {
-      expect(escapeJsonPointerSegment("foo")).toBe("foo");
-      expect(escapeJsonPointerSegment("foo/bar")).toBe("foo~1bar");
-      expect(escapeJsonPointerSegment("foo~bar")).toBe("foo~0bar");
-      expect(escapeJsonPointerSegment("~/~0/~1")).toBe("~0~1~00~1~01");
-      expect(escapeJsonPointerSegment(0)).toBe("0");
+      assert.strictEqual(escapeJsonPointerSegment("foo"), "foo");
+      assert.strictEqual(escapeJsonPointerSegment("foo/bar"), "foo~1bar");
+      assert.strictEqual(escapeJsonPointerSegment("foo~bar"), "foo~0bar");
+      assert.strictEqual(escapeJsonPointerSegment("~/~0/~1"), "~0~1~00~1~01");
+      assert.strictEqual(escapeJsonPointerSegment(0), "0");
     });
 
     it("正确追加路径段", () => {
-      expect(appendJsonPointer("", "user")).toBe("/user");
-      expect(appendJsonPointer("/user", "name")).toBe("/user/name");
-      expect(appendJsonPointer("/items", 0)).toBe("/items/0");
-      expect(appendJsonPointer("/items/0", "a/b")).toBe("/items/0/a~1b");
+      assert.strictEqual(appendJsonPointer("", "user"), "/user");
+      assert.strictEqual(appendJsonPointer("/user", "name"), "/user/name");
+      assert.strictEqual(appendJsonPointer("/items", 0), "/items/0");
+      assert.strictEqual(appendJsonPointer("/items/0", "a/b"), "/items/0/a~1b");
     });
   });
 
@@ -34,7 +35,7 @@ describe("Iterative Strict JsonValue Validator", () => {
       }
 
       const res = validateJsonValue(root, { maxDepth: 2_500 });
-      expect(res.valid).toBe(true);
+      assert.strictEqual(res.valid, true);
     });
 
     it("超过安全递归栈深度时按深度上限拦截而非栈溢出", () => {
@@ -44,31 +45,31 @@ describe("Iterative Strict JsonValue Validator", () => {
       }
 
       const res = validateJsonValue(root, { maxDepth: 25_000 });
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("MAX_JSON_DEPTH");
+        assert.strictEqual(res.code, "MAX_JSON_DEPTH");
       }
     });
 
     it("默认最大深度限制 256：深度 256 通过，深度 257 拦截", () => {
-      expect(DEFAULT_MAX_JSON_DEPTH).toBe(256);
+      assert.strictEqual(DEFAULT_MAX_JSON_DEPTH, 256);
 
       let obj256: any = {};
       for (let i = 0; i < 256; i++) {
         obj256 = { inner: obj256 };
       }
       const res256 = validateJsonValue(obj256);
-      expect(res256.valid).toBe(true);
+      assert.strictEqual(res256.valid, true);
 
       let obj257: any = {};
       for (let i = 0; i < 257; i++) {
         obj257 = { inner: obj257 };
       }
       const res257 = validateJsonValue(obj257);
-      expect(res257.valid).toBe(false);
+      assert.strictEqual(res257.valid, false);
       if (!res257.valid) {
-        expect(res257.code).toBe("MAX_JSON_DEPTH");
-        expect(res257.reason).toContain("Max JSON depth limit (256) exceeded");
+        assert.strictEqual(res257.code, "MAX_JSON_DEPTH");
+        assert.ok((res257.reason).includes("Max JSON depth limit (256) exceeded"));
       }
     });
 
@@ -79,13 +80,13 @@ describe("Iterative Strict JsonValue Validator", () => {
       }
 
       const resValid = validateJsonValue(nested, { maxDepth: 150 });
-      expect(resValid.valid).toBe(true);
+      assert.strictEqual(resValid.valid, true);
 
       const resExceeded = validateJsonValue(nested, { maxDepth: 50 });
-      expect(resExceeded.valid).toBe(false);
+      assert.strictEqual(resExceeded.valid, false);
       if (!resExceeded.valid) {
-        expect(resExceeded.code).toBe("MAX_JSON_DEPTH");
-        expect(resExceeded.reason).toContain("Max JSON depth limit (50) exceeded");
+        assert.strictEqual(resExceeded.code, "MAX_JSON_DEPTH");
+        assert.ok((resExceeded.reason).includes("Max JSON depth limit (50) exceeded"));
       }
     });
   });
@@ -96,10 +97,10 @@ describe("Iterative Strict JsonValue Validator", () => {
       cycleObj.self = cycleObj;
 
       const res = validateJsonValue(cycleObj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("CIRCULAR_REFERENCE");
-        expect(res.reason).toBe("Circular reference detected in object structure");
+        assert.strictEqual(res.code, "CIRCULAR_REFERENCE");
+        assert.strictEqual(res.reason, "Circular reference detected in object structure");
       }
     });
 
@@ -108,10 +109,10 @@ describe("Iterative Strict JsonValue Validator", () => {
       cycleArr.push(cycleArr);
 
       const res = validateJsonValue(cycleArr);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("CIRCULAR_REFERENCE");
-        expect(res.reason).toBe("Circular reference detected in object structure");
+        assert.strictEqual(res.code, "CIRCULAR_REFERENCE");
+        assert.strictEqual(res.reason, "Circular reference detected in object structure");
       }
     });
 
@@ -122,9 +123,9 @@ describe("Iterative Strict JsonValue Validator", () => {
       b.c = a;
 
       const res = validateJsonValue(a);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("CIRCULAR_REFERENCE");
+        assert.strictEqual(res.code, "CIRCULAR_REFERENCE");
       }
     });
 
@@ -137,113 +138,113 @@ describe("Iterative Strict JsonValue Validator", () => {
       };
 
       const res = validateJsonValue(dagRoot);
-      expect(res.valid).toBe(true);
+      assert.strictEqual(res.valid, true);
     });
   });
 
   describe("基础类型与非法原始类型校验", () => {
     it("放行所有基础合法 JSON 类型（null, boolean, string, finite number）", () => {
-      expect(validateJsonValue(null).valid).toBe(true);
-      expect(validateJsonValue(true).valid).toBe(true);
-      expect(validateJsonValue(false).valid).toBe(true);
-      expect(validateJsonValue("hello").valid).toBe(true);
-      expect(validateJsonValue(0).valid).toBe(true);
-      expect(validateJsonValue(-123.45).valid).toBe(true);
-      expect(validateJsonValue({}).valid).toBe(true);
-      expect(validateJsonValue([]).valid).toBe(true);
+      assert.strictEqual(validateJsonValue(null).valid, true);
+      assert.strictEqual(validateJsonValue(true).valid, true);
+      assert.strictEqual(validateJsonValue(false).valid, true);
+      assert.strictEqual(validateJsonValue("hello").valid, true);
+      assert.strictEqual(validateJsonValue(0).valid, true);
+      assert.strictEqual(validateJsonValue(-123.45).valid, true);
+      assert.strictEqual(validateJsonValue({}).valid, true);
+      assert.strictEqual(validateJsonValue([]).valid, true);
     });
 
     it("拦截所有非有限数值（NaN, Infinity, -Infinity）", () => {
       const r1 = validateJsonValue(NaN);
-      expect(r1.valid).toBe(false);
-      if (!r1.valid) expect(r1.code).toBe("NON_FINITE_NUMBER");
+      assert.strictEqual(r1.valid, false);
+      if (!r1.valid) assert.strictEqual(r1.code, "NON_FINITE_NUMBER");
 
       const r2 = validateJsonValue(Infinity);
-      expect(r2.valid).toBe(false);
-      if (!r2.valid) expect(r2.code).toBe("NON_FINITE_NUMBER");
+      assert.strictEqual(r2.valid, false);
+      if (!r2.valid) assert.strictEqual(r2.code, "NON_FINITE_NUMBER");
 
       const r3 = validateJsonValue(-Infinity);
-      expect(r3.valid).toBe(false);
-      if (!r3.valid) expect(r3.code).toBe("NON_FINITE_NUMBER");
+      assert.strictEqual(r3.valid, false);
+      if (!r3.valid) assert.strictEqual(r3.code, "NON_FINITE_NUMBER");
 
       const r4 = validateJsonValue({ val: NaN });
-      expect(r4.valid).toBe(false);
+      assert.strictEqual(r4.valid, false);
       if (!r4.valid) {
-        expect(r4.code).toBe("NON_FINITE_NUMBER");
-        expect(r4.path).toBe("/val");
+        assert.strictEqual(r4.code, "NON_FINITE_NUMBER");
+        assert.strictEqual(r4.path, "/val");
       }
 
       const r5 = validateJsonValue([1, 2, Infinity]);
-      expect(r5.valid).toBe(false);
+      assert.strictEqual(r5.valid, false);
       if (!r5.valid) {
-        expect(r5.code).toBe("NON_FINITE_NUMBER");
-        expect(r5.path).toBe("/2");
+        assert.strictEqual(r5.code, "NON_FINITE_NUMBER");
+        assert.strictEqual(r5.path, "/2");
       }
     });
 
     it("拦截非法 JSON 类型（undefined, function, symbol, bigint）", () => {
       const rUndef = validateJsonValue(undefined);
-      expect(rUndef.valid).toBe(false);
-      if (!rUndef.valid) expect(rUndef.code).toBe("UNDEFINED_JSON_VALUE");
+      assert.strictEqual(rUndef.valid, false);
+      if (!rUndef.valid) assert.strictEqual(rUndef.code, "UNDEFINED_JSON_VALUE");
 
       const rFn = validateJsonValue(() => {});
-      expect(rFn.valid).toBe(false);
-      if (!rFn.valid) expect(rFn.code).toBe("UNSUPPORTED_JSON_TYPE");
+      assert.strictEqual(rFn.valid, false);
+      if (!rFn.valid) assert.strictEqual(rFn.code, "UNSUPPORTED_JSON_TYPE");
 
       const rSym = validateJsonValue(Symbol("foo"));
-      expect(rSym.valid).toBe(false);
-      if (!rSym.valid) expect(rSym.code).toBe("UNSUPPORTED_JSON_TYPE");
+      assert.strictEqual(rSym.valid, false);
+      if (!rSym.valid) assert.strictEqual(rSym.code, "UNSUPPORTED_JSON_TYPE");
 
       const rBig = validateJsonValue(BigInt(123));
-      expect(rBig.valid).toBe(false);
-      if (!rBig.valid) expect(rBig.code).toBe("UNSUPPORTED_JSON_TYPE");
+      assert.strictEqual(rBig.valid, false);
+      if (!rBig.valid) assert.strictEqual(rBig.code, "UNSUPPORTED_JSON_TYPE");
 
       const rObjFn = validateJsonValue({ fn: () => {} });
-      expect(rObjFn.valid).toBe(false);
+      assert.strictEqual(rObjFn.valid, false);
       if (!rObjFn.valid) {
-        expect(rObjFn.code).toBe("UNSUPPORTED_JSON_TYPE");
-        expect(rObjFn.path).toBe("/fn");
+        assert.strictEqual(rObjFn.code, "UNSUPPORTED_JSON_TYPE");
+        assert.strictEqual(rObjFn.path, "/fn");
       }
 
       const rArrSym = validateJsonValue([Symbol("bar")]);
-      expect(rArrSym.valid).toBe(false);
+      assert.strictEqual(rArrSym.valid, false);
       if (!rArrSym.valid) {
-        expect(rArrSym.code).toBe("UNSUPPORTED_JSON_TYPE");
-        expect(rArrSym.path).toBe("/0");
+        assert.strictEqual(rArrSym.code, "UNSUPPORTED_JSON_TYPE");
+        assert.strictEqual(rArrSym.path, "/0");
       }
     });
   });
 
   describe("严格对象（Object）规范校验", () => {
     it("放行 Object.prototype 与 Object.create(null) 原型对象", () => {
-      expect(validateJsonValue({ a: 1 }).valid).toBe(true);
+      assert.strictEqual(validateJsonValue({ a: 1 }).valid, true);
 
       const nullProtoObj = Object.create(null);
       nullProtoObj.key = "value";
-      expect(validateJsonValue(nullProtoObj).valid).toBe(true);
+      assert.strictEqual(validateJsonValue(nullProtoObj).valid, true);
     });
 
     it("拒绝非普通对象原型（Date, Map, Set, RegExp, Promise, Error 等）", () => {
-      expect(validateJsonValue(new Date()).valid).toBe(false);
-      expect(validateJsonValue(new Map()).valid).toBe(false);
-      expect(validateJsonValue(new Set()).valid).toBe(false);
-      expect(validateJsonValue(/abc/).valid).toBe(false);
-      expect(validateJsonValue(Promise.resolve(1)).valid).toBe(false);
-      expect(validateJsonValue(new Error("err")).valid).toBe(false);
-      expect(validateJsonValue(new Uint8Array(8)).valid).toBe(false);
-      expect(validateJsonValue(Buffer.from("abc")).valid).toBe(false);
+      assert.strictEqual(validateJsonValue(new Date()).valid, false);
+      assert.strictEqual(validateJsonValue(new Map()).valid, false);
+      assert.strictEqual(validateJsonValue(new Set()).valid, false);
+      assert.strictEqual(validateJsonValue(/abc/).valid, false);
+      assert.strictEqual(validateJsonValue(Promise.resolve(1)).valid, false);
+      assert.strictEqual(validateJsonValue(new Error("err")).valid, false);
+      assert.strictEqual(validateJsonValue(new Uint8Array(8)).valid, false);
+      assert.strictEqual(validateJsonValue(Buffer.from("abc")).valid, false);
 
       class CustomClass {
         name = "custom";
       }
-      expect(validateJsonValue(new CustomClass()).valid).toBe(false);
+      assert.strictEqual(validateJsonValue(new CustomClass()).valid, false);
 
       const nestedDate = { time: new Date() };
       const res = validateJsonValue(nestedDate);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
-        expect(res.path).toBe("/time");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
+        assert.strictEqual(res.path, "/time");
       }
     });
 
@@ -251,9 +252,9 @@ describe("Iterative Strict JsonValue Validator", () => {
       const symKey = Symbol("sym");
       const obj = { [symKey]: "val", regular: 1 };
       const res = validateJsonValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
       }
     });
 
@@ -264,10 +265,10 @@ describe("Iterative Strict JsonValue Validator", () => {
         },
       };
       const res = validateJsonValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
-        expect(res.path).toBe("/dynamic");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
+        assert.strictEqual(res.path, "/dynamic");
       }
     });
 
@@ -279,43 +280,43 @@ describe("Iterative Strict JsonValue Validator", () => {
         configurable: true,
       });
       const res = validateJsonValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
-        expect(res.path).toBe("/hidden");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
+        assert.strictEqual(res.path, "/hidden");
       }
     });
 
     it("拒绝属性值为 undefined 的对象", () => {
       const obj = { a: undefined };
       const res = validateJsonValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("UNDEFINED_JSON_VALUE");
-        expect(res.path).toBe("/a");
+        assert.strictEqual(res.code, "UNDEFINED_JSON_VALUE");
+        assert.strictEqual(res.path, "/a");
       }
     });
   });
 
   describe("严格数组（Array）规范校验", () => {
     it("放行致密普通数组", () => {
-      expect(validateJsonValue([1, "a", true, null, { x: 1 }]).valid).toBe(true);
-      expect(validateJsonValue([]).valid).toBe(true);
+      assert.strictEqual(validateJsonValue([1, "a", true, null, { x: 1 }]).valid, true);
+      assert.strictEqual(validateJsonValue([]).valid, true);
     });
 
     it("拒绝稀疏数组（存在 hole）", () => {
       const sparse1 = new Array(3);
       const res1 = validateJsonValue(sparse1);
-      expect(res1.valid).toBe(false);
+      assert.strictEqual(res1.valid, false);
       if (!res1.valid) {
-        expect(res1.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res1.code, "INVALID_JSON_OBJECT");
       }
 
       const sparse2 = [1, , 3];
       const res2 = validateJsonValue(sparse2);
-      expect(res2.valid).toBe(false);
+      assert.strictEqual(res2.valid, false);
       if (!res2.valid) {
-        expect(res2.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res2.code, "INVALID_JSON_OBJECT");
       }
     });
 
@@ -323,27 +324,27 @@ describe("Iterative Strict JsonValue Validator", () => {
       const arr1: any = [1, 2];
       arr1.extra = "prop";
       const res1 = validateJsonValue(arr1);
-      expect(res1.valid).toBe(false);
+      assert.strictEqual(res1.valid, false);
       if (!res1.valid) {
-        expect(res1.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res1.code, "INVALID_JSON_OBJECT");
       }
 
       const arr2: any = [1, 2];
       arr2[Symbol("tag")] = "symbol_value";
       const res2 = validateJsonValue(arr2);
-      expect(res2.valid).toBe(false);
+      assert.strictEqual(res2.valid, false);
       if (!res2.valid) {
-        expect(res2.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res2.code, "INVALID_JSON_OBJECT");
       }
     });
 
     it("拒绝元素包含 undefined 的数组", () => {
       const arr = [1, undefined, 3];
       const res = validateJsonValue(arr);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("UNDEFINED_JSON_VALUE");
-        expect(res.path).toBe("/1");
+        assert.strictEqual(res.code, "UNDEFINED_JSON_VALUE");
+        assert.strictEqual(res.path, "/1");
       }
     });
 
@@ -352,9 +353,9 @@ describe("Iterative Strict JsonValue Validator", () => {
       const arr = new CustomArray();
       arr.push(1, 2);
       const res = validateJsonValue(arr);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
       }
     });
   });
@@ -368,10 +369,10 @@ describe("Iterative Strict JsonValue Validator", () => {
       });
 
       const res = validateJsonValue(throwingProxy);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
-        expect(res.reason).toContain("Proxy trap exploded");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
+        assert.ok((res.reason).includes("Proxy trap exploded"));
       }
     });
 
@@ -383,10 +384,10 @@ describe("Iterative Strict JsonValue Validator", () => {
       });
 
       const res = validateJsonValue(throwingProxy);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.code).toBe("INVALID_JSON_OBJECT");
-        expect(res.reason).toContain("ownKeys failed");
+        assert.strictEqual(res.code, "INVALID_JSON_OBJECT");
+        assert.ok((res.reason).includes("ownKeys failed"));
       }
     });
   });
@@ -398,39 +399,39 @@ describe("Iterative Strict JsonValue Validator", () => {
         age: 30,
         tags: ["admin", "dev"],
       });
-      expect(res.valid).toBe(true);
+      assert.strictEqual(res.valid, true);
     });
 
     it("拦截根对象中的 __proto__ 禁止属性", () => {
       const obj = JSON.parse('{"__proto__": 123}');
       const res = validateActionInputValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid && res.kind === "input-policy") {
-        expect(res.code).toBe("FORBIDDEN_PROPERTY");
-        expect(res.property).toBe("__proto__");
-        expect(res.path).toBe("/__proto__");
+        assert.strictEqual(res.code, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(res.property, "__proto__");
+        assert.strictEqual(res.path, "/__proto__");
       }
     });
 
     it("拦截根对象中的 constructor 禁止属性", () => {
       const obj = { constructor: "exploit" };
       const res = validateActionInputValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid && res.kind === "input-policy") {
-        expect(res.code).toBe("FORBIDDEN_PROPERTY");
-        expect(res.property).toBe("constructor");
-        expect(res.path).toBe("/constructor");
+        assert.strictEqual(res.code, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(res.property, "constructor");
+        assert.strictEqual(res.path, "/constructor");
       }
     });
 
     it("拦截根对象中的 prototype 禁止属性", () => {
       const obj = { prototype: "exploit" };
       const res = validateActionInputValue(obj);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid && res.kind === "input-policy") {
-        expect(res.code).toBe("FORBIDDEN_PROPERTY");
-        expect(res.property).toBe("prototype");
-        expect(res.path).toBe("/prototype");
+        assert.strictEqual(res.code, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(res.property, "prototype");
+        assert.strictEqual(res.path, "/prototype");
       }
     });
 
@@ -444,41 +445,41 @@ describe("Iterative Strict JsonValue Validator", () => {
         },
       };
       const res = validateActionInputValue(deep);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid && res.kind === "input-policy") {
-        expect(res.code).toBe("FORBIDDEN_PROPERTY");
-        expect(res.property).toBe("constructor");
-        expect(res.path).toBe("/meta/items/1/constructor");
+        assert.strictEqual(res.code, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(res.property, "constructor");
+        assert.strictEqual(res.path, "/meta/items/1/constructor");
       }
     });
 
     it("validateJsonValue 不触发 input-policy 且放行数据属性的 constructor", () => {
       const obj = { constructor: "plain_data" };
       const res = validateJsonValue(obj);
-      expect(res.valid).toBe(true);
+      assert.strictEqual(res.valid, true);
     });
 
     it("非 JsonValue 违规优先于或统一报告为 kind: json-value", () => {
       const bad = { num: NaN };
       const res = validateActionInputValue(bad);
-      expect(res.valid).toBe(false);
+      assert.strictEqual(res.valid, false);
       if (!res.valid) {
-        expect(res.kind).toBe("json-value");
-        expect(res.code).toBe("NON_FINITE_NUMBER");
-        expect(res.path).toBe("/num");
+        assert.strictEqual(res.kind, "json-value");
+        assert.strictEqual(res.code, "NON_FINITE_NUMBER");
+        assert.strictEqual(res.path, "/num");
       }
     });
   });
 
   describe("assertJsonValue 断言兼容性", () => {
     it("合法值通过断言", () => {
-      expect(() => assertJsonValue({ a: 1, b: "ok" })).not.toThrow();
+      assert.doesNotThrow(() => assertJsonValue({ a: 1, b: "ok" }));
     });
 
     it("非法值抛出 TypeError 并携带 reason", () => {
-      expect(() => assertJsonValue(NaN)).toThrow(TypeError);
-      expect(() => assertJsonValue({ bad: Infinity })).toThrow(TypeError);
-      expect(() => assertJsonValue(new Date())).toThrow(TypeError);
+      assert.throws(() => assertJsonValue(NaN), TypeError);
+      assert.throws(() => assertJsonValue({ bad: Infinity }), TypeError);
+      assert.throws(() => assertJsonValue(new Date()), TypeError);
     });
   });
 });

@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -43,8 +44,8 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe("# Database Map\nLine 2\nLine 3");
-    expect(stderrLogs.join("\n")).toContain("[system-knowledge/db-map.md | lines 1-17 | hasMore: false]");
+    assert.strictEqual(stdoutLogs.join("\n"), "# Database Map\nLine 2\nLine 3");
+    assert.ok((stderrLogs.join("\n")).includes("[system-knowledge/db-map.md | lines 1-17 | hasMore: false]"));
   });
 
   it("renders truncated metadata flag when truncated is true", () => {
@@ -69,9 +70,9 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe("Log content...");
-    expect(stderrLogs.join("\n")).toContain("truncated: true");
-    expect(stderrLogs.join("\n")).toContain("hasMore: true");
+    assert.strictEqual(stdoutLogs.join("\n"), "Log content...");
+    assert.ok((stderrLogs.join("\n")).includes("truncated: true"));
+    assert.ok((stderrLogs.join("\n")).includes("hasMore: true"));
   });
 
   it("safely stringifies content when content itself is a nested object", () => {
@@ -92,8 +93,8 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe(JSON.stringify({ key: "value", list: [1, 2] }, null, 2));
-    expect(stderrLogs.join("\n")).toContain("[config.json]");
+    assert.strictEqual(stdoutLogs.join("\n"), JSON.stringify({ key: "value", list: [1, 2] }, null, 2));
+    assert.ok((stderrLogs.join("\n")).includes("[config.json]"));
   });
 
   it("renders pure string data directly to stdout without metadata", () => {
@@ -111,8 +112,8 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe("pure string output");
-    expect(stderrLogs.length).toBe(0);
+    assert.strictEqual(stdoutLogs.join("\n"), "pure string output");
+    assert.strictEqual(stderrLogs.length, 0);
   });
 
   it("renders message field to stdout when data contains message", () => {
@@ -132,8 +133,8 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe("Hello from action!");
-    expect(stderrLogs.length).toBe(0);
+    assert.strictEqual(stdoutLogs.join("\n"), "Hello from action!");
+    assert.strictEqual(stderrLogs.length, 0);
   });
 
   it("renders text field to stdout when data contains text", () => {
@@ -154,8 +155,8 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    expect(stdoutLogs.join("\n")).toBe("Some text block");
-    expect(stderrLogs.join("\n")).toContain("code: 200");
+    assert.strictEqual(stdoutLogs.join("\n"), "Some text block");
+    assert.ok((stderrLogs.join("\n")).includes("code: 200"));
   });
 
   it("renders error to stderr and sets exitCode on failure", () => {
@@ -178,10 +179,10 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
         stderr: (msg) => stderrLogs.push(msg),
       });
 
-      expect(stdoutLogs.length).toBe(0);
-      expect(stderrLogs.join("\n")).toContain("Error [FILE_NOT_FOUND]: File could not be opened");
-      expect(stderrLogs.join("\n")).not.toContain("Tip: Run 'ad describe");
-      expect(process.exitCode).toBe(1);
+      assert.strictEqual(stdoutLogs.length, 0);
+      assert.ok((stderrLogs.join("\n")).includes("Error [FILE_NOT_FOUND]: File could not be opened"));
+      assert.ok(!(stderrLogs.join("\n")).includes("Tip: Run 'ad describe"));
+      assert.strictEqual(process.exitCode, 1);
     } finally {
       process.exitCode = prevExitCode ?? 0;
     }
@@ -208,12 +209,12 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
         stderr: (msg) => stderrLogs.push(msg),
       });
 
-      expect(stdoutLogs.length).toBe(0);
+      assert.strictEqual(stdoutLogs.length, 0);
       const stderr = stderrLogs.join("\n");
-      expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]: Input schema validation failed for action 'files.read'");
-      expect(stderr).toContain("must have required property 'path'");
-      expect(stderr).toContain("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
-      expect(process.exitCode).toBe(1);
+      assert.ok((stderr).includes("Error [INPUT_VALIDATION_FAILED]: Input schema validation failed for action 'files.read'"));
+      assert.ok((stderr).includes("must have required property 'path'"));
+      assert.ok((stderr).includes("Tip: Run 'ad describe files.read' to inspect schema and syntax examples."));
+      assert.strictEqual(process.exitCode, 1);
     } finally {
       process.exitCode = prevExitCode ?? 0;
     }
@@ -239,11 +240,11 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
         stderr: (msg) => stderrLogs.push(msg),
       });
 
-      expect(stdoutLogs.length).toBe(0);
+      assert.strictEqual(stdoutLogs.length, 0);
       const stderr = stderrLogs.join("\n");
-      expect(stderr).toContain("Error [ACTION_FAILED]: Action business logic threw an unhandled error");
-      expect(stderr).not.toContain("Tip: Run 'ad describe");
-      expect(process.exitCode).toBe(1);
+      assert.ok((stderr).includes("Error [ACTION_FAILED]: Action business logic threw an unhandled error"));
+      assert.ok(!(stderr).includes("Tip: Run 'ad describe"));
+      assert.strictEqual(process.exitCode, 1);
     } finally {
       process.exitCode = prevExitCode ?? 0;
     }
@@ -253,7 +254,7 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
 describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
   let tempDir: string;
 
-  beforeAll(async () => {
+  before(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-raw-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-raw-home-"));
 
@@ -266,7 +267,7 @@ describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
 
     // Initialize package
     const initProc = await runCli(["init", "--id", "test.raw-pkg", "--name", "Raw Pkg", "."], tempDir);
-    expect(initProc.exitCode).toBe(0);
+    assert.strictEqual(initProc.exitCode, 0);
 
     // Create a mock files.read action
     const filesReadSource = `import { defineAction } from "@actiondock/sdk";
@@ -305,7 +306,7 @@ export default defineAction(async (input: { path: string }) => {
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -329,13 +330,13 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "--input", JSON.stringify({ path: "docs/readme.md" })],
       tempDir
     );
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
 
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stdout).toBe("# File Header\n\nBody text line 3\n");
-    expect(stderr).toContain("[docs/readme.md | lines 1-3 | hasMore: false]");
+    assert.strictEqual(stdout, "# File Header\n\nBody text line 3\n");
+    assert.ok((stderr).includes("[docs/readme.md | lines 1-3 | hasMore: false]"));
   });
 
   it("outputs standard JSON execution envelope when --json is provided", async () => {
@@ -343,17 +344,17 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "-i", JSON.stringify({ path: "test.txt" }), "--json"],
       tempDir
     );
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
 
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stderr.trim()).toBe("");
+    assert.strictEqual(stderr.trim(), "");
     const parsed = JSON.parse(stdout);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.runId).toBeDefined();
-    expect(parsed.data.path).toBe("test.txt");
-    expect(parsed.data.content).toBe("# File Header\n\nBody text line 3");
+    assert.strictEqual(parsed.ok, true);
+    assert.notStrictEqual(parsed.runId, undefined);
+    assert.strictEqual(parsed.data.path, "test.txt");
+    assert.strictEqual(parsed.data.content, "# File Header\n\nBody text line 3");
   });
 
   it("works with ad action run defaulting to raw and supporting --json", async () => {
@@ -362,19 +363,19 @@ export default defineAction(async (input: { path: string }) => {
       ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
       tempDir
     );
-    expect(procRaw.exitCode).toBe(0);
-    expect(procRaw.stdout.toString()).toBe("# File Header\n\nBody text line 3\n");
-    expect(procRaw.stderr.toString()).toContain("[info.md | lines 1-3 | hasMore: false]");
+    assert.strictEqual(procRaw.exitCode, 0);
+    assert.strictEqual(procRaw.stdout.toString(), "# File Header\n\nBody text line 3\n");
+    assert.ok((procRaw.stderr.toString()).includes("[info.md | lines 1-3 | hasMore: false]"));
 
     // --json machine envelope
     const procJson = await runCli(
       ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--json"],
       tempDir
     );
-    expect(procJson.exitCode).toBe(0);
+    assert.strictEqual(procJson.exitCode, 0);
     const parsed = JSON.parse(procJson.stdout.toString());
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.path).toBe("info.md");
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.path, "info.md");
   });
 
   it("handles action error properly by writing to stderr by default", async () => {
@@ -382,15 +383,15 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" })],
       tempDir
     );
-    expect(proc.exitCode).toBe(1);
+    assert.strictEqual(proc.exitCode, 1);
 
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stdout.trim()).toBe("");
-    expect(stderr).toContain("Error");
-    expect(stderr).toContain("File not found: missing.txt");
-    expect(stderr).not.toContain("Tip: Run 'ad describe");
+    assert.strictEqual(stdout.trim(), "");
+    assert.ok((stderr).includes("Error"));
+    assert.ok((stderr).includes("File not found: missing.txt"));
+    assert.ok(!(stderr).includes("Tip: Run 'ad describe"));
   });
 
   it("handles action error properly by outputting JSON envelope when --json is provided", async () => {
@@ -398,12 +399,12 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" }), "--json"],
       tempDir
     );
-    expect(proc.exitCode).toBe(1);
+    assert.strictEqual(proc.exitCode, 1);
 
     const stdout = proc.stdout.toString();
     const parsed = JSON.parse(stdout);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.message).toContain("File not found: missing.txt");
+    assert.strictEqual(parsed.ok, false);
+    assert.ok((parsed.error.message).includes("File not found: missing.txt"));
   });
 
   it("renders describe guidance tip to stderr on INPUT_VALIDATION_FAILED in raw mode", async () => {
@@ -411,14 +412,14 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "-i", JSON.stringify({ wrongField: "val" })],
       tempDir
     );
-    expect(proc.exitCode).toBe(1);
+    assert.strictEqual(proc.exitCode, 1);
 
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stdout.trim()).toBe("");
-    expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]");
-    expect(stderr).toContain("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
+    assert.strictEqual(stdout.trim(), "");
+    assert.ok((stderr).includes("Error [INPUT_VALIDATION_FAILED]"));
+    assert.ok((stderr).includes("Tip: Run 'ad describe files.read' to inspect schema and syntax examples."));
   });
 
   it("outputs describe guidance hint on INPUT_VALIDATION_FAILED in machine output when --json is provided", async () => {
@@ -426,15 +427,15 @@ export default defineAction(async (input: { path: string }) => {
       ["run", "files.read", "-i", JSON.stringify({ wrongField: "val" }), "--json"],
       tempDir
     );
-    expect(proc.exitCode).toBe(1);
+    assert.strictEqual(proc.exitCode, 1);
 
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stderr.trim()).toBe("");
+    assert.strictEqual(stderr.trim(), "");
     const parsed = JSON.parse(stdout);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
-    expect(parsed.hint).toBe("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "INPUT_VALIDATION_FAILED");
+    assert.strictEqual(parsed.hint, "Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { InMemoryEventSink } from "../src/runtime/events";
 import type { ExecutionEvent } from "@actiondock/sdk";
 
@@ -26,8 +27,8 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(3);
-    expect(received.map((e) => e.sequence)).toEqual([0, 1, 2]);
+    assert.strictEqual(received.length, 3);
+    assert.deepStrictEqual(received.map((e) => e.sequence), [0, 1, 2]);
   });
 
   it("atomic subscription handoff: concurrent emissions during history playback are not lost or duplicated", async () => {
@@ -62,10 +63,10 @@ describe("InMemoryEventSink", () => {
       }
     }
 
-    expect(received.map((e) => e.sequence)).toEqual([0, 1, 2, 3, 4]);
+    assert.deepStrictEqual(received.map((e) => e.sequence), [0, 1, 2, 3, 4]);
     // Ensure no duplicates
     const sequences = received.map((e) => e.sequence);
-    expect(new Set(sequences).size).toBe(5);
+    assert.strictEqual(new Set(sequences).size, 5);
   });
 
   it("enforces count quota and drops oldest events when buffer is full", () => {
@@ -78,8 +79,8 @@ describe("InMemoryEventSink", () => {
     sink.emit({ runId, rootRunId: runId, sequence: 3, timestamp: "t3", type: "log", level: "info", message: "msg 2" });
 
     const statsBefore = sink.getRunStats(runId);
-    expect(statsBefore?.count).toBe(4);
-    expect(statsBefore?.droppedCount).toBe(0);
+    assert.strictEqual(statsBefore?.count, 4);
+    assert.strictEqual(statsBefore?.droppedCount, 0);
 
     // Emit 5th event -> should drop oldest event
     sink.emit({
@@ -92,9 +93,9 @@ describe("InMemoryEventSink", () => {
     });
 
     const statsAfter = sink.getRunStats(runId);
-    expect(statsAfter?.count).toBe(4);
-    expect(statsAfter?.droppedCount).toBe(1);
-    expect(statsAfter?.isTerminal).toBe(true);
+    assert.strictEqual(statsAfter?.count, 4);
+    assert.strictEqual(statsAfter?.droppedCount, 1);
+    assert.strictEqual(statsAfter?.isTerminal, true);
   });
 
   it("enforces count quota and drops oldest events when exceeding maxEventsPerRun", () => {
@@ -106,15 +107,15 @@ describe("InMemoryEventSink", () => {
     sink.emit({ runId, rootRunId: runId, sequence: 2, timestamp: "t2", type: "log", level: "info", message: "msg 2" });
 
     const stats1 = sink.getRunStats(runId)!;
-    expect(stats1.count).toBe(3);
-    expect(stats1.droppedCount).toBe(0);
+    assert.strictEqual(stats1.count, 3);
+    assert.strictEqual(stats1.droppedCount, 0);
 
     sink.emit({ runId, rootRunId: runId, sequence: 3, timestamp: "t3", type: "log", level: "info", message: "msg 3" });
     sink.emit({ runId, rootRunId: runId, sequence: 4, timestamp: "t4", type: "log", level: "info", message: "msg 4" });
 
     const stats2 = sink.getRunStats(runId)!;
-    expect(stats2.count).toBe(3);
-    expect(stats2.droppedCount).toBe(2);
+    assert.strictEqual(stats2.count, 3);
+    assert.strictEqual(stats2.droppedCount, 2);
   });
 
   it("enforces global bounded run eviction when exceeding maxRuns", () => {
@@ -123,15 +124,15 @@ describe("InMemoryEventSink", () => {
     sink.emit({ runId: "run-a", rootRunId: "run-a", sequence: 0, timestamp: "t0", type: "finish", result: { ok: true, runId: "run-a", data: null } });
     sink.emit({ runId: "run-b", rootRunId: "run-b", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunCount()).toBe(2);
+    assert.strictEqual(sink.getRunCount(), 2);
 
     // Adding 3rd run should evict finished run-a
     sink.emit({ runId: "run-c", rootRunId: "run-c", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunCount()).toBe(2);
-    expect(sink.getRunStats("run-a")).toBeUndefined();
-    expect(sink.getRunStats("run-b")).toBeDefined();
-    expect(sink.getRunStats("run-c")).toBeDefined();
+    assert.strictEqual(sink.getRunCount(), 2);
+    assert.strictEqual(sink.getRunStats("run-a"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-b"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-c"), undefined);
   });
 
   it("cleans up AbortSignal listeners properly on abort or completion", async () => {
@@ -152,8 +153,8 @@ describe("InMemoryEventSink", () => {
     })();
 
     await consumer;
-    expect(received.length).toBe(1);
-    expect(controller.signal.aborted).toBe(true);
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(controller.signal.aborted, true);
   });
 
   it("evictOldestRun strictly enforces maxRuns by evicting terminal runs first or oldest active run", () => {
@@ -162,15 +163,15 @@ describe("InMemoryEventSink", () => {
     // Both run-1 and run-2 are active (non-terminal)
     sink.emit({ runId: "run-1", rootRunId: "run-1", sequence: 0, timestamp: "t0", type: "status", status: "running" });
     sink.emit({ runId: "run-2", rootRunId: "run-2", sequence: 0, timestamp: "t0", type: "status", status: "running" });
-    expect(sink.getRunCount()).toBe(2);
+    assert.strictEqual(sink.getRunCount(), 2);
 
     // Emit run-3 (also active) - since neither run-1 nor run-2 is terminal, oldest active run (run-1) is evicted
     sink.emit({ runId: "run-3", rootRunId: "run-3", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunCount()).toBe(2);
-    expect(sink.getRunStats("run-1")).toBeUndefined();
-    expect(sink.getRunStats("run-2")).toBeDefined();
-    expect(sink.getRunStats("run-3")).toBeDefined();
+    assert.strictEqual(sink.getRunCount(), 2);
+    assert.strictEqual(sink.getRunStats("run-1"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-2"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-3"), undefined);
 
     // Now mark run-2 as terminal (finish)
     sink.emit({
@@ -185,10 +186,10 @@ describe("InMemoryEventSink", () => {
     // Emitting run-4 should evict the terminal run-2, preserving active run-3
     sink.emit({ runId: "run-4", rootRunId: "run-4", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunCount()).toBe(2);
-    expect(sink.getRunStats("run-2")).toBeUndefined();
-    expect(sink.getRunStats("run-3")).toBeDefined();
-    expect(sink.getRunStats("run-4")).toBeDefined();
+    assert.strictEqual(sink.getRunCount(), 2);
+    assert.strictEqual(sink.getRunStats("run-2"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-3"), undefined);
+    assert.notStrictEqual(sink.getRunStats("run-4"), undefined);
   });
 
   it("clear(runId) wakes up waiting subscribers so async iterator terminates cleanly", async () => {
@@ -209,15 +210,15 @@ describe("InMemoryEventSink", () => {
 
     // Yield to let subscriber enter the waiting state
     await new Promise((r) => setTimeout(r, 20));
-    expect(completed).toBe(false);
-    expect(received.length).toBe(1);
+    assert.strictEqual(completed, false);
+    assert.strictEqual(received.length, 1);
 
     // Calling clear() must unblock waiting subscriber
     sink.clear(runId);
 
     await consumer;
-    expect(completed).toBe(true);
-    expect(received.length).toBe(1);
+    assert.strictEqual(completed, true);
+    assert.strictEqual(received.length, 1);
   });
 
   it("broadcasts large log and finish events intact without payload truncation or tampering", async () => {
@@ -255,21 +256,21 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(2);
+    assert.strictEqual(received.length, 2);
 
     const logEvt = received[0];
-    expect(logEvt.type).toBe("log");
+    assert.strictEqual(logEvt.type, "log");
     if (logEvt.type === "log") {
-      expect(logEvt.message).toBe(massiveLog);
-      expect(logEvt.message.includes("[TRUNCATED]")).toBe(false);
+      assert.strictEqual(logEvt.message, massiveLog);
+      assert.strictEqual(logEvt.message.includes("[TRUNCATED]"), false);
     }
 
     const finishEvt = received[1];
-    expect(finishEvt.type).toBe("finish");
+    assert.strictEqual(finishEvt.type, "finish");
     if (finishEvt.type === "finish") {
-      expect(finishEvt.result.ok).toBe(true);
-      expect(finishEvt.result).toEqual({ ok: true, runId, data: massiveFinishData });
-      expect((finishEvt.result as any).data?._truncated).toBeUndefined();
+      assert.strictEqual(finishEvt.result.ok, true);
+      assert.deepStrictEqual(finishEvt.result, { ok: true, runId, data: massiveFinishData });
+      assert.strictEqual((finishEvt.result as any).data?._truncated, undefined);
     }
   });
 
@@ -296,9 +297,9 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(3);
-    expect(received.map((e) => e.type)).toEqual(["status", "status", "finish"]);
-    expect(received[2].type).toBe("finish");
+    assert.strictEqual(received.length, 3);
+    assert.deepStrictEqual(received.map((e) => e.type), ["status", "status", "finish"]);
+    assert.strictEqual(received[2].type, "finish");
   });
 
   it("late subscriber terminates cleanly when run is terminal", async () => {
@@ -316,16 +317,16 @@ describe("InMemoryEventSink", () => {
     });
 
     const stats = sink.getRunStats(runId);
-    expect(stats?.isTerminal).toBe(true);
-    expect(stats?.count).toBe(1);
+    assert.strictEqual(stats?.isTerminal, true);
+    assert.strictEqual(stats?.count, 1);
 
     const received: ExecutionEvent[] = [];
     for await (const evt of sink.subscribe(runId)) {
       received.push(evt);
     }
 
-    expect(received.length).toBe(1);
-    expect(received[0].type).toBe("finish");
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].type, "finish");
   });
 
   it("delivers finish event when subscription starts between terminal status and finish", async () => {
@@ -355,9 +356,9 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(3);
-    expect(received.map((e) => e.type)).toEqual(["status", "status", "finish"]);
-    expect(received[2].type).toBe("finish");
+    assert.strictEqual(received.length, 3);
+    assert.deepStrictEqual(received.map((e) => e.type), ["status", "status", "finish"]);
+    assert.strictEqual(received[2].type, "finish");
   });
 
   it("paused subscriber terminates cleanly when active run is evicted by maxRuns", async () => {
@@ -389,8 +390,8 @@ describe("InMemoryEventSink", () => {
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: subscriber hung")), 500));
     await Promise.race([consumer, timeoutPromise]);
 
-    expect(completed).toBe(true);
-    expect(received.length).toBe(1);
+    assert.strictEqual(completed, true);
+    assert.strictEqual(received.length, 1);
   });
 
   it("drops oldest events in subscriber queue when queue limit is exceeded", async () => {
@@ -423,9 +424,9 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBeLessThan(5);
-    expect(received.some((e) => e.sequence === 0)).toBe(true);
-    expect(received[received.length - 1].type).toBe("finish");
+    assert.ok((received.length) < 5);
+    assert.strictEqual(received.some((e) => e.sequence === 0), true);
+    assert.strictEqual(received[received.length - 1].type, "finish");
   });
 
   it("preserves finish error payload intact without tampering", async () => {
@@ -458,14 +459,14 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(2);
+    assert.strictEqual(received.length, 2);
     const finishEvt = received[1];
-    expect(finishEvt.type).toBe("finish");
+    assert.strictEqual(finishEvt.type, "finish");
     if (finishEvt.type === "finish") {
-      expect(finishEvt.result.ok).toBe(false);
+      assert.strictEqual(finishEvt.result.ok, false);
       if (!finishEvt.result.ok) {
-        expect(finishEvt.result.error.message).toBe(massiveErrMsg);
-        expect(finishEvt.result.error.message.includes("[TRUNCATED]")).toBe(false);
+        assert.strictEqual(finishEvt.result.error.message, massiveErrMsg);
+        assert.strictEqual(finishEvt.result.error.message.includes("[TRUNCATED]"), false);
       }
     }
   });
@@ -497,8 +498,8 @@ describe("InMemoryEventSink", () => {
     });
 
     await consumer;
-    expect(received.length).toBe(2);
-    expect(received.map((e) => e.sequence)).toEqual([0, 1]);
+    assert.strictEqual(received.length, 2);
+    assert.deepStrictEqual(received.map((e) => e.sequence), [0, 1]);
   });
 
   it("filters events strictly by runId so subscribers only receive their own events", async () => {
@@ -519,7 +520,7 @@ describe("InMemoryEventSink", () => {
     sink.emit({ runId: runA, rootRunId: runA, sequence: 1, timestamp: "t1", type: "finish", result: { ok: true, runId: runA, data: null } });
 
     await consumerA;
-    expect(receivedA.length).toBe(2);
-    expect(receivedA.every((e) => e.runId === runA)).toBe(true);
+    assert.strictEqual(receivedA.length, 2);
+    assert.strictEqual(receivedA.every((e) => e.runId === runA), true);
   });
 });

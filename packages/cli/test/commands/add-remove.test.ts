@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,12 +21,12 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
   it("支持 ad add 命令选项注册与帮助信息展示", () => {
     const program = createCliProgram();
     const addCmd = program.commands.find((c) => c.name() === "add");
-    expect(addCmd).toBeDefined();
-    expect(addCmd?.description()).toContain("Install and lock an Action package dependency");
+    assert.notStrictEqual(addCmd, undefined);
+    assert.ok(addCmd!.description().includes("Install and lock an Action package dependency"));
 
     const removeCmd = program.commands.find((c) => c.name() === "remove");
-    expect(removeCmd).toBeDefined();
-    expect(removeCmd?.description()).toContain("Remove an Action package dependency");
+    assert.notStrictEqual(removeCmd, undefined);
+    assert.ok(removeCmd!.description().includes("Remove an Action package dependency"));
   });
 
   it("ad remove 拦截被 action uses 反向引用的依赖包移除操作", async () => {
@@ -64,13 +65,13 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
     );
 
     const program = createCliProgram();
-    await expect(
+    await assert.rejects(
       program.parseAsync(["node", "ad", "remove", "pkg.tool", "-P", tempDir])
-    ).rejects.toThrow(/action 'doSomething' declares dependency on it in 'uses'/);
+    , /action 'doSomething' declares dependency on it in 'uses'/);
 
     // 清单与锁文件保持未被破坏
     const content = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(content.dependencies?.["pkg.tool"]).toBeDefined();
+    assert.notStrictEqual(content.dependencies?.["pkg.tool"], undefined);
   });
 
   it("ad remove 成功移除无反向引用的依赖并更新锁文件，保留该包存储命名空间", async () => {
@@ -112,10 +113,10 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
 
     // 清单中已移除
     const afterManifest = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(afterManifest.dependencies).toBeUndefined();
+    assert.strictEqual(afterManifest.dependencies, undefined);
 
     // 锁文件中已移除
     const afterLock = JSON.parse(readFileSync(join(tempDir, "actiondock.lock.json"), "utf-8"));
-    expect(afterLock.packages?.["pkg.unused"]).toBeUndefined();
+    assert.strictEqual(afterLock.packages?.["pkg.unused"], undefined);
   });
 });

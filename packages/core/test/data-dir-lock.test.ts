@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
@@ -39,12 +40,12 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
 
     // 验证锁目录已创建
     const lockFile = join(tempDir, ".actiondock.data.lock");
-    expect(existsSync(lockFile)).toBe(true);
+    assert.strictEqual(existsSync(lockFile), true);
 
     const metaFile = statSync(lockFile).isDirectory() ? join(lockFile, "metadata.json") : lockFile;
     const lockData = JSON.parse(readFileSync(metaFile, "utf8"));
-    expect(lockData.pid).toBe(process.pid);
-    expect(lockData.sessionToken).toBeDefined();
+    assert.strictEqual(lockData.pid, process.pid);
+    assert.notStrictEqual(lockData.sessionToken, undefined);
 
     // 第二个 Host 试图并发打开同一数据目录
     let caughtError: any;
@@ -57,19 +58,19 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       caughtError = err;
     }
 
-    expect(caughtError).toBeDefined();
-    expect(caughtError?.code).toBe("DATA_DIR_IN_USE");
+    assert.notStrictEqual(caughtError, undefined);
+    assert.strictEqual(caughtError?.code, "DATA_DIR_IN_USE");
 
     // 第一个 Host 正常关闭并释放锁
     await host1.close();
-    expect(existsSync(lockFile)).toBe(false);
+    assert.strictEqual(existsSync(lockFile), false);
 
     // 锁释放后，新 Host 可以成功打开
     const host2 = await createActionDockHost({
       dataDir: tempDir,
       autoLoadCurrentProject: false,
     });
-    expect(host2).toBeDefined();
+    assert.notStrictEqual(host2, undefined);
     await host2.close();
   });
 
@@ -96,8 +97,8 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       caughtError = err;
     }
 
-    expect(caughtError).toBeDefined();
-    expect(caughtError?.code).toBe("DATA_DIR_RECOVERY_REQUIRED");
+    assert.notStrictEqual(caughtError, undefined);
+    assert.strictEqual(caughtError?.code, "DATA_DIR_RECOVERY_REQUIRED");
   });
 
   it("所有相关进程均退出后新 Host 成功接管并自动将 running 与 pending 运行收敛为 interrupted", async () => {
@@ -164,26 +165,26 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
 
     // 4. 验证原先处于 running 与 pending 的记录均被收敛为 interrupted
     const runRunning = await host.getRun("run-running-1");
-    expect(runRunning).toBeDefined();
-    expect(runRunning?.status).toBe("interrupted");
-    expect(runRunning?.error?.code).toBe("RUN_INTERRUPTED");
-    expect(runRunning?.finishedAt).toBeDefined();
+    assert.notStrictEqual(runRunning, undefined);
+    assert.strictEqual(runRunning?.status, "interrupted");
+    assert.strictEqual(runRunning?.error?.code, "RUN_INTERRUPTED");
+    assert.notStrictEqual(runRunning?.finishedAt, undefined);
 
     const runPending = await host.getRun("run-pending-1");
-    expect(runPending).toBeDefined();
-    expect(runPending?.status).toBe("interrupted");
-    expect(runPending?.error?.code).toBe("RUN_INTERRUPTED");
-    expect(runPending?.finishedAt).toBeDefined();
+    assert.notStrictEqual(runPending, undefined);
+    assert.strictEqual(runPending?.status, "interrupted");
+    assert.strictEqual(runPending?.error?.code, "RUN_INTERRUPTED");
+    assert.notStrictEqual(runPending?.finishedAt, undefined);
 
     // 验证原终态 success 记录未受影响
     const runSuccess = await host.getRun("run-success-1");
-    expect(runSuccess?.status).toBe("success");
+    assert.strictEqual(runSuccess?.status, "success");
 
     await host.close();
   });
 
   it("存储 Schema 版本严格保护与单事务初始化失败原子回滚", async () => {
-    expect(STORAGE_SCHEMA_VERSION).toBe(2);
+    assert.strictEqual(STORAGE_SCHEMA_VERSION, 2);
 
     const dbPath = join(tempDir, "schema-test.db");
 
@@ -192,25 +193,25 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       packageId: "pkg.schema",
       dbPath,
     });
-    expect(storage1.isOpen).toBe(true);
+    assert.strictEqual(storage1.isOpen, true);
     await storage1.close();
 
     // 验证 user_version 精确为 STORAGE_SCHEMA_VERSION (2)
     const dbCheck = new NodeSqliteDriver(dbPath);
     const row = dbCheck.prepare("PRAGMA user_version;").get() as any;
-    expect(row.user_version).toBe(2);
+    assert.strictEqual(row.user_version, 2);
 
     // 修改 user_version 为不支持的版本（例如 99）
     dbCheck.exec("PRAGMA user_version = 99;");
     dbCheck.close();
 
     // 验证打开不支持版本时在写事务前直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动
-    expect(() => {
+    assert.throws(() => {
       new SqliteRuntimeStorage({
         packageId: "pkg.schema",
         dbPath,
       });
-    }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
+    }, /UNSUPPORTED_STORAGE_SCHEMA/);
 
     // 注入事务失败模拟：验证初始化事务失败时原子回滚，不留下残缺表
     const badDbPath = join(tempDir, "rollback-test.db");
@@ -231,13 +232,13 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       close: () => {},
     };
 
-    expect(() => {
+    assert.throws(() => {
       new SqliteRuntimeStorage({
         packageId: "pkg.rollback",
         dbPath: badDbPath,
         driver: mockDriver,
       });
-    }).toThrow("Disk I/O error during schema initialization");
+    }, (err: any) => err.message.includes("Disk I/O error during schema initialization"));
   });
 
   it("多实例并发抢锁时严格保证仅有一方成功，其余方均捕获 DATA_DIR_IN_USE 异常", async () => {
@@ -257,22 +258,22 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       }
     }
 
-    expect(results.success.length).toBe(1);
-    expect(results.errors.length).toBe(concurrency - 1);
+    assert.strictEqual(results.success.length, 1);
+    assert.strictEqual(results.errors.length, concurrency - 1);
     for (const err of results.errors) {
-      expect(err?.code).toBe("DATA_DIR_IN_USE");
+      assert.strictEqual(err?.code, "DATA_DIR_IN_USE");
     }
 
     // 成功持有锁的实例释放锁
     results.success[0].release();
     const lockFile = join(tempDir, ".actiondock.data.lock");
-    expect(existsSync(lockFile)).toBe(false);
+    assert.strictEqual(existsSync(lockFile), false);
   });
 
   it("释放锁时校验 sessionToken，若磁盘锁文件被覆盖则不删除他人持有的锁文件", () => {
     const lockFile = join(tempDir, ".actiondock.data.lock");
     const lock = DataDirLock.acquire(tempDir);
-    expect(existsSync(lockFile)).toBe(true);
+    assert.strictEqual(existsSync(lockFile), true);
 
     // 模拟锁文件已被其他会话接管覆盖
     const otherLockInfo = {
@@ -287,10 +288,10 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
 
     // 旧锁实例尝试 release，由于 sessionToken 不匹配，磁盘文件不会被删除
     lock.release();
-    expect(existsSync(lockFile)).toBe(true);
+    assert.strictEqual(existsSync(lockFile), true);
 
     const onDisk = JSON.parse(readFileSync(metaPath, "utf8"));
-    expect(onDisk.sessionToken).toBe("other-session-token");
+    assert.strictEqual(onDisk.sessionToken, "other-session-token");
   });
 
   it("真实多进程并发争抢陈旧锁时，严格保证仅有一个子进程成功接管，其余子进程均抛出 DATA_DIR_IN_USE 异常", async () => {
@@ -413,9 +414,9 @@ rl.on("line", (cmd) => {
     const successCount = results.filter((r) => r === "SUCCESS").length;
     const inUseCount = results.filter((r) => r === "DATA_DIR_IN_USE").length;
 
-    expect(successCount).toBe(1);
-    expect(inUseCount).toBe(concurrency - 1);
-    expect(results.length).toBe(concurrency);
+    assert.strictEqual(successCount, 1);
+    assert.strictEqual(inUseCount, concurrency - 1);
+    assert.strictEqual(results.length, concurrency);
 
     if (winnerProc) {
       (winnerProc as any).stdin?.write("RELEASE\n");
@@ -434,18 +435,18 @@ rl.on("line", (cmd) => {
       )
     );
 
-    expect(existsSync(lockFile)).toBe(false);
+    assert.strictEqual(existsSync(lockFile), false);
     const remainingQuarantines = readdirSync(tempDir).filter((name) =>
       name.includes(".quarantine.")
     );
-    expect(remainingQuarantines.length).toBe(0);
+    assert.strictEqual(remainingQuarantines.length, 0);
   });
 
   it("覆盖元数据写入过程中并发读取与锁竞争保护，验证不会因元数据临时缺失而误判锁死亡", async () => {
     const lockDir = join(tempDir, ".actiondock.data.lock");
     // 模拟所有者刚刚原子创建锁目录，但尚未完成 metadata.json 写入
     mkdirSync(lockDir, { mode: 0o700 });
-    expect(existsSync(lockDir)).toBe(true);
+    assert.strictEqual(existsSync(lockDir), true);
 
     const metaJsonPath = join(lockDir, "metadata.json");
     const validInfo = {
@@ -476,9 +477,9 @@ rl.on("line", (cmd) => {
     }
 
     // 验证锁目录未被误删，且在读到合法元数据后正确识别活跃持有者并抛出 DATA_DIR_IN_USE
-    expect(existsSync(lockDir)).toBe(true);
-    expect(caughtError).toBeDefined();
-    expect(caughtError?.code).toBe("DATA_DIR_IN_USE");
+    assert.strictEqual(existsSync(lockDir), true);
+    assert.notStrictEqual(caughtError, undefined);
+    assert.strictEqual(caughtError?.code, "DATA_DIR_IN_USE");
   });
 
   it("真实多进程并发争抢陈旧目录锁时，通过原子检疫隔离接管，验证无死锁且其余进程均捕获 DATA_DIR_IN_USE", async () => {
@@ -606,9 +607,9 @@ rl.on("line", (cmd) => {
     const successCount = results.filter((r) => r === "SUCCESS").length;
     const inUseCount = results.filter((r) => r === "DATA_DIR_IN_USE").length;
 
-    expect(successCount).toBe(1);
-    expect(inUseCount).toBe(concurrency - 1);
-    expect(results.length).toBe(concurrency);
+    assert.strictEqual(successCount, 1);
+    assert.strictEqual(inUseCount, concurrency - 1);
+    assert.strictEqual(results.length, concurrency);
 
     if (winnerProc) {
       (winnerProc as any).stdin?.write("RELEASE\n");
@@ -627,11 +628,11 @@ rl.on("line", (cmd) => {
       )
     );
 
-    expect(existsSync(lockDir)).toBe(false);
+    assert.strictEqual(existsSync(lockDir), false);
     const remainingQuarantines = readdirSync(tempDir).filter((name) =>
       name.includes(".quarantine.") || name.includes(".reclaim")
     );
-    expect(remainingQuarantines.length).toBe(0);
+    assert.strictEqual(remainingQuarantines.length, 0);
   });
 
 });
@@ -659,14 +660,12 @@ describe("DataDirLock 元数据刷新失败可观测性", () => {
 
       try {
         // flush 失败不得抛出，也不得中断宿主流程
-        expect(() => lock.registerChildPid(4321)).not.toThrow();
-        expect(
-          warnCalls.some(
+        assert.doesNotThrow(() => lock.registerChildPid(4321));
+        assert.strictEqual(warnCalls.some(
             (m) =>
               m.includes("data dir lock metadata flush failed") &&
               m.includes(lockDirPath)
-          )
-        ).toBe(true);
+          ), true);
       } finally {
         console.warn = originalWarn;
       }

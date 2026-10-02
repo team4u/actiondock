@@ -1,5 +1,7 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -32,7 +34,7 @@ function flushDeferredCleanup(): void {
 let tempHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -49,11 +51,11 @@ describe("CLI Workflow - Core Lifecycle", () => {
   let tempDir: string;
   let caseIndex = 0;
 
-  beforeAll(() => {
+  before(() => {
     suiteBaseDir = mkdtempSync(join(tmpdir(), "actiondock-cli-core-suite-"));
   });
 
-  afterAll(() => {
+  after(() => {
     safeCleanDir(suiteBaseDir);
     flushDeferredCleanup();
   });
@@ -78,109 +80,109 @@ describe("CLI Workflow - Core Lifecycle", () => {
     safeCleanDir(tempDir);
   });
 
-  it("covers project initial lifecycle: init, info, list, describe, validate, run, and playbook", async () => {
+  it("covers project initial lifecycle: init, info, list, describe, validate, run, and playbook", { timeout: 120000 }, async () => {
     // 1. init
     const initProc = runCli(
       ["init", "--id", "team.github-ops", "--name", "GitHub Ops", "."],
       tempDir
     );
-    expect(initProc.exitCode).toBe(0);
+    assert.strictEqual(initProc.exitCode, 0);
 
     // 2. info
     const infoProc = runCli(["info", "--json"], tempDir);
-    expect(infoProc.exitCode).toBe(0);
+    assert.strictEqual(infoProc.exitCode, 0);
     const info = JSON.parse(infoProc.stdout.toString());
-    expect(info.id).toBe("team.github-ops");
-    expect(info.actions.some((a: any) => a.id === "sample.greet")).toBe(true);
+    assert.strictEqual(info.id, "team.github-ops");
+    assert.strictEqual(info.actions.some((a: any) => a.id === "sample.greet"), true);
 
     // 3. list & describe & validate (including intent fuzzy search and fallback)
     const listProc = runCli(["list", "--json"], tempDir);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const actionsList = JSON.parse(listProc.stdout.toString());
-    expect(actionsList.items.length).toBe(1);
-    expect(actionsList.items[0].id).toBe("sample.greet");
+    assert.strictEqual(actionsList.items.length, 1);
+    assert.strictEqual(actionsList.items[0].id, "sample.greet");
 
     // 3b. Test list with --intent and positional fuzzy search
     const listIntentProc = runCli(["list", "--intent", "greet|hello", "--json"], tempDir);
-    expect(listIntentProc.exitCode).toBe(0);
-    expect(JSON.parse(listIntentProc.stdout.toString()).items.length).toBe(1);
+    assert.strictEqual(listIntentProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(listIntentProc.stdout.toString()).items.length, 1);
 
     const listPositionalProc = runCli(["list", "greet", "--json"], tempDir);
-    expect(listPositionalProc.exitCode).toBe(0);
-    expect(JSON.parse(listPositionalProc.stdout.toString()).items.length).toBe(1);
+    assert.strictEqual(listPositionalProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(listPositionalProc.stdout.toString()).items.length, 1);
 
     // In machine mode (--json), no fallback by default when no match: returns empty array
     const listNoMatchProc = runCli(["list", "--intent", "nomatch", "--json"], tempDir);
-    expect(listNoMatchProc.exitCode).toBe(0);
-    expect(JSON.parse(listNoMatchProc.stdout.toString()).items.length).toBe(0);
+    assert.strictEqual(listNoMatchProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(listNoMatchProc.stdout.toString()).items.length, 0);
 
     // Fallback only when explicitly requested via --fallback in machine mode
     const listFallbackProc = runCli(
       ["list", "--intent", "nomatch", "--fallback", "--json"],
       tempDir
     );
-    expect(listFallbackProc.exitCode).toBe(0);
+    assert.strictEqual(listFallbackProc.exitCode, 0);
     const fallbackRes = JSON.parse(listFallbackProc.stdout.toString());
-    expect(fallbackRes.isFallback).toBe(true);
-    expect(fallbackRes.items.length).toBe(1);
+    assert.strictEqual(fallbackRes.isFallback, true);
+    assert.strictEqual(fallbackRes.items.length, 1);
 
     // No fallback when --no-fallback is specified
     const listNoFallbackProc = runCli(
       ["list", "--intent", "nomatch", "--no-fallback", "--json"],
       tempDir
     );
-    expect(listNoFallbackProc.exitCode).toBe(0);
-    expect(JSON.parse(listNoFallbackProc.stdout.toString()).items.length).toBe(0);
+    assert.strictEqual(listNoFallbackProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(listNoFallbackProc.stdout.toString()).items.length, 0);
 
     const showProc = runCli(["describe", "sample.greet", "--json"], tempDir);
-    expect(showProc.exitCode).toBe(0);
+    assert.strictEqual(showProc.exitCode, 0);
     const show = JSON.parse(showProc.stdout.toString());
-    expect(show.id).toBe("sample.greet");
-    expect(show.inputSchema).toBeDefined();
+    assert.strictEqual(show.id, "sample.greet");
+    assert.notStrictEqual(show.inputSchema, undefined);
 
     const valProc = runCli(["validate", "--json"], tempDir);
-    expect(valProc.exitCode).toBe(0);
+    assert.strictEqual(valProc.exitCode, 0);
     const val = JSON.parse(valProc.stdout.toString());
-    expect(val.valid).toBe(true);
+    assert.strictEqual(val.valid, true);
 
     // 4. run
     const runProc = runCli(
       ["run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s", "--json"],
       tempDir
     );
-    expect(runProc.exitCode).toBe(0);
+    assert.strictEqual(runProc.exitCode, 0);
     const runRes = JSON.parse(runProc.stdout.toString());
-    expect(runRes.ok).toBe(true);
-    expect(runRes.data.message).toBe("Hello, Developer!");
+    assert.strictEqual(runRes.ok, true);
+    assert.strictEqual(runRes.data.message, "Hello, Developer!");
 
     // Local async is rejected
     const localAsyncProc = runCli(
       ["run", "sample.greet", "--input", '{"name": "Developer"}', "--async"],
       tempDir
     );
-    expect(localAsyncProc.exitCode).toBe(1);
-    expect(localAsyncProc.stderr.toString()).toContain("Async execution requires a long-running ActionDock server");
+    assert.strictEqual(localAsyncProc.exitCode, 1);
+    assert.ok((localAsyncProc.stderr.toString()).includes("Async execution requires a long-running ActionDock server"));
 
     // 5. playbook list & show & validate
     const pbListProc = runCli(["playbook", "list", "--json"], tempDir);
-    expect(pbListProc.exitCode).toBe(0);
+    assert.strictEqual(pbListProc.exitCode, 0);
     const pbList = JSON.parse(pbListProc.stdout.toString());
-    expect(pbList.items.length).toBe(1);
+    assert.strictEqual(pbList.items.length, 1);
 
     const pbListIntent = runCli(["playbook", "list", "greet", "--json"], tempDir);
-    expect(pbListIntent.exitCode).toBe(0);
-    expect(JSON.parse(pbListIntent.stdout.toString()).items.length).toBe(1);
+    assert.strictEqual(pbListIntent.exitCode, 0);
+    assert.strictEqual(JSON.parse(pbListIntent.stdout.toString()).items.length, 1);
 
     const pbListStrict = runCli(["playbook", "list", "nomatch", "--no-fallback", "--json"], tempDir);
-    expect(pbListStrict.exitCode).toBe(0);
-    expect(JSON.parse(pbListStrict.stdout.toString()).items.length).toBe(0);
+    assert.strictEqual(pbListStrict.exitCode, 0);
+    assert.strictEqual(JSON.parse(pbListStrict.stdout.toString()).items.length, 0);
 
     const pbShowProc = runCli(["playbook", "show", "greet-user", "--json"], tempDir);
-    expect(pbShowProc.exitCode).toBe(0);
+    assert.strictEqual(pbShowProc.exitCode, 0);
     const pbShow = JSON.parse(pbShowProc.stdout.toString());
-    expect(pbShow.id).toBe("greet-user");
+    assert.strictEqual(pbShow.id, "greet-user");
 
     const pbValProc = runCli(["playbook", "validate", "--json"], tempDir);
-    expect(pbValProc.exitCode).toBe(0);
-  }, 120000);
+    assert.strictEqual(pbValProc.exitCode, 0);
+  });
 });

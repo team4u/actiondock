@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createActionDockHost } from "../src/host";
@@ -162,33 +163,33 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     const actions = await host.listActions();
     const actionIds = actions.map((a) => a.id);
 
-    expect(actionIds).toContain("root-app/main");
-    expect(actionIds).toContain("pkg-b/b-action");
-    expect(actionIds).toContain("pkg-c/c-echo"); // 被 run-c Playbook 精确委托点名暴露
-    expect(actionIds).not.toContain("pkg-c/c-secret"); // 未被委托，不对外可见
+    assert.ok((actionIds).includes("root-app/main"));
+    assert.ok((actionIds).includes("pkg-b/b-action"));
+    assert.ok((actionIds).includes("pkg-c/c-echo")); // 被 run-c Playbook 精确委托点名暴露
+    assert.ok(!(actionIds).includes("pkg-c/c-secret")); // 未被委托，不对外可见
 
     const resEcho = await host.runAction("pkg-c/c-echo", { text: "world" });
-    expect(resEcho.ok).toBe(true);
+    assert.strictEqual(resEcho.ok, true);
     if (resEcho.ok) {
-      expect((resEcho.data as any)?.echo).toBe("world");
+      assert.strictEqual((resEcho.data as any)?.echo, "world");
     }
 
     // 验证根调用：未声明直接依赖且未委托的 pkg-c/c-secret 严格拦截
     const resSecret = await host.runAction("pkg-c/c-secret", {});
-    expect(resSecret.ok).toBe(false);
+    assert.strictEqual(resSecret.ok, false);
     if (!resSecret.ok) {
-      expect(resSecret.error?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
+      assert.strictEqual(resSecret.error?.code, "UNDECLARED_ACTION_DEPENDENCY");
     }
 
     // 验证级联调用：已声明 uses 的调用成功
     const resCascadeOk = await host.runAction("pkg-b/b-cascade-declared", {});
-    expect(resCascadeOk.ok).toBe(true);
+    assert.strictEqual(resCascadeOk.ok, true);
 
     // 验证级联调用：未声明 uses 的调用拦截
     const resCascadeFail = await host.runAction("pkg-b/b-cascade-undeclared", {});
-    expect(resCascadeFail.ok).toBe(false);
+    assert.strictEqual(resCascadeFail.ok, false);
     if (!resCascadeFail.ok) {
-      expect(resCascadeFail.error?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
+      assert.strictEqual(resCascadeFail.error?.code, "UNDECLARED_ACTION_DEPENDENCY");
     }
 
     await host.close();
@@ -220,12 +221,12 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
       },
     });
 
-    await expect(
+    await assert.rejects(
       createActionDockHost({
         projectRoot: rootDir,
         inMemory: true,
       })
-    ).rejects.toThrow(/ACTION_PACKAGE_VERSION_CONFLICT/);
+    , /ACTION_PACKAGE_VERSION_CONFLICT/);
   });
 
   it("当存在崩溃遗留的悬空事务时 Host 启动自动恢复旧快照", async () => {
@@ -276,8 +277,8 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     const restored = JSON.parse(
       readFileSync(join(rootDir, MANIFEST_FILE_NAME), "utf-8")
     );
-    expect(restored.version).toBe("1.0.0");
-    expect(restored.name).toBe("original");
+    assert.strictEqual(restored.version, "1.0.0");
+    assert.strictEqual(restored.name, "original");
 
     await host.close();
   });

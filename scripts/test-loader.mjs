@@ -3,16 +3,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
-const compatUrl = pathToFileURL(path.join(rootDir, "scripts", "test-compat.ts")).href;
 
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier === "bun:test") {
-    return {
-      shortCircuit: true,
-      url: compatUrl,
-    };
-  }
-
   try {
     return await nextResolve(specifier, context);
   } catch (err) {

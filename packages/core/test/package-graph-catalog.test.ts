@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,15 +138,15 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       });
 
       const discovered = discovery.discoverSync();
-      expect(discovered.length).toBe(3);
+      assert.strictEqual(discovered.length, 3);
 
       const rootPkg = discovered.find((p) => p.id === "pkg-a");
-      expect(rootPkg).toBeDefined();
-      expect(rootPkg?.isCurrentProject).toBe(true);
+      assert.notStrictEqual(rootPkg, undefined);
+      assert.strictEqual(rootPkg?.isCurrentProject, true);
 
       const bPkg = discovered.find((p) => p.id === "pkg-b");
-      expect(bPkg).toBeDefined();
-      expect(bPkg?.isLinked).toBe(true);
+      assert.notStrictEqual(bPkg, undefined);
+      assert.strictEqual(bPkg?.isLinked, true);
     });
 
     it("detects PACKAGE_ID_CONFLICT when two distinct directories declare the same id", () => {
@@ -161,7 +162,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
           packageRoots: [duplicateDir],
         });
 
-        expect(() => discovery.discoverSync()).toThrow(/PACKAGE_ID_CONFLICT/);
+        assert.throws(() => discovery.discoverSync(), /PACKAGE_ID_CONFLICT/);
       } finally {
         rmSync(duplicateDir, { recursive: true, force: true });
       }
@@ -182,24 +183,24 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       });
       const graph = builder.buildSync();
 
-      expect(graph.root?.id).toBe("pkg-a");
-      expect(graph.hasPackage("pkg-a")).toBe(true);
-      expect(graph.hasPackage("pkg-b")).toBe(true);
-      expect(graph.hasPackage("pkg-c")).toBe(true);
+      assert.strictEqual(graph.root?.id, "pkg-a");
+      assert.strictEqual(graph.hasPackage("pkg-a"), true);
+      assert.strictEqual(graph.hasPackage("pkg-b"), true);
+      assert.strictEqual(graph.hasPackage("pkg-c"), true);
 
       const nodeA = graph.getPackage("pkg-a")!;
-      expect(nodeA.directDependencies.has("pkg-b")).toBe(true);
-      expect(nodeA.directDependencies.has("pkg-c")).toBe(false);
-      expect(nodeA.transitiveDependencies.has("pkg-b")).toBe(true);
-      expect(nodeA.transitiveDependencies.has("pkg-c")).toBe(true);
+      assert.strictEqual(nodeA.directDependencies.has("pkg-b"), true);
+      assert.strictEqual(nodeA.directDependencies.has("pkg-c"), false);
+      assert.strictEqual(nodeA.transitiveDependencies.has("pkg-b"), true);
+      assert.strictEqual(nodeA.transitiveDependencies.has("pkg-c"), true);
 
       const nodeB = graph.getPackage("pkg-b")!;
-      expect(nodeB.directDependencies.has("pkg-c")).toBe(true);
-      expect(nodeB.transitiveDependencies.has("pkg-c")).toBe(true);
+      assert.strictEqual(nodeB.directDependencies.has("pkg-c"), true);
+      assert.strictEqual(nodeB.transitiveDependencies.has("pkg-c"), true);
 
       const nodeC = graph.getPackage("pkg-c")!;
-      expect(nodeC.directDependencies.size).toBe(0);
-      expect(nodeC.transitiveDependencies.size).toBe(0);
+      assert.strictEqual(nodeC.directDependencies.size, 0);
+      assert.strictEqual(nodeC.transitiveDependencies.size, 0);
     });
   });
 
@@ -217,17 +218,17 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       );
 
       const greetCand = catalog.get("pkg-a", "greet");
-      expect(greetCand).toBeDefined();
-      expect(greetCand?.actionId).toBe("greet");
+      assert.notStrictEqual(greetCand, undefined);
+      assert.strictEqual(greetCand?.actionId, "greet");
 
       const dynCand = catalog.get("pkg-a", "dynamicAction");
-      expect(dynCand).toBeDefined();
-      expect(dynCand?.actionId).toBe("dynamicAction");
+      assert.notStrictEqual(dynCand, undefined);
+      assert.strictEqual(dynCand?.actionId, "dynamicAction");
 
       const listA = catalog.list("pkg-a");
-      expect(listA.map((c) => c.actionId)).toContain("greet");
-      expect(listA.map((c) => c.actionId)).toContain("shared");
-      expect(listA.map((c) => c.actionId)).toContain("dynamicAction");
+      assert.ok((listA.map((c) => c.actionId)).includes("greet"));
+      assert.ok((listA.map((c) => c.actionId)).includes("shared"));
+      assert.ok((listA.map((c) => c.actionId)).includes("dynamicAction"));
     });
   });
 
@@ -246,40 +247,40 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
 
     it("resolves scoped action reference directly", () => {
       const resolved = resolveAction("pkg-b/helper", { graph, catalog });
-      expect(resolved.package.id).toBe("pkg-b");
-      expect(resolved.ref.actionId).toBe("helper");
-      expect(resolved.entry).toBe("actions/helper.ts");
+      assert.strictEqual(resolved.package.id, "pkg-b");
+      assert.strictEqual(resolved.ref.actionId, "helper");
+      assert.strictEqual(resolved.entry, "actions/helper.ts");
     });
 
     it("resolves short reference prioritizing caller package", () => {
       const resolved = resolveAction("shared", { graph, catalog, caller: "pkg-a" });
-      expect(resolved.package.id).toBe("pkg-a");
-      expect(resolved.ref.actionId).toBe("shared");
+      assert.strictEqual(resolved.package.id, "pkg-a");
+      assert.strictEqual(resolved.ref.actionId, "shared");
 
       const resolvedFromB = resolveAction("shared", { graph, catalog, caller: "pkg-b" });
-      expect(resolvedFromB.package.id).toBe("pkg-b");
+      assert.strictEqual(resolvedFromB.package.id, "pkg-b");
     });
 
     it("resolves unique global short reference without caller", () => {
       const resolved = resolveAction("leaf", { graph, catalog });
-      expect(resolved.package.id).toBe("pkg-c");
-      expect(resolved.ref.actionId).toBe("leaf");
+      assert.strictEqual(resolved.package.id, "pkg-c");
+      assert.strictEqual(resolved.ref.actionId, "leaf");
     });
 
     it("throws AMBIGUOUS_ACTION_REF when short reference matches multiple packages", () => {
-      expect(() => resolveAction("shared", { graph, catalog })).toThrow(
+      assert.throws(() => resolveAction("shared", { graph, catalog }), 
         /is ambiguous and provided by multiple packages/
       );
     });
 
     it("throws ACTION_NOT_FOUND when action does not exist", () => {
-      expect(() => resolveAction("nonexistent", { graph, catalog })).toThrow(
+      assert.throws(() => resolveAction("nonexistent", { graph, catalog }), 
         /not found/
       );
     });
 
     it("throws PACKAGE_NOT_FOUND when package does not exist", () => {
-      expect(() => resolveAction("missing-pkg/action", { graph, catalog })).toThrow(
+      assert.throws(() => resolveAction("missing-pkg/action", { graph, catalog }), 
         /Package 'missing-pkg' not found/
       );
     });
@@ -294,21 +295,21 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
 
       const pbA = resolvePlaybook("pkg-a/flow-a", { graph });
-      expect(pbA.packageId).toBe("pkg-a");
-      expect(pbA.playbook.description).toBe("Flow in A");
+      assert.strictEqual(pbA.packageId, "pkg-a");
+      assert.strictEqual(pbA.playbook.description, "Flow in A");
 
       const pbB = resolvePlaybook("flow-b", { graph });
-      expect(pbB.packageId).toBe("pkg-b");
-      expect(pbB.playbook.description).toBe("Flow in B");
+      assert.strictEqual(pbB.packageId, "pkg-b");
+      assert.strictEqual(pbB.playbook.description, "Flow in B");
     });
   });
 
   describe("parseActionRef", () => {
     it("parses valid action references correctly", () => {
-      expect(parseActionRef("greet")).toEqual({ actionId: "greet" });
-      expect(parseActionRef("pkg-a/greet")).toEqual({ packageId: "pkg-a", actionId: "greet" });
-      expect(parseActionRef({ actionId: "greet" })).toEqual({ actionId: "greet" });
-      expect(parseActionRef({ packageId: "pkg-a", actionId: "greet" })).toEqual({
+      assert.deepStrictEqual(parseActionRef("greet"), { actionId: "greet" });
+      assert.deepStrictEqual(parseActionRef("pkg-a/greet"), { packageId: "pkg-a", actionId: "greet" });
+      assert.deepStrictEqual(parseActionRef({ actionId: "greet" }), { actionId: "greet" });
+      assert.deepStrictEqual(parseActionRef({ packageId: "pkg-a", actionId: "greet" }), {
         packageId: "pkg-a",
         actionId: "greet",
       });
@@ -318,46 +319,46 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Empty string
       try {
         parseActionRef("");
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ActionDockError);
-        expect(err.code).toBe(INVALID_ACTION_REF);
+        assert.ok(err instanceof ActionDockError);
+        assert.strictEqual(err.code, INVALID_ACTION_REF);
       }
 
       // Missing actionId in object
       try {
         parseActionRef({ actionId: "" } as any);
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ActionDockError);
-        expect(err.code).toBe(INVALID_ACTION_REF);
+        assert.ok(err instanceof ActionDockError);
+        assert.strictEqual(err.code, INVALID_ACTION_REF);
       }
 
       // Colon in reference
       try {
         parseActionRef("invalid:colon");
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ActionDockError);
-        expect(err.code).toBe(INVALID_ACTION_REF);
+        assert.ok(err instanceof ActionDockError);
+        assert.strictEqual(err.code, INVALID_ACTION_REF);
       }
 
       // Invalid trailing slash
       try {
         parseActionRef("pkg/");
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ActionDockError);
-        expect(err.code).toBe(INVALID_ACTION_REF);
+        assert.ok(err instanceof ActionDockError);
+        assert.strictEqual(err.code, INVALID_ACTION_REF);
       }
 
       // Invalid path traversal in actionId
       try {
         parseActionRef("pkg/..");
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(ActionDockError);
-        expect(err.code).toBe(INVALID_ACTION_REF);
+        assert.ok(err instanceof ActionDockError);
+        assert.strictEqual(err.code, INVALID_ACTION_REF);
       }
     });
   });

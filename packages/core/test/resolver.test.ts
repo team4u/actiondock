@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { computeManifestDigest } from "../src/project/digest";
@@ -95,11 +96,11 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
     const builder = new PackageGraphBuilder({ projectRoot: rootDir });
     const graph = builder.buildSync();
 
-    expect(graph.rootPackageId).toBe("root-app");
-    expect(graph.packages.has("pkg-b")).toBe(true);
-    expect(graph.packages.has("pkg-c")).toBe(true);
-    expect(graph.directDependencyIds.has("pkg-b")).toBe(true);
-    expect(graph.transitiveDependencyIds.has("pkg-c")).toBe(true);
+    assert.strictEqual(graph.rootPackageId, "root-app");
+    assert.strictEqual(graph.packages.has("pkg-b"), true);
+    assert.strictEqual(graph.packages.has("pkg-c"), true);
+    assert.strictEqual(graph.directDependencyIds.has("pkg-b"), true);
+    assert.strictEqual(graph.transitiveDependencyIds.has("pkg-c"), true);
   });
 
   it("检测版本冲突并在不可收敛时抛出 ACTION_PACKAGE_VERSION_CONFLICT", () => {
@@ -131,14 +132,14 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
     });
 
     const builder = new PackageGraphBuilder({ projectRoot: rootDir });
-    expect(() => builder.buildSync()).toThrow(ActionPackageVersionConflictError);
+    assert.throws(() => builder.buildSync(), ActionPackageVersionConflictError);
 
     try {
       builder.buildSync();
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe("ACTION_PACKAGE_VERSION_CONFLICT");
-      expect(err.packageId).toBe("pkg-d");
+      assert.strictEqual(err.code, "ACTION_PACKAGE_VERSION_CONFLICT");
+      assert.strictEqual(err.packageId, "pkg-d");
     }
   });
 
@@ -170,11 +171,11 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
     const graph = builder.buildSync();
 
     // 根包直接调用直接依赖 pkg-b 的 Action 允许
-    expect(graph.canRootCall("pkg-b", "runB")).toBe(true);
+    assert.strictEqual(graph.canRootCall("pkg-b", "runB"), true);
 
     // 根包未将 pkg-c 声明为直接依赖，且无可见 Playbook 委托，调用应被拒绝
-    expect(graph.canRootCall("pkg-c", "secretAction")).toBe(false);
-    expect(() => graph.assertRootCallAllowed("pkg-c", "secretAction")).toThrow(
+    assert.strictEqual(graph.canRootCall("pkg-c", "secretAction"), false);
+    assert.throws(() => graph.assertRootCallAllowed("pkg-c", "secretAction"), 
       UndeclaredActionDependencyError
     );
 
@@ -184,14 +185,14 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
       hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
       graph,
     });
-    expect(allowedRes).toBeUndefined();
+    assert.strictEqual(allowedRes, undefined);
 
     const blockedRes = policy.checkRootVisibility("pkg-c", "secretAction", {
       hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
       graph,
     });
-    expect(blockedRes).toBeDefined();
-    expect(blockedRes?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
+    assert.notStrictEqual(blockedRes, undefined);
+    assert.strictEqual(blockedRes?.code, "UNDECLARED_ACTION_DEPENDENCY");
   });
 
   it("当可见 Playbook 明确委托点名传递包的特定 Action 时允许根调用，其余 Action 依然受限", () => {
@@ -240,12 +241,12 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
     const graph = builder.buildSync();
 
     // 点名委托的 check 允许根调用
-    expect(graph.canRootCall("pkg-c", "check")).toBe(true);
-    expect(() => graph.assertRootCallAllowed("pkg-c", "check")).not.toThrow();
+    assert.strictEqual(graph.canRootCall("pkg-c", "check"), true);
+    assert.doesNotThrow(() => graph.assertRootCallAllowed("pkg-c", "check"));
 
     // 未被委托的 internalSecret 依然被拦截
-    expect(graph.canRootCall("pkg-c", "internalSecret")).toBe(false);
-    expect(() => graph.assertRootCallAllowed("pkg-c", "internalSecret")).toThrow(
+    assert.strictEqual(graph.canRootCall("pkg-c", "internalSecret"), false);
+    assert.throws(() => graph.assertRootCallAllowed("pkg-c", "internalSecret"), 
       UndeclaredActionDependencyError
     );
 
@@ -255,14 +256,14 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
       hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
       graph,
     });
-    expect(allowedRes).toBeUndefined();
+    assert.strictEqual(allowedRes, undefined);
 
     const blockedRes = policy.checkRootVisibility("pkg-c", "internalSecret", {
       hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
       graph,
     });
-    expect(blockedRes).toBeDefined();
-    expect(blockedRes?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
+    assert.notStrictEqual(blockedRes, undefined);
+    assert.strictEqual(blockedRes?.code, "UNDECLARED_ACTION_DEPENDENCY");
   });
 
   it("校验跨包级联调用必须在 uses 中显式声明", () => {
@@ -295,16 +296,14 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
     const graph = builder.buildSync();
 
     // 声明了 uses 的调用允许
-    expect(graph.canCascadeCall("root-app", "declaredAction", "pkg-b", "helper")).toBe(true);
-    expect(() =>
-      graph.assertCascadeCallAllowed("root-app", "declaredAction", "pkg-b", "helper")
-    ).not.toThrow();
+    assert.strictEqual(graph.canCascadeCall("root-app", "declaredAction", "pkg-b", "helper"), true);
+    assert.doesNotThrow(() =>
+      graph.assertCascadeCallAllowed("root-app", "declaredAction", "pkg-b", "helper"));
 
     // 未声明 uses 的调用拦截
-    expect(graph.canCascadeCall("root-app", "undeclaredAction", "pkg-b", "helper")).toBe(false);
-    expect(() =>
-      graph.assertCascadeCallAllowed("root-app", "undeclaredAction", "pkg-b", "helper")
-    ).toThrow(UndeclaredActionDependencyError);
+    assert.strictEqual(graph.canCascadeCall("root-app", "undeclaredAction", "pkg-b", "helper"), false);
+    assert.throws(() =>
+      graph.assertCascadeCallAllowed("root-app", "undeclaredAction", "pkg-b", "helper"), UndeclaredActionDependencyError);
 
     // 经由 InvocationPolicy 校验一致
     const policy = new InvocationPolicy();
@@ -313,14 +312,14 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
       { packageId: "pkg-b", actionId: "helper" },
       graph
     );
-    expect(authOk).toBeUndefined();
+    assert.strictEqual(authOk, undefined);
 
     const authFail = policy.checkUsesAuthorization(
       { packageId: "root-app", actionId: "undeclaredAction", declaredUses: [] },
       { packageId: "pkg-b", actionId: "helper" },
       graph
     );
-    expect(authFail).toBeDefined();
-    expect(authFail?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
+    assert.notStrictEqual(authFail, undefined);
+    assert.strictEqual(authFail?.code, "UNDECLARED_ACTION_DEPENDENCY");
   });
 });

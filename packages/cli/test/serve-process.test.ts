@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { runCommandSync } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -24,7 +26,7 @@ async function getAvailablePort(): Promise<number> {
 }
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync([process.execPath, cliPath, ...args], {
+  return runCommandSync([process.execPath, cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -172,7 +174,7 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 1. 通过远程 ad run 执行进程类 Action
     const runResultProc = runCli(
@@ -191,11 +193,11 @@ export default defineAction({
       { ACTIONDOCK_HOME: tempHome }
     );
 
-    expect(runResultProc.exitCode).toBe(0);
+    assert.strictEqual(runResultProc.exitCode, 0);
     const resultJson = JSON.parse(runResultProc.stdout.toString());
-    expect(resultJson.ok).toBe(true);
-    expect(resultJson.data.output).toBe("custom-echo-success");
-    expect(resultJson.data.exitCode).toBe(0);
+    assert.strictEqual(resultJson.ok, true);
+    assert.strictEqual(resultJson.data.output, "custom-echo-success");
+    assert.strictEqual(resultJson.data.exitCode, 0);
 
     // 2. 通过内置 /mcp 端点执行进程类 Action
     // 首先进行 MCP 初始化握手
@@ -217,7 +219,7 @@ export default defineAction({
         },
       }),
     });
-    expect(initResponse.status).toBe(200);
+    assert.strictEqual(initResponse.status, 200);
 
     const sessionId = initResponse.headers.get("mcp-session-id");
     const mcpHeaders: Record<string, string> = {
@@ -238,12 +240,12 @@ export default defineAction({
         method: "tools/call",
         params: {
           name: "proc.exec",
-          arguments: { message: "mcp-echo-success" },
+          arguments: "mcp-echo-success",
         },
       }),
     });
 
-    expect(mcpResponse.status).toBe(200);
+    assert.strictEqual(mcpResponse.status, 200);
     const mcpRawText = await mcpResponse.text();
     let mcpData: any;
     if (mcpRawText.startsWith("event:")) {
@@ -253,11 +255,11 @@ export default defineAction({
     } else {
       mcpData = JSON.parse(mcpRawText);
     }
-    expect(mcpData.error).toBeUndefined();
-    expect(mcpData.result.isError).toBeFalsy();
+    assert.strictEqual(mcpData.error, undefined);
+    assert.ok(!(mcpData.result.isError));
     const contentText = mcpData.result.content[0].text;
     const parsedActionData = JSON.parse(contentText);
-    expect(parsedActionData.ok).toBe(true);
-    expect(parsedActionData.data.output).toBe("mcp-echo-success");
+    assert.strictEqual(parsedActionData.ok, true);
+    assert.strictEqual(parsedActionData.data.output, "mcp-echo-success");
   });
 });

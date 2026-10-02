@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   buildActionDescribePayload,
   formatActionDetail,
@@ -29,17 +30,17 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.id).toBe("greet");
-      expect(payload.packageId).toBe("example");
-      expect(payload.description).toBe("Greet user");
-      expect(payload.inputSchema).toEqual(spec.inputSchema);
-      expect(payload.outputSchema).toEqual(spec.outputSchema);
+      assert.strictEqual(payload.id, "greet");
+      assert.strictEqual(payload.packageId, "example");
+      assert.strictEqual(payload.description, "Greet user");
+      assert.deepStrictEqual(payload.inputSchema, spec.inputSchema);
+      assert.deepStrictEqual(payload.outputSchema, spec.outputSchema);
 
-      expect((payload as any).inputTransport).toBeUndefined();
-      expect((payload as any).inputEncoding).toBeUndefined();
-      expect((payload as any).inputPolicy).toBeUndefined();
+      assert.strictEqual((payload as any).inputTransport, undefined);
+      assert.strictEqual((payload as any).inputEncoding, undefined);
+      assert.strictEqual((payload as any).inputPolicy, undefined);
 
-      expect(payload.inputAdvice).toEqual({
+      assert.deepStrictEqual(payload.inputAdvice, {
         version: 1,
         recommendedMode: "flat",
         assignments: {
@@ -48,7 +49,7 @@ describe("ActionDock describe 输出统一设计", () => {
           enabled: ":=",
         },
       });
-      expect(payload.syntaxReference).toEqual([...ACTION_DESCRIBE_SYNTAX_REFERENCE]);
+      assert.deepStrictEqual(payload.syntaxReference, [...ACTION_DESCRIBE_SYNTAX_REFERENCE]);
     });
 
     it("空对象 Schema 推荐 flat 模式且 assignments 为空对象", () => {
@@ -61,7 +62,7 @@ describe("ActionDock describe 输出统一设计", () => {
         },
       };
       const payload1 = buildActionDescribePayload(specWithEmptyProps);
-      expect(payload1.inputAdvice).toEqual({
+      assert.deepStrictEqual(payload1.inputAdvice, {
         version: 1,
         recommendedMode: "flat",
         assignments: {},
@@ -75,7 +76,7 @@ describe("ActionDock describe 输出统一设计", () => {
         },
       };
       const payload2 = buildActionDescribePayload(specTypeOnly);
-      expect(payload2.inputAdvice).toEqual({
+      assert.deepStrictEqual(payload2.inputAdvice, {
         version: 1,
         recommendedMode: "flat",
         assignments: {},
@@ -96,10 +97,10 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.inputAdvice.recommendedMode).toBe("full-json");
-      expect(payload.inputAdvice.reason).toBe("COMPLEX_SCHEMA");
-      expect(payload.inputAdvice.assignments).toBeUndefined();
-      expect(payload.syntaxReference).toBeUndefined();
+      assert.strictEqual(payload.inputAdvice.recommendedMode, "full-json");
+      assert.strictEqual(payload.inputAdvice.reason, "COMPLEX_SCHEMA");
+      assert.strictEqual(payload.inputAdvice.assignments, undefined);
+      assert.strictEqual(payload.syntaxReference, undefined);
     });
 
     it("非对象根模式标记为 full-json 并给出 NON_OBJECT_SCHEMA 原因", () => {
@@ -113,9 +114,9 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.inputAdvice.recommendedMode).toBe("full-json");
-      expect(payload.inputAdvice.reason).toBe("NON_OBJECT_SCHEMA");
-      expect(payload.inputAdvice.assignments).toBeUndefined();
+      assert.strictEqual(payload.inputAdvice.recommendedMode, "full-json");
+      assert.strictEqual(payload.inputAdvice.reason, "NON_OBJECT_SCHEMA");
+      assert.strictEqual(payload.inputAdvice.assignments, undefined);
     });
 
     it("布尔模式 false 标记为 none 并给出 SCHEMA_REJECTS_ALL 原因", () => {
@@ -126,9 +127,9 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.inputAdvice.recommendedMode).toBe("none");
-      expect(payload.inputAdvice.reason).toBe("SCHEMA_REJECTS_ALL");
-      expect(payload.inputAdvice.assignments).toBeUndefined();
+      assert.strictEqual(payload.inputAdvice.recommendedMode, "none");
+      assert.strictEqual(payload.inputAdvice.reason, "SCHEMA_REJECTS_ALL");
+      assert.strictEqual(payload.inputAdvice.assignments, undefined);
     });
 
     it("必填字段包含禁止属性时标记为 none 并收集 issues", () => {
@@ -145,9 +146,9 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.inputAdvice.recommendedMode).toBe("none");
-      expect(payload.inputAdvice.reason).toBe("REQUIRED_FIELD_FORBIDDEN");
-      expect(payload.inputAdvice.issues).toEqual([
+      assert.strictEqual(payload.inputAdvice.recommendedMode, "none");
+      assert.strictEqual(payload.inputAdvice.reason, "REQUIRED_FIELD_FORBIDDEN");
+      assert.deepStrictEqual(payload.inputAdvice.issues, [
         { path: "__proto__", code: "FORBIDDEN_PROPERTY" },
       ]);
     });
@@ -167,11 +168,11 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const payload = buildActionDescribePayload(spec);
 
-      expect(payload.inputAdvice.recommendedMode).toBe("flat");
-      expect(payload.inputAdvice.assignments).toEqual({
+      assert.strictEqual(payload.inputAdvice.recommendedMode, "flat");
+      assert.deepStrictEqual(payload.inputAdvice.assignments, {
         name: "=",
       });
-      expect(payload.inputAdvice.issues).toEqual([
+      assert.deepStrictEqual(payload.inputAdvice.issues, [
         { path: "bad.field", code: "UNSAFE_FLAT_PROPERTY" },
       ]);
     });
@@ -182,7 +183,7 @@ describe("ActionDock describe 输出统一设计", () => {
       };
 
       const payload = buildActionDescribePayload(spec, { packageId: "fallback.pkg" });
-      expect(payload.packageId).toBe("fallback.pkg");
+      assert.strictEqual(payload.packageId, "fallback.pkg");
     });
 
     it("完整透传 tags, annotations, uses, entry", () => {
@@ -195,10 +196,10 @@ describe("ActionDock describe 输出统一设计", () => {
       };
 
       const payload = buildActionDescribePayload(spec);
-      expect(payload.tags).toEqual(["tool", "ai"]);
-      expect(payload.annotations).toEqual({ experimental: true });
-      expect(payload.uses).toEqual(["auth.login"]);
-      expect(payload.entry).toBe("./actions/full-meta.ts");
+      assert.deepStrictEqual(payload.tags, ["tool", "ai"]);
+      assert.deepStrictEqual(payload.annotations, { experimental: true });
+      assert.deepStrictEqual(payload.uses, ["auth.login"]);
+      assert.strictEqual(payload.entry, "./actions/full-meta.ts");
     });
   });
 
@@ -231,25 +232,25 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Action: greet");
-      expect(text).toContain("Package: example");
-      expect(text).toContain("Description: Greet user");
-      expect(text).toContain("Input Schema:\n{\n  \"type\": \"object\",");
-      expect(text).toContain("Output Schema:\n{\n  \"type\": \"object\"\n}");
-      expect(text).toContain("Recommended Input: flat");
-      expect(text).toContain("Assignments:\n  name=\n  age:=");
-      expect(text).toContain("Syntax Reference:");
-      expect(text).toContain('key="value"');
-      expect(text).toContain("count:=10  enabled:=true");
-      expect(text).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
-      expect(text).toContain("--input-file input.json");
-      expect(text).not.toContain("Reason:");
+      assert.ok((text).includes("Action: greet"));
+      assert.ok((text).includes("Package: example"));
+      assert.ok((text).includes("Description: Greet user"));
+      assert.ok((text).includes("Input Schema:\n{\n  \"type\": \"object\","));
+      assert.ok((text).includes("Output Schema:\n{\n  \"type\": \"object\"\n}"));
+      assert.ok((text).includes("Recommended Input: flat"));
+      assert.ok((text).includes("Assignments:\n  name=\n  age:="));
+      assert.ok((text).includes("Syntax Reference:"));
+      assert.ok((text).includes('key="value"'));
+      assert.ok((text).includes("count:=10  enabled:=true"));
+      assert.ok((text).includes('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")'));
+      assert.ok((text).includes("--input-file input.json"));
+      assert.ok(!(text).includes("Reason:"));
 
       // 验证 Assignments 在 Syntax Reference 上方
       const assignmentsIdx = text.indexOf("Assignments:");
       const syntaxRefIdx = text.indexOf("Syntax Reference:");
-      expect(assignmentsIdx).toBeGreaterThanOrEqual(0);
-      expect(syntaxRefIdx).toBeGreaterThan(assignmentsIdx);
+      assert.ok((assignmentsIdx) >= 0);
+      assert.ok((syntaxRefIdx) > assignmentsIdx);
     });
 
     it("正确格式化复杂模式输出", () => {
@@ -264,11 +265,11 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Action: complex");
-      expect(text).toContain("Recommended Input: full-json");
-      expect(text).toContain("Reason: COMPLEX_SCHEMA");
-      expect(text).not.toContain("Assignments:");
-      expect(text).not.toContain("Syntax Reference:");
+      assert.ok((text).includes("Action: complex"));
+      assert.ok((text).includes("Recommended Input: full-json"));
+      assert.ok((text).includes("Reason: COMPLEX_SCHEMA"));
+      assert.ok(!(text).includes("Assignments:"));
+      assert.ok(!(text).includes("Syntax Reference:"));
     });
 
     it("正确格式化不可输入模式输出", () => {
@@ -283,11 +284,11 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Action: reject-all");
-      expect(text).toContain("Recommended Input: none");
-      expect(text).toContain("Reason: SCHEMA_REJECTS_ALL");
-      expect(text).not.toContain("Assignments:");
-      expect(text).not.toContain("Syntax Reference:");
+      assert.ok((text).includes("Action: reject-all"));
+      assert.ok((text).includes("Recommended Input: none"));
+      assert.ok((text).includes("Reason: SCHEMA_REJECTS_ALL"));
+      assert.ok(!(text).includes("Assignments:"));
+      assert.ok(!(text).includes("Syntax Reference:"));
     });
 
     it("包含 issues 时正确展示 Issues 列表且位于 Syntax Reference 下方", () => {
@@ -307,15 +308,15 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Recommended Input: flat");
-      expect(text).toContain("Assignments:\n  name=");
-      expect(text).toContain("Syntax Reference:");
-      expect(text).toContain("Issues:\n  - bad_prop: UNSAFE_FLAT_PROPERTY");
+      assert.ok((text).includes("Recommended Input: flat"));
+      assert.ok((text).includes("Assignments:\n  name="));
+      assert.ok((text).includes("Syntax Reference:"));
+      assert.ok((text).includes("Issues:\n  - bad_prop: UNSAFE_FLAT_PROPERTY"));
 
       const syntaxRefIdx = text.indexOf("Syntax Reference:");
       const issuesIdx = text.indexOf("Issues:");
-      expect(syntaxRefIdx).toBeGreaterThanOrEqual(0);
-      expect(issuesIdx).toBeGreaterThan(syntaxRefIdx);
+      assert.ok((syntaxRefIdx) >= 0);
+      assert.ok((issuesIdx) > syntaxRefIdx);
     });
 
     it("当 recommendedMode 为 flat 但无 assignments 时仍输出 Syntax Reference", () => {
@@ -330,13 +331,13 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Recommended Input: flat");
-      expect(text).not.toContain("Assignments:");
-      expect(text).toContain("Syntax Reference:");
-      expect(text).toContain('key="value"');
-      expect(text).toContain("count:=10  enabled:=true");
-      expect(text).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
-      expect(text).toContain("--input-file input.json");
+      assert.ok((text).includes("Recommended Input: flat"));
+      assert.ok(!(text).includes("Assignments:"));
+      assert.ok((text).includes("Syntax Reference:"));
+      assert.ok((text).includes('key="value"'));
+      assert.ok((text).includes("count:=10  enabled:=true"));
+      assert.ok((text).includes('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")'));
+      assert.ok((text).includes("--input-file input.json"));
     });
 
     it("当存在 assignments 且 recommendedMode 为 full-json 时仍追加 Syntax Reference", () => {
@@ -354,24 +355,24 @@ describe("ActionDock describe 输出统一设计", () => {
 
       const text = formatActionDetail(payload);
 
-      expect(text).toContain("Recommended Input: full-json");
-      expect(text).toContain("Reason: REQUIRED_FIELD_NOT_FLAT_SAFE");
-      expect(text).toContain("Assignments:\n  optionalTag=");
-      expect(text).toContain("Syntax Reference:");
-      expect(text).toContain('key="value"');
+      assert.ok((text).includes("Recommended Input: full-json"));
+      assert.ok((text).includes("Reason: REQUIRED_FIELD_NOT_FLAT_SAFE"));
+      assert.ok((text).includes("Assignments:\n  optionalTag="));
+      assert.ok((text).includes("Syntax Reference:"));
+      assert.ok((text).includes('key="value"'));
     });
 
     it("ACTION_DESCRIBE_SYNTAX_REFERENCE 包含四个核心维度的入参速查", () => {
       const joined = ACTION_DESCRIBE_SYNTAX_REFERENCE.join("\n");
       // 1. 字符串赋值
-      expect(joined).toContain('key="value"');
+      assert.ok((joined).includes('key="value"'));
       // 2. 类型化字面量（数值/布尔）
-      expect(joined).toContain("count:=10  enabled:=true");
+      assert.ok((joined).includes("count:=10  enabled:=true"));
       // 3. 数组结构（连续索引与直接 JSON 数组）
-      expect(joined).toContain('tags:=\'["a", "b"]\'');
-      expect(joined).toContain('tags.0="a" tags.1="b"');
+      assert.ok((joined).includes('tags:=\'["a", "b"]\''));
+      assert.ok((joined).includes('tags.0="a" tags.1="b"'));
       // 4. 复杂/文件输入
-      expect(joined).toContain("--input-file input.json");
+      assert.ok((joined).includes("--input-file input.json"));
     });
   });
 });

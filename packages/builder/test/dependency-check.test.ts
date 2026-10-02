@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   existsSync,
   mkdirSync,
@@ -45,18 +46,18 @@ describe("本地相对路径依赖完整性校验", () => {
       `;
 
       const specifiers = extractRelativeSpecifiers(code);
-      expect(specifiers).toContain("../src/utils.js");
-      expect(specifiers).toContain("./side-effect.js");
-      expect(specifiers).toContain("./types");
-      expect(specifiers).toContain("./helpers/sub.js");
-      expect(specifiers).toContain("./all.js");
-      expect(specifiers).toContain("./dynamic.js");
-      expect(specifiers).toContain("./legacy.cjs");
+      assert.ok((specifiers).includes("../src/utils.js"));
+      assert.ok((specifiers).includes("./side-effect.js"));
+      assert.ok((specifiers).includes("./types"));
+      assert.ok((specifiers).includes("./helpers/sub.js"));
+      assert.ok((specifiers).includes("./all.js"));
+      assert.ok((specifiers).includes("./dynamic.js"));
+      assert.ok((specifiers).includes("./legacy.cjs"));
 
-      expect(specifiers).not.toContain("@actiondock/sdk");
-      expect(specifiers).not.toContain("node:fs");
-      expect(specifiers).not.toContain("./ignored1.js");
-      expect(specifiers).not.toContain("../ignored2.js");
+      assert.ok(!(specifiers).includes("@actiondock/sdk"));
+      assert.ok(!(specifiers).includes("node:fs"));
+      assert.ok(!(specifiers).includes("./ignored1.js"));
+      assert.ok(!(specifiers).includes("../ignored2.js"));
     });
   });
 
@@ -87,17 +88,17 @@ describe("本地相对路径依赖完整性校验", () => {
 
       // 1. .js 映射为 .ts
       const resolvedTs = resolveRelativeModule(actionsDir, "../src/utils.js");
-      expect(resolvedTs).toBeDefined();
-      expect(resolvedTs?.endsWith("utils.ts")).toBe(true);
+      assert.notStrictEqual(resolvedTs, undefined);
+      assert.strictEqual(resolvedTs?.endsWith("utils.ts"), true);
 
       // 2. 目录 index 解析
       const resolvedIndex = resolveRelativeModule(actionsDir, "../sub");
-      expect(resolvedIndex).toBeDefined();
-      expect(resolvedIndex?.endsWith("index.ts")).toBe(true);
+      assert.notStrictEqual(resolvedIndex, undefined);
+      assert.strictEqual(resolvedIndex?.endsWith("index.ts"), true);
 
       // 3. 不存在的文件
       const notFound = resolveRelativeModule(actionsDir, "./missing.js");
-      expect(notFound).toBeUndefined();
+      assert.strictEqual(notFound, undefined);
     });
   });
 
@@ -144,9 +145,9 @@ export default defineAction(async () => {
       );
 
       // 3. 规划构建：因未声明 files，必须直接报错抛出 UNMET_LOCAL_DEPENDENCY
-      expect(() => {
+      assert.throws(() => {
         SelectionPlanner.plan({ projectRoot: tempDir });
-      }).toThrow(BuilderError);
+      }, BuilderError);
     });
 
     it("在 actiondock.json 中声明 files 后校验顺利通过", async () => {
@@ -182,8 +183,8 @@ export default defineAction(async () => {
 
       // 4. 重新规划构建，校验通过
       const plan = SelectionPlanner.plan({ projectRoot: tempDir });
-      expect(plan).toBeDefined();
-      expect(plan.dependencies.modulesAndAssets.some((m) => m.path.includes("utils.ts"))).toBe(true);
+      assert.notStrictEqual(plan, undefined);
+      assert.strictEqual(plan.dependencies.modulesAndAssets.some((m) => m.path.includes("utils.ts")), true);
 
       // 5. 导出 Skill 也应顺利通过并将 src/utils.ts 包含在产物中
       const outDir = join(tempDir, "dist", "skill");
@@ -192,8 +193,8 @@ export default defineAction(async () => {
         outDir,
         mode: "source",
       });
-      expect(exportRes.mode).toBe("source");
-      expect(existsSync(join(outDir, "src", "utils.ts"))).toBe(true);
+      assert.strictEqual(exportRes.mode, "source");
+      assert.strictEqual(existsSync(join(outDir, "src", "utils.ts")), true);
     });
 
     it("当 Action 引用不存在的相对路径文件时报错 FILE_NOT_FOUND", () => {
@@ -209,9 +210,9 @@ export default defineAction(async () => {
 `
       );
 
-      expect(() => {
+      assert.throws(() => {
         SelectionPlanner.plan({ projectRoot: tempDir });
-      }).toThrow(/does not exist on disk/);
+      }, /does not exist on disk/);
     });
 
     it("通过 skipDependencyValidation 选项可按需跳过校验", () => {
@@ -231,7 +232,7 @@ export default defineAction(async () => {
         projectRoot: tempDir,
         skipDependencyValidation: true,
       });
-      expect(plan).toBeDefined();
+      assert.notStrictEqual(plan, undefined);
     });
 
     it("当 Action 引用越出项目根目录的相对路径模块时抛出 EXTERNAL_LOCAL_DEPENDENCY", () => {
@@ -253,9 +254,9 @@ export default defineAction(async () => {
 `
         );
 
-        expect(() => {
+        assert.throws(() => {
           SelectionPlanner.plan({ projectRoot: tempDir });
-        }).toThrow(BuilderError);
+        }, BuilderError);
       } finally {
         if (existsSync(outsideDir)) {
           rmSync(outsideDir, { recursive: true, force: true });
@@ -291,9 +292,9 @@ export default defineAction(async () => {
 `
         );
 
-        expect(() => {
+        assert.throws(() => {
           SelectionPlanner.plan({ projectRoot: projectDir });
-        }).toThrow(BuilderError);
+        }, BuilderError);
       } finally {
         if (existsSync(nestedBase)) {
           rmSync(nestedBase, { recursive: true, force: true });
@@ -333,8 +334,8 @@ export default defineAction(async () => {
       });
 
       const plan = SelectionPlanner.plan({ projectRoot: tempDir });
-      expect(plan).toBeDefined();
-      expect(plan.dependencies.modulesAndAssets.some((m) => m.path.includes("helper.ts"))).toBe(true);
+      assert.notStrictEqual(plan, undefined);
+      assert.strictEqual(plan.dependencies.modulesAndAssets.some((m) => m.path.includes("helper.ts")), true);
     });
   });
 });

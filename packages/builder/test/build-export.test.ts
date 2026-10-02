@@ -1,4 +1,6 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { runCommandSync } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,7 +39,7 @@ describe("Build & Skill Export Contract", () => {
   let caseIndex = 0;
 
   function runBin(cmdArray: string[], options: any = {}) {
-    return Bun.spawnSync(cmdArray, {
+    return runCommandSync(cmdArray, {
       cwd: tempDir,
       stdout: "pipe",
       stderr: "pipe",
@@ -50,11 +52,11 @@ describe("Build & Skill Export Contract", () => {
     });
   }
 
-  beforeAll(() => {
+  before(() => {
     suiteBaseDir = mkdtempSync(join(tmpdir(), "actiondock-build-suite-"));
   });
 
-  afterAll(() => {
+  after(() => {
     safeCleanDir(suiteBaseDir);
     flushDeferredCleanup();
   });
@@ -86,44 +88,44 @@ describe("Build & Skill Export Contract", () => {
     safeCleanDir(tempDir);
   });
 
-  it("builds a standalone executable and verifies CLI commands work in compiled binary", async () => {
+  it("builds a standalone executable and verifies CLI commands work in compiled binary", { timeout: 30000 }, async () => {
     const buildRes = await buildProject({
       projectRoot: tempDir,
     });
 
-    expect(existsSync(buildRes.executablePath)).toBe(true);
-    expect(existsSync(buildRes.metadataPath)).toBe(true);
+    assert.strictEqual(existsSync(buildRes.executablePath), true);
+    assert.strictEqual(existsSync(buildRes.metadataPath), true);
 
     const metadata = JSON.parse(readFileSync(buildRes.metadataPath, "utf-8"));
-    expect(metadata.packageId).toBe("test.sample-tools");
-    expect(metadata.actions).toEqual(["sample.greet"]);
+    assert.strictEqual(metadata.packageId, "test.sample-tools");
+    assert.deepStrictEqual(metadata.actions, ["sample.greet"]);
 
     // 1. Test binary `list --json`
     const listProc = runBin([buildRes.executablePath, "list", "--json"]);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const listJson = JSON.parse(listProc.stdout.toString());
-    expect(listJson.items).toEqual([
+    assert.deepStrictEqual(listJson.items, [
       { id: "sample.greet", description: "Greeting action demonstrating basic input, config, and state usage" },
     ]);
-    expect(listJson.hints).toEqual([
+    assert.deepStrictEqual(listJson.hints, [
       "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
     ]);
 
     // 1b. Test binary `list --intent greet --json` and `list nonexist --no-fallback --json`
     const listIntentProc = runBin([buildRes.executablePath, "list", "--intent", "greet|other", "--json"]);
-    expect(listIntentProc.exitCode).toBe(0);
-    expect(JSON.parse(listIntentProc.stdout.toString()).items.length).toBe(1);
+    assert.strictEqual(listIntentProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(listIntentProc.stdout.toString()).items.length, 1);
 
     const listStrictProc = runBin([buildRes.executablePath, "list", "nomatch", "--no-fallback", "--json"]);
-    expect(listStrictProc.exitCode).toBe(0);
-    expect(JSON.parse(listStrictProc.stdout.toString()).items).toEqual([]);
+    assert.strictEqual(listStrictProc.exitCode, 0);
+    assert.deepStrictEqual(JSON.parse(listStrictProc.stdout.toString()).items, []);
 
     // 2. Test binary `describe <id> --json`
     const descProc = runBin([buildRes.executablePath, "describe", "sample.greet", "--json"]);
-    expect(descProc.exitCode).toBe(0);
+    assert.strictEqual(descProc.exitCode, 0);
     const descJson = JSON.parse(descProc.stdout.toString());
-    expect(descJson.id).toBe("sample.greet");
-    expect(descJson.inputSchema).toBeDefined();
+    assert.strictEqual(descJson.id, "sample.greet");
+    assert.notStrictEqual(descJson.inputSchema, undefined);
 
     // 3. Test binary `run <id> --input '...'` with default greeting
     const runProc = runBin([
@@ -136,11 +138,11 @@ describe("Build & Skill Export Contract", () => {
       "5s",
       "--json",
     ]);
-    expect(runProc.exitCode).toBe(0);
+    assert.strictEqual(runProc.exitCode, 0);
     const runJson = JSON.parse(runProc.stdout.toString());
-    expect(runJson.ok).toBe(true);
-    expect(runJson.data.message).toBe("Hello, Antigravity!");
-    expect(runJson.runId).toBeDefined();
+    assert.strictEqual(runJson.ok, true);
+    assert.strictEqual(runJson.data.message, "Hello, Antigravity!");
+    assert.notStrictEqual(runJson.runId, undefined);
 
     // 3b. Test binary rejects --async
     const asyncProc = runBin([
@@ -151,14 +153,14 @@ describe("Build & Skill Export Contract", () => {
       '{"name": "Antigravity"}',
       "--async",
     ]);
-    expect(asyncProc.exitCode).toBe(1);
-    expect(asyncProc.stderr.toString()).toContain(
+    assert.strictEqual(asyncProc.exitCode, 1);
+    assert.ok((asyncProc.stderr.toString()).includes(
       "Async execution is not supported in standalone single-execution binaries"
-    );
+    ));
 
     // 4. Test binary `config set` and verify persistence in subsequent run
     const confSet = runBin([buildRes.executablePath, "config", "set", "SAMPLE_GREETING", "Welcome"]);
-    expect(confSet.exitCode).toBe(0);
+    assert.strictEqual(confSet.exitCode, 0);
 
     const confRun = runBin([
       buildRes.executablePath,
@@ -168,9 +170,9 @@ describe("Build & Skill Export Contract", () => {
       '{"name": "Antigravity"}',
       "--json",
     ]);
-    expect(confRun.exitCode).toBe(0);
+    assert.strictEqual(confRun.exitCode, 0);
     const confRunJson = JSON.parse(confRun.stdout.toString());
-    expect(confRunJson.data.message).toBe("Welcome, Antigravity!");
+    assert.strictEqual(confRunJson.data.message, "Welcome, Antigravity!");
 
     // 5. Test binary with custom --data-dir isolation
     const isolatedRun = runBin([
@@ -183,36 +185,36 @@ describe("Build & Skill Export Contract", () => {
       '{"name": "Isolated"}',
       "--json",
     ]);
-    expect(isolatedRun.exitCode).toBe(0);
+    assert.strictEqual(isolatedRun.exitCode, 0);
     const isoJson = JSON.parse(isolatedRun.stdout.toString());
     // In new isolated data-dir, it uses default greeting ("Hello")
-    expect(isoJson.data.message).toBe("Hello, Isolated!");
-  }, 30000);
+    assert.strictEqual(isoJson.data.message, "Hello, Isolated!");
+  });
 
   it("exports Source Skill package by default with SKILL.md, actiondock.json, actions, and playbooks", async () => {
     const exportRes = await exportSkill({
       projectRoot: tempDir,
     });
 
-    expect(exportRes.mode).toBe("source");
-    expect(existsSync(exportRes.skillDir)).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "actiondock.json"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "package.json"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "actions", "greet.ts"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
+    assert.strictEqual(exportRes.mode, "source");
+    assert.strictEqual(existsSync(exportRes.skillDir), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "SKILL.md")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "actiondock.json")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "package.json")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "actions", "greet.ts")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md")), true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd.startsWith("---\nname:")).toBe(true);
-    expect(skillMd).toContain("description:");
-    expect(skillMd).toContain("# Sample Tools");
-    expect(skillMd).toContain("ad link");
-    expect(skillMd).toContain("test.sample-tools/sample.greet");
-    expect(skillMd).toContain("Playbook SOPs");
-    expect(skillMd).toContain("故障排查与环境安装指引");
-    expect(skillMd).toContain("npm install -g @actiondock/cli");
-    expect(skillMd).toContain("npm install --omit=dev");
-    expect(skillMd).toContain("ad doctor");
+    assert.strictEqual(skillMd.startsWith("---\nname:"), true);
+    assert.ok((skillMd).includes("description:"));
+    assert.ok((skillMd).includes("# Sample Tools"));
+    assert.ok((skillMd).includes("ad link"));
+    assert.ok((skillMd).includes("test.sample-tools/sample.greet"));
+    assert.ok((skillMd).includes("Playbook SOPs"));
+    assert.ok((skillMd).includes("故障排查与环境安装指引"));
+    assert.ok((skillMd).includes("npm install -g @actiondock/cli"));
+    assert.ok((skillMd).includes("npm install --omit=dev"));
+    assert.ok((skillMd).includes("ad doctor"));
   });
 
   it("exports Source Skill package including dependent lib files and non-action helpers", async () => {
@@ -253,43 +255,43 @@ export default defineAction({
       projectRoot: tempDir,
     });
 
-    expect(exportRes.mode).toBe("source");
-    expect(existsSync(join(exportRes.skillDir, "lib", "greet-client.ts"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "lib", "utils", "formatter.ts"))).toBe(true);
+    assert.strictEqual(exportRes.mode, "source");
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "lib", "greet-client.ts")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "lib", "utils", "formatter.ts")), true);
 
     // 验证导出的文件列表中包含 lib 文件
-    expect(exportRes.files).toContain("lib/greet-client.ts");
-    expect(exportRes.files).toContain("lib/utils/formatter.ts");
+    assert.ok((exportRes.files).includes("lib/greet-client.ts"));
+    assert.ok((exportRes.files).includes("lib/utils/formatter.ts"));
   });
 
-  it("exports Node directory Skill package when mode is node", async () => {
+  it("exports Node directory Skill package when mode is node", { timeout: 30000 }, async () => {
     const exportRes = await exportSkill({
       projectRoot: tempDir,
       mode: "node",
     });
 
-    expect(exportRes.mode).toBe("node");
-    expect(existsSync(exportRes.skillDir)).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "entry.mjs"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
+    assert.strictEqual(exportRes.mode, "node");
+    assert.strictEqual(existsSync(exportRes.skillDir), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "SKILL.md")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "entry.mjs")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md")), true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd).toContain("node ./entry.mjs");
-    expect(skillMd).toContain("sample.greet");
+    assert.ok((skillMd).includes("node ./entry.mjs"));
+    assert.ok((skillMd).includes("sample.greet"));
 
     // Execute exported entrypoint directly
     const exportedEntry = join(exportRes.skillDir, "entry.mjs");
     const binProc = runBin(
       [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}', "--json"]
     );
-    expect(binProc.exitCode).toBe(0);
+    assert.strictEqual(binProc.exitCode, 0);
     const res = JSON.parse(binProc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.message).toBe("Hello, Agent!");
-  }, 30000);
+    assert.strictEqual(res.ok, true);
+    assert.strictEqual(res.data.message, "Hello, Agent!");
+  });
 
-  it("supports Playbook-driven selective export (only packages specified playbook and its dependent actions)", async () => {
+  it("supports Playbook-driven selective export (only packages specified playbook and its dependent actions)", { timeout: 30000 }, async () => {
     const fs = await import("node:fs");
     // Add a second action
     const action2Code = `
@@ -297,7 +299,7 @@ import { defineAction } from "@actiondock/sdk";
 export default defineAction({
   id: "sample.farewell",
   description: "Say farewell to user",
-  run: async (ctx) => ({ message: "Goodbye" }),
+  run: async (ctx) => ("Goodbye"),
 });
 `;
     fs.writeFileSync(join(tempDir, "actions", "farewell.ts"), action2Code, "utf-8");
@@ -326,28 +328,28 @@ export default defineAction({
       outDir: join(tempDir, "dist", "selective-source-skill"),
     });
 
-    expect(exportRes.actionsCount).toBe(1);
-    expect(exportRes.playbooksCount).toBe(1);
+    assert.strictEqual(exportRes.actionsCount, 1);
+    assert.strictEqual(exportRes.playbooksCount, 1);
 
     // Only greet-user.md should be in playbooks dir, farewell-sop.md must NOT exist
-    expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "playbooks", "farewell-sop.md"))).toBe(false);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "playbooks", "farewell-sop.md")), false);
 
     // actiondock.json should contain greet-user playbook and exclude farewell-sop
     const exportedManifest = JSON.parse(fs.readFileSync(join(exportRes.skillDir, "actiondock.json"), "utf-8"));
-    expect(exportedManifest.playbooks?.["greet-user"]).toBeDefined();
-    expect(exportedManifest.playbooks?.["farewell-sop"]).toBeUndefined();
+    assert.notStrictEqual(exportedManifest.playbooks?.["greet-user"], undefined);
+    assert.strictEqual(exportedManifest.playbooks?.["farewell-sop"], undefined);
 
     // Only greet.ts should be in actions dir, farewell.ts must NOT exist
-    expect(existsSync(join(exportRes.skillDir, "actions", "greet.ts"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "actions", "farewell.ts"))).toBe(false);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "actions", "greet.ts")), true);
+    assert.strictEqual(existsSync(join(exportRes.skillDir, "actions", "farewell.ts")), false);
 
     // SKILL.md should only mention sample.greet and greet-user
     const skillMd = fs.readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd).toContain("sample.greet");
-    expect(skillMd).not.toContain("sample.farewell");
-    expect(skillMd).toContain("greet-user");
-    expect(skillMd).not.toContain("farewell-sop");
+    assert.ok((skillMd).includes("sample.greet"));
+    assert.ok(!(skillMd).includes("sample.farewell"));
+    assert.ok((skillMd).includes("greet-user"));
+    assert.ok(!(skillMd).includes("farewell-sop"));
 
     // 2. Export node directory skill for greet-user playbook only
     const exportNodeRes = await exportSkill({
@@ -359,10 +361,10 @@ export default defineAction({
 
     const selectiveEntry = join(exportNodeRes.skillDir, "entry.mjs");
     const listProc = runBin([selectiveEntry, "list", "--json"]);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(listData.items.length).toBe(1);
-    expect(listData.items[0].id).toBe("sample.greet");
-  }, 30000);
+    assert.strictEqual(listData.items.length, 1);
+    assert.strictEqual(listData.items[0].id, "sample.greet");
+  });
 });
 

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,15 +34,15 @@ describe("createNodePlatform 平台工厂测试", () => {
     it("具备标准 Node 运行时平台属性契约", () => {
       const platform = createNodePlatform({ rootDir: tempDir });
 
-      expect(platform.name).toBe("node");
-      expect(platform.clock).toBeInstanceOf(SystemClock);
-      expect(platform.files).toBeInstanceOf(NodeFileSystem);
-      expect(platform.process).toBeDefined();
-      expect(typeof platform.process.run).toBe("function");
-      expect(typeof platform.process.start).toBe("function");
-      expect(platform.storage).toBeDefined();
-      expect(typeof platform.storage.createStorage).toBe("function");
-      expect(typeof platform.storage.createGlobalStorage).toBe("function");
+      assert.strictEqual(platform.name, "node");
+      assert.ok(platform.clock instanceof SystemClock);
+      assert.ok(platform.files instanceof NodeFileSystem);
+      assert.notStrictEqual(platform.process, undefined);
+      assert.strictEqual(typeof platform.process.run, "function");
+      assert.strictEqual(typeof platform.process.start, "function");
+      assert.notStrictEqual(platform.storage, undefined);
+      assert.strictEqual(typeof platform.storage.createStorage, "function");
+      assert.strictEqual(typeof platform.storage.createGlobalStorage, "function");
     });
 
     it("时钟驱动正常工作并提供时间服务", async () => {
@@ -50,13 +51,13 @@ describe("createNodePlatform 平台工厂测试", () => {
       const now = platform.clock.now();
       const after = Date.now();
 
-      expect(now.getTime()).toBeGreaterThanOrEqual(before);
-      expect(now.getTime()).toBeLessThanOrEqual(after);
+      assert.ok((now.getTime()) >= before);
+      assert.ok((now.getTime()) <= after);
 
       const mono1 = platform.clock.monotonic();
       await platform.clock.sleep(10);
       const mono2 = platform.clock.monotonic();
-      expect(mono2).toBeGreaterThan(mono1);
+      assert.ok((mono2) > mono1);
     });
 
     it("文件系统驱动基于 NodeFileSystem 正常读写并受沙箱约束", async () => {
@@ -64,17 +65,17 @@ describe("createNodePlatform 平台工厂测试", () => {
       const testFile = join(tempDir, "sample.txt");
 
       await platform.files.writeFile(testFile, "ActionDock Node Platform");
-      expect(await platform.files.exists(testFile)).toBe(true);
+      assert.strictEqual(await platform.files.exists(testFile), true);
 
       const content = await platform.files.readFile(testFile);
-      expect(content).toBe("ActionDock Node Platform");
+      assert.strictEqual(content, "ActionDock Node Platform");
 
       const stat = await platform.files.stat(testFile);
-      expect(stat.isFile()).toBe(true);
-      expect(stat.isDirectory()).toBe(false);
+      assert.strictEqual(stat.isFile(), true);
+      assert.strictEqual(stat.isDirectory(), false);
 
       const outsidePath = join(tempDir, "..", "outside-escape.txt");
-      await expect(platform.files.writeFile(outsidePath, "escape")).rejects.toThrow();
+      await assert.rejects(platform.files.writeFile(outsidePath, "escape"));
     });
 
     it("进程执行驱动能够基于 ProcessManager 与 NodeProcessDriver 执行命令并捕获输出", async () => {
@@ -89,9 +90,9 @@ describe("createNodePlatform 平台工厂测试", () => {
         maxOutputBytes: 1024 * 1024,
       });
 
-      expect(result.exit.code).toBe(0);
+      assert.strictEqual(result.exit.code, 0);
       const text = decodeText(result.chunks);
-      expect(text.trim()).toBe("hello from node");
+      assert.strictEqual(text.trim(), "hello from node");
     });
 
     it("模块加载驱动能够基于 NodeModuleLoader 正常解析带扩展名模块并拒绝无扩展名", async () => {
@@ -99,8 +100,8 @@ describe("createNodePlatform 平台工厂测试", () => {
       const fooFile = join(tempDir, "foo.ts");
       await platform.files.writeFile(fooFile, "export const val = 42;");
       const resolved = platform.modules.resolve?.("./foo.ts", join(tempDir, "index.ts"));
-      expect(resolved).toBe(fooFile);
-      expect(() => platform.modules.resolve?.("./foo", join(tempDir, "index.ts"))).toThrow();
+      assert.strictEqual(resolved, fooFile);
+      assert.throws(() => platform.modules.resolve?.("./foo", join(tempDir, "index.ts")));
     });
   });
 
@@ -109,14 +110,14 @@ describe("createNodePlatform 平台工厂测试", () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
 
-      expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
-      expect(storage.isOpen).toBe(true);
+      assert.ok(storage instanceof SqliteRuntimeStorage);
+      assert.strictEqual(storage.isOpen, true);
 
       storage.setConfig("SERVER_PORT", 8080);
-      expect(storage.getConfig<number>("SERVER_PORT")).toBe(8080);
+      assert.strictEqual(storage.getConfig<number>("SERVER_PORT"), 8080);
 
       storage.setState("test-run", "progress", { step: 1 });
-      expect(await storage.getState<any>("test-run", "progress")).toEqual({ step: 1 });
+      assert.deepStrictEqual(await storage.getState<any>("test-run", "progress"), { step: 1 });
 
       await storage.close();
     });
@@ -126,15 +127,15 @@ describe("createNodePlatform 平台工厂测试", () => {
       const platform = createNodePlatform({ dataDir, customHome: tempDir });
 
       const storage = platform.storage.createStorage("scoped-pkg");
-      expect(storage.isOpen).toBe(true);
+      assert.strictEqual(storage.isOpen, true);
       storage.setConfig("KEY", "VALUE");
-      expect(storage.getConfig<string>("KEY")).toBe("VALUE");
+      assert.strictEqual(storage.getConfig<string>("KEY"), "VALUE");
       await storage.close();
 
       const globalStorage = platform.storage.createGlobalStorage();
-      expect(globalStorage.isOpen).toBe(true);
+      assert.strictEqual(globalStorage.isOpen, true);
       globalStorage.setConfig("GLOBAL_KEY", "GLOBAL_VAL");
-      expect(globalStorage.getConfig<string>("GLOBAL_KEY")).toBe("GLOBAL_VAL");
+      assert.strictEqual(globalStorage.getConfig<string>("GLOBAL_KEY"), "GLOBAL_VAL");
       await globalStorage.close();
     });
 
@@ -148,16 +149,16 @@ describe("createNodePlatform 平台工厂测试", () => {
       });
 
       const storage = platform.storage.createStorage("pkg-driver-test", { inMemory: true });
-      expect(customFactoryCalled).toBe(true);
-      expect(storage.isOpen).toBe(true);
+      assert.strictEqual(customFactoryCalled, true);
+      assert.strictEqual(storage.isOpen, true);
       await storage.close();
     });
 
     it("默认使用 NodeSqliteDriver 同步存储驱动", async () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("worker-default-test", { inMemory: true });
-      expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
-      expect((storage as any).driver).toBeInstanceOf(NodeSqliteDriver);
+      assert.ok(storage instanceof SqliteRuntimeStorage);
+      assert.ok((storage as any).driver instanceof NodeSqliteDriver);
       await storage.close();
     });
   });
@@ -173,12 +174,12 @@ describe("createNodePlatform 平台工厂测试", () => {
       });
       await server.listen(0, "127.0.0.1");
 
-      expect(server.port).toBeGreaterThan(0);
+      assert.ok((server.port) > 0);
 
       const res = await fetch(`http://127.0.0.1:${server.port}/`);
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const json = await res.json();
-      expect(json).toEqual({ status: "ok" });
+      assert.deepStrictEqual(json, { status: "ok" });
 
       await server.stop();
     });
@@ -213,9 +214,9 @@ describe("createNodePlatform 平台工厂测试", () => {
       const ticket = await service.start("echo-action", {}, createInvocationContext({ package: identity }));
       const result = await ticket.result!;
 
-      expect(result.ok).toBe(true);
+      assert.strictEqual(result.ok, true);
       if (result.ok) {
-        expect((result.data as any).msg).toBe("node-platform-success");
+        assert.strictEqual((result.data as any).msg, "node-platform-success");
       }
 
       await service.close();

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { createActionDock } from "@actiondock/core";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
@@ -223,46 +224,46 @@ describe("@actiondock/mcp Host Integration", () => {
     await allDonePromise;
 
     // 4. 断言 tools/list 正确注册工具
-    expect(toolsListResult).toBeDefined();
-    expect(Array.isArray(toolsListResult.tools)).toBe(true);
-    expect(toolsListResult.tools.length).toBe(2);
+    assert.notStrictEqual(toolsListResult, undefined);
+    assert.strictEqual(Array.isArray(toolsListResult.tools), true);
+    assert.strictEqual(toolsListResult.tools.length, 2);
 
     const calcTool = toolsListResult.tools.find((t: any) => t.name.includes("calc.add"));
-    expect(calcTool).toBeDefined();
-    expect(calcTool.description).toBe("加法计算动作");
-    expect(calcTool.inputSchema.properties.a.type).toBe("number");
-    expect(calcTool.outputSchema.properties.sum.type).toBe("number");
+    assert.notStrictEqual(calcTool, undefined);
+    assert.strictEqual(calcTool.description, "加法计算动作");
+    assert.strictEqual(calcTool.inputSchema.properties.a.type, "number");
+    assert.strictEqual(calcTool.outputSchema.properties.sum.type, "number");
 
     // 5. 断言 tools/call 同步执行成功
-    expect(syncCallResult).toBeDefined();
-    expect(syncCallResult.structuredContent).toEqual({ sum: 42 });
+    assert.notStrictEqual(syncCallResult, undefined);
+    assert.deepStrictEqual(syncCallResult.structuredContent, { sum: 42 });
     const syncParsed = JSON.parse(syncCallResult.content[0].text);
-    expect(syncParsed.ok).toBe(true);
-    expect(syncParsed.data).toEqual({ sum: 42 });
+    assert.strictEqual(syncParsed.ok, true);
+    assert.deepStrictEqual(syncParsed.data, { sum: 42 });
 
     // 6. 断言 tools/call 异步执行返回票据
-    expect(asyncCallResult).toBeDefined();
-    expect(asyncCallResult.ok).toBe(true);
-    expect(asyncCallResult.status).toBe("running");
-    expect(asyncCallResult.taskId).toBeDefined();
+    assert.notStrictEqual(asyncCallResult, undefined);
+    assert.strictEqual(asyncCallResult.ok, true);
+    assert.strictEqual(asyncCallResult.status, "running");
+    assert.notStrictEqual(asyncCallResult.taskId, undefined);
 
     // 7. 断言 tasks/get 查得运行记录
-    expect(taskGetResult).toBeDefined();
-    expect(taskGetResult.task.taskId).toBe(asyncCallResult.taskId);
-    expect(["working", "completed"]).toContain(taskGetResult.task.status);
+    assert.notStrictEqual(taskGetResult, undefined);
+    assert.strictEqual(taskGetResult.task.taskId, asyncCallResult.taskId);
+    assert.ok((["working", "completed"]).includes(taskGetResult.task.status));
 
     // 8. 断言 tasks/cancel 成功取消
-    expect(taskCancelResult).toBeDefined();
-    expect(taskCancelResult.status).toBe("cancelled");
-    expect(taskGetCancelledResult).toBeDefined();
-    expect(taskGetCancelledResult.task.status).toBe("cancelled");
-    expect(slowTaskCancelled).toBe(true);
+    assert.notStrictEqual(taskCancelResult, undefined);
+    assert.strictEqual(taskCancelResult.status, "cancelled");
+    assert.notStrictEqual(taskGetCancelledResult, undefined);
+    assert.strictEqual(taskGetCancelledResult.task.status, "cancelled");
+    assert.strictEqual(slowTaskCancelled, true);
 
     // 9. 断言 server.close() 优雅关闭 host 资源
     await server.close();
-    await expect(
+    await assert.rejects(
       service.execution.run("test.mcp-host-app/calc.add", { a: 1, b: 2 })
-    ).rejects.toThrow();
+    );
   });
 
   it("injects ActionDockService directly, verifying tools list discovery, sync call, async task, and cancellation", async () => {
@@ -404,14 +405,14 @@ describe("@actiondock/mcp Host Integration", () => {
 
     await donePromise;
 
-    expect(toolsListResult.tools.length).toBe(2);
-    expect(syncCallResult.structuredContent).toEqual({ sum: 30 });
-    expect(asyncCallResult.status).toBe("running");
-    expect(cancelResult.status).toBe("cancelled");
-    expect(slowTaskCancelled).toBe(true);
+    assert.strictEqual(toolsListResult.tools.length, 2);
+    assert.deepStrictEqual(syncCallResult.structuredContent, { sum: 30 });
+    assert.strictEqual(asyncCallResult.status, "running");
+    assert.strictEqual(cancelResult.status, "cancelled");
+    assert.strictEqual(slowTaskCancelled, true);
 
     await server.close();
-    await expect(service.execution.run("calc.add", { a: 1, b: 2 })).rejects.toThrow();
+    await assert.rejects(service.execution.run("calc.add", { a: 1, b: 2 }));
   });
 });
 

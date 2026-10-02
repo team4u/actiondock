@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -55,49 +56,49 @@ export default defineAction({
     const emptyDir = fakeHome;
     const report = await runDoctorChecks({ cwd: emptyDir, customHome: fakeHome });
 
-    expect(report.hasProject).toBe(false);
-    expect(report.checks.length).toBeGreaterThanOrEqual(4);
+    assert.strictEqual(report.hasProject, false);
+    assert.ok((report.checks.length) >= 4);
 
     const nodeCheck = report.checks.find((c) => c.id === "runtime.node");
-    expect(nodeCheck).toBeDefined();
-    expect(nodeCheck?.status).toBe("ok");
-    expect(nodeCheck?.message).toContain(">= 24.12.0 supported");
+    assert.notStrictEqual(nodeCheck, undefined);
+    assert.strictEqual(nodeCheck?.status, "ok");
+    assert.ok((nodeCheck?.message).includes(">= 24.12.0 supported"));
 
     const storageCheck = report.checks.find((c) => c.id === "storage.global");
-    expect(storageCheck).toBeDefined();
-    expect(storageCheck?.status).toBe("ok");
+    assert.notStrictEqual(storageCheck, undefined);
+    assert.strictEqual(storageCheck?.status, "ok");
   });
 
   it("runs full project diagnostics inside ActionDock project", async () => {
     const report = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
 
-    expect(report.hasProject).toBe(true);
-    expect(report.packageId).toBe("team.doctor-test");
+    assert.strictEqual(report.hasProject, true);
+    assert.strictEqual(report.packageId, "team.doctor-test");
 
     const sdkCheck = report.checks.find((c) => c.id === "project.sdk");
-    expect(sdkCheck).toBeDefined();
-    expect(sdkCheck?.status).toBe("ok");
+    assert.notStrictEqual(sdkCheck, undefined);
+    assert.strictEqual(sdkCheck?.status, "ok");
 
     const actionCheck = report.checks.find((c) => c.id === "project.actions");
-    expect(actionCheck).toBeDefined();
-    expect(actionCheck?.status).toBe("ok");
+    assert.notStrictEqual(actionCheck, undefined);
+    assert.strictEqual(actionCheck?.status, "ok");
 
     const manifestCheck = report.checks.find((c) => c.id === "project.manifest");
-    expect(manifestCheck).toBeDefined();
-    expect(manifestCheck?.status).toBe("warn");
-    expect(manifestCheck?.message).toContain("doctor-act.ts");
-    expect(manifestCheck?.fix).toContain("actiondock.json");
+    assert.notStrictEqual(manifestCheck, undefined);
+    assert.strictEqual(manifestCheck?.status, "warn");
+    assert.ok((manifestCheck?.message).includes("doctor-act.ts"));
+    assert.ok((manifestCheck?.fix).includes("actiondock.json"));
 
     const storageProjectCheck = report.checks.find((c) => c.id === "project.storage");
-    expect(storageProjectCheck).toBeDefined();
-    expect(storageProjectCheck?.status).toBe("ok");
-    expect(storageProjectCheck?.message).toContain(fakeHome);
+    assert.notStrictEqual(storageProjectCheck, undefined);
+    assert.strictEqual(storageProjectCheck?.status, "ok");
+    assert.ok((storageProjectCheck?.message).includes(fakeHome));
 
     // Config readiness check should detect missing REQ_API_KEY as a warning
     const configCheck = report.checks.find((c) => c.id === "project.config_readiness");
-    expect(configCheck).toBeDefined();
-    expect(configCheck?.status).toBe("warn");
-    expect(configCheck?.message).toContain("REQ_API_KEY");
+    assert.notStrictEqual(configCheck, undefined);
+    assert.strictEqual(configCheck?.status, "warn");
+    assert.ok((configCheck?.message).includes("REQ_API_KEY"));
   });
 
   it("detects stale registry links in doctor checks", async () => {
@@ -111,9 +112,9 @@ export default defineAction({
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
     const regCheck = report.checks.find((c) => c.id === "registry.global");
-    expect(regCheck).toBeDefined();
-    expect(regCheck?.status).toBe("warn");
-    expect(regCheck?.message).toContain("stale");
+    assert.notStrictEqual(regCheck, undefined);
+    assert.strictEqual(regCheck?.status, "warn");
+    assert.ok((regCheck?.message).includes("stale"));
   });
 
   it("detects linked packages declaring dependencies with missing node_modules", async () => {
@@ -130,12 +131,12 @@ export default defineAction({
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
     const depCheck = report.checks.find((c) => c.id === "registry.dependencies");
-    expect(depCheck).toBeDefined();
-    expect(depCheck?.status).toBe("warn");
-    expect(depCheck?.message).toContain("team.missing-deps");
-    expect(depCheck?.message).toContain("miss node_modules");
-    expect(depCheck?.fix).toContain("npm install");
-    expect(depCheck?.fix).not.toContain("bun install");
+    assert.notStrictEqual(depCheck, undefined);
+    assert.strictEqual(depCheck?.status, "warn");
+    assert.ok((depCheck?.message).includes("team.missing-deps"));
+    assert.ok((depCheck?.message).includes("miss node_modules"));
+    assert.ok((depCheck?.fix).includes("npm install"));
+    assert.ok(!(depCheck?.fix).includes("bun install"));
 
     rmSync(depPkg, { recursive: true, force: true });
   });
@@ -158,9 +159,9 @@ export default defineAction({
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
     const usesCheck = report.checks.find((c) => c.id === "registry.uses_closure");
-    expect(usesCheck).toBeDefined();
-    expect(usesCheck?.status).toBe("warn");
-    expect(usesCheck?.message).toContain("unresolved.remote/service");
+    assert.notStrictEqual(usesCheck, undefined);
+    assert.strictEqual(usesCheck?.status, "warn");
+    assert.ok((usesCheck?.message).includes("unresolved.remote/service"));
 
     rmSync(usesPkg, { recursive: true, force: true });
   });
@@ -180,10 +181,10 @@ export default defineAction(async () => ({ ok }));`
 
     const reportError = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
     const filesCheckError = reportError.checks.find((c) => c.id === "project.files");
-    expect(filesCheckError).toBeDefined();
-    expect(filesCheckError?.status).toBe("error");
-    expect(filesCheckError?.message).toContain("Actions import modules from 'src/'");
-    expect(filesCheckError?.fix).toContain('"files": ["src"]');
+    assert.notStrictEqual(filesCheckError, undefined);
+    assert.strictEqual(filesCheckError?.status, "error");
+    assert.ok((filesCheckError?.message).includes("Actions import modules from 'src/'"));
+    assert.ok((filesCheckError?.fix).includes('"files": ["src"]'));
 
     // 声明 files: ["src"] 后变为 ok
     const configPath = join(pkgDir, "actiondock.json");
@@ -193,8 +194,8 @@ export default defineAction(async () => ({ ok }));`
 
     const reportOk = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
     const filesCheckOk = reportOk.checks.find((c) => c.id === "project.files");
-    expect(filesCheckOk).toBeDefined();
-    expect(filesCheckOk?.status).toBe("ok");
-    expect(filesCheckOk?.message).toContain("boundaries verified");
+    assert.notStrictEqual(filesCheckOk, undefined);
+    assert.strictEqual(filesCheckOk?.status, "ok");
+    assert.ok((filesCheckOk?.message).includes("boundaries verified"));
   });
 });

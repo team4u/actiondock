@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -59,7 +60,7 @@ describe("IPC cross-process cancellation chain", () => {
   }
   let hostChild: ChildProcess | undefined;
 
-  afterAll(() => {
+  after(() => {
     if (hostChild && hostChild.exitCode === null) {
       hostChild.kill("SIGKILL");
     }
@@ -70,7 +71,7 @@ describe("IPC cross-process cancellation chain", () => {
     }
   });
 
-  it("propagates parent-side abort to host-side ActionContext signal and ends with cancellation semantics", async () => {
+  it("propagates parent-side abort to host-side ActionContext signal and ends with cancellation semantics", { timeout: 20000 }, async () => {
     // 宿主脚本落盘为 .ts，复用仓库根 tsconfig 路径别名由测试加载器解析工作区依赖
     const hostScriptPath = join(tempDir, "ipc-cancel-host.ts");
     writeFileSync(hostScriptPath, HOST_SCRIPT);
@@ -108,16 +109,16 @@ describe("IPC cross-process cancellation chain", () => {
     const result = await runPromise;
 
     // 断言宿主侧 ActionContext.signal 已随 abort 消息中止
-    expect(hostSignalAborted).toBe(true);
+    assert.strictEqual(hostSignalAborted, true);
 
     // 断言调用以取消语义结束：cancelled 状态与 ACTION_CANCELLED 错误码
     // 联合类型收窄：仅失败分支携带 error 字段
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (result.ok) {
       throw new Error("Expected cancelled execution result, got success");
     }
-    expect(result.error?.code).toBe("ACTION_CANCELLED");
+    assert.strictEqual(result.error?.code, "ACTION_CANCELLED");
 
     await service.close();
-  }, 20000);
+  });
 });

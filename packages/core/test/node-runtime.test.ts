@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import type * as cp from "node:child_process";
 import {
   existsSync,
@@ -21,7 +22,7 @@ import { killProcessGroup } from "../src/process/process-driver";
 describe("NodeSqliteDriver 单元测试", () => {
   it("支持基础增删改查，正确处理展开参数与数组参数", () => {
     const driver = new NodeSqliteDriver(":memory:");
-    expect(driver.isOpen).toBe(true);
+    assert.strictEqual(driver.isOpen, true);
 
     driver.exec(`
       CREATE TABLE users (
@@ -35,42 +36,42 @@ describe("NodeSqliteDriver 单元测试", () => {
 
     // 展开位置参数
     const res1 = insertStmt.run(1, "Alice", 30);
-    expect(res1.changes).toBe(1);
+    assert.strictEqual(res1.changes, 1);
 
     // 数组参数
     const res2 = insertStmt.run([2, "Bob", 25]);
-    expect(res2.changes).toBe(1);
+    assert.strictEqual(res2.changes, 1);
 
     const getStmt = driver.prepare("SELECT * FROM users WHERE id = ?");
     const user1 = getStmt.get<{ id: number; name: string; age: number }>(1);
-    expect(user1).toBeDefined();
-    expect(user1?.name).toBe("Alice");
-    expect(user1?.age).toBe(30);
+    assert.notStrictEqual(user1, undefined);
+    assert.strictEqual(user1?.name, "Alice");
+    assert.strictEqual(user1?.age, 30);
 
     const user2 = getStmt.get<{ id: number; name: string; age: number }>([2]);
-    expect(user2).toBeDefined();
-    expect(user2?.name).toBe("Bob");
+    assert.notStrictEqual(user2, undefined);
+    assert.strictEqual(user2?.name, "Bob");
 
     const allStmt = driver.prepare("SELECT * FROM users ORDER BY id ASC");
     const allUsers = allStmt.all<{ id: number; name: string; age: number }>();
-    expect(allUsers.length).toBe(2);
-    expect(allUsers[0].name).toBe("Alice");
-    expect(allUsers[1].name).toBe("Bob");
+    assert.strictEqual(allUsers.length, 2);
+    assert.strictEqual(allUsers[0].name, "Alice");
+    assert.strictEqual(allUsers[1].name, "Bob");
 
     // 更新
     const updateStmt = driver.prepare("UPDATE users SET age = ? WHERE id = ?");
     const updateRes = updateStmt.run([31, 1]);
-    expect(updateRes.changes).toBe(1);
-    expect(getStmt.get<{ age: number }>(1)?.age).toBe(31);
+    assert.strictEqual(updateRes.changes, 1);
+    assert.strictEqual(getStmt.get<{ age: number }>(1)?.age, 31);
 
     // 删除
     const deleteStmt = driver.prepare("DELETE FROM users WHERE id = ?");
     const deleteRes = deleteStmt.run(2);
-    expect(deleteRes.changes).toBe(1);
-    expect(getStmt.get(2)).toBeUndefined();
+    assert.strictEqual(deleteRes.changes, 1);
+    assert.strictEqual(getStmt.get(2), undefined);
 
     driver.close();
-    expect(driver.isOpen).toBe(false);
+    assert.strictEqual(driver.isOpen, false);
   });
 
   it("支持同步事务成功提交", () => {
@@ -85,7 +86,7 @@ describe("NodeSqliteDriver 单元测试", () => {
     });
 
     const list = driver.prepare("SELECT * FROM items").all<{ id: number; title: string }>();
-    expect(list.length).toBe(2);
+    assert.strictEqual(list.length, 2);
 
     driver.close();
   });
@@ -97,15 +98,15 @@ describe("NodeSqliteDriver 单元测试", () => {
     const insert = driver.prepare("INSERT INTO logs (id, msg) VALUES (?, ?)");
     insert.run(1, "init");
 
-    expect(() => {
+    assert.throws(() => {
       driver.transaction(() => {
         insert.run(2, "transient");
         throw new Error("Trigger rollback");
       });
-    }).toThrow("Trigger rollback");
+    }, /Trigger rollback/);
 
     const list = driver.prepare("SELECT * FROM logs").all();
-    expect(list.length).toBe(1);
+    assert.strictEqual(list.length, 1);
 
     driver.close();
   });
@@ -124,13 +125,13 @@ describe("NodeSqliteDriver 单元测试", () => {
       }) as any);
     } catch (err: any) {
       errorThrown = true;
-      expect(err.message).toContain("Async transactions are not allowed in SQLite");
+      assert.ok((err.message).includes("Async transactions are not allowed in SQLite"));
     }
 
-    expect(errorThrown).toBe(true);
+    assert.strictEqual(errorThrown, true);
 
     const list = driver.prepare("SELECT * FROM records").all();
-    expect(list.length).toBe(0);
+    assert.strictEqual(list.length, 0);
 
     driver.close();
   });
@@ -138,15 +139,15 @@ describe("NodeSqliteDriver 单元测试", () => {
   it("妥善管理关闭状态与防止无效调用", () => {
     const driver = new NodeSqliteDriver(":memory:");
     driver.close();
-    expect(driver.isOpen).toBe(false);
+    assert.strictEqual(driver.isOpen, false);
 
     // 重复关闭不应报错
-    expect(() => driver.close()).not.toThrow();
+    assert.doesNotThrow(() => driver.close());
 
     // 关闭后调用应当拒绝
-    expect(() => driver.exec("SELECT 1")).toThrow("Database connection is closed");
-    expect(() => driver.prepare("SELECT 1")).toThrow("Database connection is closed");
-    expect(() => driver.transaction(() => {})).toThrow("Database connection is closed");
+    assert.throws(() => driver.exec("SELECT 1"), /Database connection is closed/);
+    assert.throws(() => driver.prepare("SELECT 1"), /Database connection is closed/);
+    assert.throws(() => driver.transaction(() => {}), /Database connection is closed/);
   });
 });
 
@@ -176,16 +177,16 @@ describe("killProcessGroup 跨平台终止行为", () => {
 
       // 启动 killProcessGroup：必须触发 taskkill，且在 taskkill 完成前严禁执行 process.kill，避免子进程孤儿化
       const killPromise = killProcessGroup(99999, "SIGTERM", mockSpawn);
-      expect(spawnedCommands.length).toBe(1);
-      expect(spawnedCommands[0].command).toBe("taskkill");
-      expect(spawnedCommands[0].args).toEqual(["/pid", "99999", "/T", "/F"]);
-      expect(killedSignals.length).toBe(0);
+      assert.strictEqual(spawnedCommands.length, 1);
+      assert.strictEqual(spawnedCommands[0].command, "taskkill");
+      assert.deepStrictEqual(spawnedCommands[0].args, ["/pid", "99999", "/T", "/F"]);
+      assert.strictEqual(killedSignals.length, 0);
 
       // taskkill 成功完成（exit 0）
       closeCallback?.(0);
       await killPromise;
       // taskkill 已成功销毁整棵进程树，process.kill 不应被调用
-      expect(killedSignals.length).toBe(0);
+      assert.strictEqual(killedSignals.length, 0);
     } finally {
       Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
       process.kill = origKill;
@@ -217,20 +218,20 @@ describe("killProcessGroup 跨平台终止行为", () => {
 
       // 1. taskkill 触发 error 事件时回退至 process.kill
       const errPromise = killProcessGroup(77777, "SIGTERM", mockSpawn);
-      expect(killedSignals.length).toBe(0);
+      assert.strictEqual(killedSignals.length, 0);
       errorCallback?.();
       await errPromise;
-      expect(killedSignals.length).toBe(1);
-      expect(killedSignals[0]).toEqual({ pid: 77777, signal: "SIGTERM" });
+      assert.strictEqual(killedSignals.length, 1);
+      assert.deepStrictEqual(killedSignals[0], { pid: 77777, signal: "SIGTERM" });
 
       // 2. taskkill 退出码非 0 时回退至 process.kill
       killedSignals.length = 0;
       const nonZeroPromise = killProcessGroup(66666, "SIGKILL", mockSpawn);
-      expect(killedSignals.length).toBe(0);
+      assert.strictEqual(killedSignals.length, 0);
       closeCallback?.(1);
       await nonZeroPromise;
-      expect(killedSignals.length).toBe(1);
-      expect(killedSignals[0]).toEqual({ pid: 66666, signal: "SIGKILL" });
+      assert.strictEqual(killedSignals.length, 1);
+      assert.deepStrictEqual(killedSignals[0], { pid: 66666, signal: "SIGKILL" });
 
       // 3. spawn 抛出同步异常时直接回退至 process.kill
       killedSignals.length = 0;
@@ -238,8 +239,8 @@ describe("killProcessGroup 跨平台终止行为", () => {
         throw new Error("spawn failed");
       }) as unknown as typeof cp.spawn;
       await killProcessGroup(55555, "SIGTERM", throwingSpawn);
-      expect(killedSignals.length).toBe(1);
-      expect(killedSignals[0]).toEqual({ pid: 55555, signal: "SIGTERM" });
+      assert.strictEqual(killedSignals.length, 1);
+      assert.deepStrictEqual(killedSignals[0], { pid: 55555, signal: "SIGTERM" });
     } finally {
       Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
       process.kill = origKill;
@@ -298,25 +299,25 @@ describe("NodeModuleLoader 单元测试", () => {
     const filePath = join(testDir, "service.ts");
 
     const mod = await loader.load(filePath);
-    expect(mod.serviceName).toBe("auth-service");
+    assert.strictEqual(mod.serviceName, "auth-service");
 
     const calculate = await loader.loadDefault<(...args: number[]) => number>(filePath);
-    expect(typeof calculate).toBe("function");
-    expect(calculate(10, 20)).toBe(30);
+    assert.strictEqual(typeof calculate, "function");
+    assert.strictEqual(calculate(10, 20), 30);
   });
 
   it("严格拒绝不受支持的 .tsx 扩展名", async () => {
     const loader = new NodeModuleLoader();
     const filePath = join(testDir, "component.tsx");
 
-    await expect(loader.load(filePath)).rejects.toThrow("unsupported extension '.tsx'");
+    await assert.rejects(loader.load(filePath), /unsupported extension '\.tsx'/);
   });
 
   it("严格拒绝不受支持的 .cjs 扩展名", async () => {
     const loader = new NodeModuleLoader();
     const filePath = join(testDir, "legacy.cjs");
 
-    await expect(loader.load(filePath)).rejects.toThrow("unsupported extension '.cjs'");
+    await assert.rejects(loader.load(filePath), /unsupported extension '\.cjs'/);
   });
 
   it("支持加载 .mts 源码模块", async () => {
@@ -324,10 +325,10 @@ describe("NodeModuleLoader 单元测试", () => {
     const filePath = join(testDir, "module.mts");
 
     const mod = await loader.load(filePath);
-    expect(mod.magicNumber).toBe(42);
+    assert.strictEqual(mod.magicNumber, 42);
 
     const def = await loader.loadDefault<{ magicNumber: number }>(filePath);
-    expect(def.magicNumber).toBe(42);
+    assert.strictEqual(def.magicNumber, 42);
   });
 
   it("支持显式相对路径解析与加载，并严格拒绝无扩展名解析", async () => {
@@ -335,22 +336,21 @@ describe("NodeModuleLoader 单元测试", () => {
 
     // 显式扩展名解析成功
     const resolved = loader.resolve("./service.ts", join(testDir, "dummy.js"));
-    expect(resolved.endsWith("service.ts")).toBe(true);
+    assert.strictEqual(resolved.endsWith("service.ts"), true);
 
     const mod = await loader.load("./service.ts", join(testDir, "dummy.js"));
-    expect(mod.serviceName).toBe("auth-service");
+    assert.strictEqual(mod.serviceName, "auth-service");
 
     // 无扩展名解析严格拒绝
-    expect(() => loader.resolve("./service", join(testDir, "dummy.js"))).toThrow(
-      "missing file extension"
-    );
+    assert.throws(() => loader.resolve("./service", join(testDir, "dummy.js")), 
+      /missing file extension/);
   });
 
   it("解包辅助函数 unwrapDefaultExport 支持多层嵌套与 action 属性回退", () => {
-    expect(unwrapDefaultExport(null)).toBeNull();
-    expect(unwrapDefaultExport<string>({ default: "val" })).toBe("val");
-    expect(unwrapDefaultExport<string>({ default: { default: "nested" } })).toBe("nested");
-    expect(unwrapDefaultExport<any>({ action: { id: "test-act" } })).toEqual({ id: "test-act" });
+    assert.strictEqual(unwrapDefaultExport(null), null);
+    assert.strictEqual(unwrapDefaultExport<string>({ default: "val" }), "val");
+    assert.strictEqual(unwrapDefaultExport<string>({ default: { default: "nested" } }), "nested");
+    assert.deepStrictEqual(unwrapDefaultExport<any>({ action: { id: "test-act" } }), { id: "test-act" });
   });
 });
 
@@ -391,15 +391,15 @@ describe("NodeHttpServer 单元测试", () => {
       body: "hello web request",
     });
 
-    expect(res.status).toBe(201);
-    expect(res.headers.get("x-response-sign")).toBe("actiondock-ok");
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.headers.get("x-response-sign"), "actiondock-ok");
     const json = await res.json();
-    expect(json).toEqual({ echo: "hello web request" });
+    assert.deepStrictEqual(json, { echo: "hello web request" });
 
-    expect(capturedMethod).toBe("POST");
-    expect(capturedPath).toBe("/api/v1/test");
-    expect(capturedHeader).toBe("header-value-42");
-    expect(capturedBody).toBe("hello web request");
+    assert.strictEqual(capturedMethod, "POST");
+    assert.strictEqual(capturedPath, "/api/v1/test");
+    assert.strictEqual(capturedHeader, "header-value-42");
+    assert.strictEqual(capturedBody, "hello web request");
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
@@ -426,7 +426,7 @@ describe("NodeHttpServer 单元测试", () => {
 
     const res = await fetch(`${testServer.url}/stream`);
     const reader = res.body?.getReader();
-    expect(reader).toBeDefined();
+    assert.notStrictEqual(reader, undefined);
 
     const chunks: string[] = [];
     while (true) {
@@ -436,10 +436,10 @@ describe("NodeHttpServer 单元测试", () => {
     }
 
     const fullText = chunks.join("");
-    expect(fullText).toBe("part-1;part-2;part-3;");
+    assert.strictEqual(fullText, "part-1;part-2;part-3;");
 
     await testServer.close();
-    expect(testServer.isListening).toBe(false);
+    assert.strictEqual(testServer.isListening, false);
   });
 
   it("处理 404 与服务端异常回退", async () => {
@@ -452,11 +452,11 @@ describe("NodeHttpServer 单元测试", () => {
     });
 
     const errRes = await fetch(`${testServer.url}/boom`);
-    expect(errRes.status).toBe(500);
+    assert.strictEqual(errRes.status, 500);
     const errJson = await errRes.json();
-    expect(errJson.ok).toBe(false);
-    expect(errJson.error.code).toBe("SERVER_ERROR");
-    expect(errJson.error.message).toContain("Deliberate failure");
+    assert.strictEqual(errJson.ok, false);
+    assert.strictEqual(errJson.error.code, "SERVER_ERROR");
+    assert.ok((errJson.error.message).includes("Deliberate failure"));
 
     await testServer.close();
   });
@@ -495,11 +495,11 @@ describe("NodeHttpServer 单元测试", () => {
     };
 
     listener(mockReq, mockRes);
-    expect(handled).toBe(false);
-    expect(statusCode).toBe(400);
+    assert.strictEqual(handled, false);
+    assert.strictEqual(statusCode, 400);
     const json = JSON.parse(responseBody);
-    expect(json.ok).toBe(false);
-    expect(json.error.code).toBe("BAD_REQUEST");
+    assert.strictEqual(json.ok, false);
+    assert.strictEqual(json.error.code, "BAD_REQUEST");
   });
 
   it("客户端在服务端响应完成前断开时（!res.writableFinished），createWebRequest 正确触发 abort", async () => {
@@ -547,8 +547,8 @@ describe("NodeHttpServer 单元测试", () => {
       await new Promise((r) => setTimeout(r, 20));
     }
 
-    expect(aborted).toBe(true);
-    expect(signalTriggered).toBe(true);
+    assert.strictEqual(aborted, true);
+    assert.strictEqual(signalTriggered, true);
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
@@ -562,8 +562,8 @@ describe("NodeHttpServer 单元测试", () => {
 
     await server.listen(0, "::1");
     try {
-      expect(server.url).toMatch(/^http:\/\/\[::1\]:\d+$/);
-      expect(() => new URL(server.url)).not.toThrow();
+      assert.ok(/^http:\/\/\[::1\]:\d+$/.test(server.url));
+      assert.doesNotThrow(() => new URL(server.url));
     } finally {
       await server.close();
     }
@@ -582,7 +582,7 @@ describe("NodeHttpServer 单元测试", () => {
     const response = await fetch(`http://127.0.0.1:${port}/`, {
       headers: { connection: "keep-alive" },
     });
-    expect(await response.text()).toBe("ok");
+    assert.strictEqual(await response.text(), "ok");
 
     // 若未强制断连，server.close 会因空闲连接悬挂而不 resolve
     const timeoutSignal = AbortSignal.timeout(3000);
@@ -596,7 +596,7 @@ describe("NodeHttpServer 单元测试", () => {
     });
 
     const winner = await Promise.race([closePromise.then(() => "closed" as const), guard]);
-    expect(winner).toBe("closed");
-    expect(server.isListening).toBe(false);
+    assert.strictEqual(winner, "closed");
+    assert.strictEqual(server.isListening, false);
   });
 });

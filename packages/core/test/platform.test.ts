@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,29 +40,29 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       const fs = new NodeFileSystem({ rootDir: tempDir });
 
       const filePath = join(tempDir, "hello.txt");
-      expect(await fs.exists(filePath)).toBe(false);
+      assert.strictEqual(await fs.exists(filePath), false);
 
       await fs.writeFile(filePath, "Hello ActionDock!");
-      expect(await fs.exists(filePath)).toBe(true);
+      assert.strictEqual(await fs.exists(filePath), true);
 
       const content = await fs.readFile(filePath);
-      expect(content).toBe("Hello ActionDock!");
+      assert.strictEqual(content, "Hello ActionDock!");
 
       const stat = await fs.stat(filePath);
-      expect(stat.isFile()).toBe(true);
-      expect(stat.isDirectory()).toBe(false);
-      expect(stat.size).toBe(17);
+      assert.strictEqual(stat.isFile(), true);
+      assert.strictEqual(stat.isDirectory(), false);
+      assert.strictEqual(stat.size, 17);
 
       const subDir = join(tempDir, "sub-dir");
       await fs.mkdir(subDir);
-      expect(await fs.exists(subDir)).toBe(true);
+      assert.strictEqual(await fs.exists(subDir), true);
 
       const dirStat = await fs.stat(subDir);
-      expect(dirStat.isDirectory()).toBe(true);
+      assert.strictEqual(dirStat.isDirectory(), true);
 
       const entries = await fs.readdir(tempDir);
-      expect(entries).toContain("hello.txt");
-      expect(entries).toContain("sub-dir");
+      assert.ok((entries).includes("hello.txt"));
+      assert.ok((entries).includes("sub-dir"));
     });
 
     it("支持文件与目录拷贝及删除", async () => {
@@ -72,12 +73,12 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       await fs.writeFile(srcFile, "Source Content");
       await fs.copy(srcFile, destFile);
 
-      expect(await fs.exists(destFile)).toBe(true);
-      expect(await fs.readFile(destFile)).toBe("Source Content");
+      assert.strictEqual(await fs.exists(destFile), true);
+      assert.strictEqual(await fs.readFile(destFile), "Source Content");
 
       await fs.rm(srcFile);
-      expect(await fs.exists(srcFile)).toBe(false);
-      expect(await fs.exists(destFile)).toBe(true);
+      assert.strictEqual(await fs.exists(srcFile), false);
+      assert.strictEqual(await fs.exists(destFile), true);
     });
 
     it("当配置 rootDir 沙箱时严格拦截越界路径逃逸与空字节路径", async () => {
@@ -86,23 +87,23 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       await fs.mkdir(sandboxDir);
 
       const outsideFile = join(tempDir, "outside.txt");
-      await expect(fs.writeFile(outsideFile, "hacked")).rejects.toThrow(/escapes boundary/);
-      await expect(fs.readFile(outsideFile)).rejects.toThrow(/escapes boundary/);
+      await assert.rejects(fs.writeFile(outsideFile, "hacked"), /escapes boundary/);
+      await assert.rejects(fs.readFile(outsideFile), /escapes boundary/);
 
-      await expect(fs.readFile("test\0bad.txt")).rejects.toThrow(/null byte/);
+      await assert.rejects(fs.readFile("test\0bad.txt"), /null byte/);
     });
   });
 
   describe("createNodePlatform 平台组装与显式注入测试", () => {
     it("具备标准 RuntimePlatform 属性契约并默认使用 Node 原生驱动", () => {
       const platform = createNodePlatform({ name: "test" });
-      expect(platform.name).toBe("test");
-      expect(platform.clock).toBeDefined();
-      expect(platform.clock.now()).toBeInstanceOf(Date);
-      expect(platform.files).toBeDefined();
-      expect(platform.modules).toBeDefined();
-      expect(platform.process).toBeDefined();
-      expect(platform.storage).toBeDefined();
+      assert.strictEqual(platform.name, "test");
+      assert.notStrictEqual(platform.clock, undefined);
+      assert.ok(platform.clock.now() instanceof Date);
+      assert.notStrictEqual(platform.files, undefined);
+      assert.notStrictEqual(platform.modules, undefined);
+      assert.notStrictEqual(platform.process, undefined);
+      assert.notStrictEqual(platform.storage, undefined);
     });
 
     it("默认具备可用 NodeProcessDriver 进程能力", async () => {
@@ -115,8 +116,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       };
 
       const res = await platform.process.run(runInput);
-      expect(res.exit.code).toBe(0);
-      expect(decodeText(res.chunks)).toContain("platform-ok");
+      assert.strictEqual(res.exit.code, 0);
+      assert.ok((decodeText(res.chunks)).includes("platform-ok"));
     });
 
     it("显式注入 MemoryProcessDriver 时平台提供可用受管进程能力", async () => {
@@ -130,8 +131,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         requestId: "req-memory-driver-start",
         spec: { executable: "echo", args: [], io: { mode: "pipe" } },
       });
-      expect(startRes.process.id).toBeDefined();
-      expect(startRes.process.state).toBe("running");
+      assert.notStrictEqual(startRes.process.id, undefined);
+      assert.strictEqual(startRes.process.state, "running");
     });
 
     it("支持显式注入自定义时钟 clock", () => {
@@ -143,8 +144,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       };
 
       const platform = createNodePlatform({ clock: customClock });
-      expect(platform.clock.now()).toEqual(fakeDate);
-      expect(platform.clock.monotonic()).toBe(12345);
+      assert.deepStrictEqual(platform.clock.now(), fakeDate);
+      assert.strictEqual(platform.clock.monotonic(), 12345);
     });
 
     it("支持显式注入自定义进程执行器 process", async () => {
@@ -166,8 +167,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         timeoutMs: 5000,
         maxOutputBytes: 1024 * 1024,
       });
-      expect(executedCommand).toBe("echo test");
-      expect(decodeText(res.chunks)).toBe("custom output");
+      assert.strictEqual(executedCommand, "echo test");
+      assert.strictEqual(decodeText(res.chunks), "custom output");
     });
 
     it("支持显式注入自定义模块加载器 modules", async () => {
@@ -181,23 +182,23 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
 
       const platform = createNodePlatform({ modules: customLoader });
       const mod = await platform.modules.load<any>("virtual:module");
-      expect(loadedSpecifier).toBe("virtual:module");
-      expect(mod.customModule).toBe(true);
+      assert.strictEqual(loadedSpecifier, "virtual:module");
+      assert.strictEqual(mod.customModule, true);
     });
 
     it("storage 工厂正确创建独立 SQLite 存储实例", async () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
-      expect(storage).toBeDefined();
-      expect(storage.isOpen).toBe(true);
+      assert.notStrictEqual(storage, undefined);
+      assert.strictEqual(storage.isOpen, true);
 
       storage.setConfig("FOO", "BAR");
-      expect(storage.getConfig<string>("FOO")).toBe("BAR");
+      assert.strictEqual(storage.getConfig<string>("FOO"), "BAR");
       await storage.close();
 
       const globalStorage = platform.storage.createGlobalStorage({ inMemory: true });
-      expect(globalStorage).toBeDefined();
-      expect(globalStorage.isOpen).toBe(true);
+      assert.notStrictEqual(globalStorage, undefined);
+      assert.strictEqual(globalStorage.isOpen, true);
       await globalStorage.close();
     });
   });
@@ -243,7 +244,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         storage: testPlatform.storage.createStorage("test-pkg"),
       });
 
-      expect(runner.getStorage()).toBeDefined();
+      assert.notStrictEqual(runner.getStorage(), undefined);
 
       runner.registerAction({
         id: "ping",
@@ -258,11 +259,11 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       });
 
       const res = await runner.execute("ping", {});
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({ pong: true });
+        assert.deepStrictEqual(res.data, { pong: true });
       }
-      expect(processCalled).toBe(true);
+      assert.strictEqual(processCalled, true);
 
       runner.getStorage().close();
     });
@@ -322,14 +323,14 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       });
 
       const result = await service.execute("inspect", {}, createInvocationContext({ package: identity }));
-      expect(result.ok).toBe(true);
+      assert.strictEqual(result.ok, true);
       if (result.ok) {
-        expect(result.data).toEqual({ stdout: "platform-process" });
+        assert.deepStrictEqual(result.data, { stdout: "platform-process" });
       }
 
       const record = await service.get(result.runId);
-      expect(record).toBeDefined();
-      expect(record?.startedAt).toBe(fixedDate.toISOString());
+      assert.notStrictEqual(record, undefined);
+      assert.strictEqual(record?.startedAt, fixedDate.toISOString());
 
       await service.close();
       memoryStorage.close();
@@ -360,13 +361,13 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       });
 
       const res = await service.execute("echo", { text: "hello" }, createInvocationContext({ package: identity }));
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect(res.data).toEqual({ text: "hello" });
+        assert.deepStrictEqual(res.data, { text: "hello" });
       }
 
       const rec = await service.get(res.runId);
-      expect(rec?.startedAt).toBe(new Date("2025-01-01T00:00:00Z").toISOString());
+      assert.strictEqual(rec?.startedAt, new Date("2025-01-01T00:00:00Z").toISOString());
 
       await service.close();
       legacyStorage.close();

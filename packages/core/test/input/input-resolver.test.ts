@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,12 +19,12 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
   describe("输入模式仲裁（Input Mode Arbitration）", () => {
     it("三者均未指定时返回默认空对象 {}", async () => {
       const res = await resolveActionInput({});
-      expect(res).toEqual({});
+      assert.deepStrictEqual(res, {});
     });
 
     it("flatArgs 为空数组 [] 时视为未指定", async () => {
       const res = await resolveActionInput({ flatArgs: [] });
-      expect(res).toEqual({});
+      assert.deepStrictEqual(res, {});
     });
 
     it("多于一种模式同时指定时抛出 INPUT_CONFLICT 且 reason 为 MULTIPLE_INPUT_MODES", async () => {
@@ -33,12 +34,12 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           flatArgs: ["a=1"],
           input: '{"b":2}',
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_CONFLICT);
-        expect(err.details?.reason).toBe("MULTIPLE_INPUT_MODES");
-        expect(err.message).toContain("mutually exclusive");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_CONFLICT);
+        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
+        assert.ok((err.message).includes("mutually exclusive"));
       }
 
       // flatArgs + inputFile
@@ -47,11 +48,11 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           flatArgs: ["a=1"],
           inputFile: "some-file.json",
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_CONFLICT);
-        expect(err.details?.reason).toBe("MULTIPLE_INPUT_MODES");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_CONFLICT);
+        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
       }
 
       // input + inputFile
@@ -60,11 +61,11 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"a":1}',
           inputFile: "some-file.json",
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_CONFLICT);
-        expect(err.details?.reason).toBe("MULTIPLE_INPUT_MODES");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_CONFLICT);
+        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
       }
     });
   });
@@ -73,11 +74,11 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
     it("options.input === '' 为显式 Full JSON 模式，抛出 INVALID_JSON / SYNTAX_ERROR 且不退化为 {}", async () => {
       try {
         await resolveActionInput({ input: "" });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.details?.reason).toBe("SYNTAX_ERROR");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -85,21 +86,21 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       // 纯空白
       try {
         await resolveActionInput({ input: "   \n\t  " });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.details?.reason).toBe("SYNTAX_ERROR");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
       }
 
       // 纯 BOM
       try {
         await resolveActionInput({ input: "\uFEFF" });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.details?.reason).toBe("SYNTAX_ERROR");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -109,11 +110,11 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
 
       try {
         await resolveActionInput({ inputFile: emptyFilePath });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.details?.reason).toBe("SYNTAX_ERROR");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -122,11 +123,11 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
 
       try {
         await resolveActionInput({ inputFile: "-", stdin: emptyStream });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.details?.reason).toBe("SYNTAX_ERROR");
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
       }
     });
   });
@@ -140,14 +141,14 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           inputFile: missingPath,
           policy: { sanitizeInputErrors: true },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_FILE_NOT_FOUND);
-        expect(err.message).toBe("Input file not found");
-        expect(err.details).toEqual({ source: "file" });
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_FILE_NOT_FOUND);
+        assert.strictEqual(err.message, "Input file not found");
+        assert.deepStrictEqual(err.details, { source: "file" });
         // 严禁包含绝对路径
-        expect(JSON.stringify(err)).not.toContain("secret");
+        assert.ok(!(JSON.stringify(err)).includes("secret"));
       }
     });
 
@@ -158,13 +159,13 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"key":"secret"}',
           policy: { sanitizeInputErrors: true },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_CONFLICT);
-        expect(err.details).toEqual({ reason: "MULTIPLE_INPUT_MODES" });
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_CONFLICT);
+        assert.deepStrictEqual(err.details, { reason: "MULTIPLE_INPUT_MODES" });
         // 严禁包含原始入参
-        expect(JSON.stringify(err)).not.toContain("secret_val");
+        assert.ok(!(JSON.stringify(err)).includes("secret_val"));
       }
     });
 
@@ -174,17 +175,17 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"password":"very-secret-password-123", syntax_error',
           policy: { sanitizeInputErrors: true },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INVALID_JSON);
-        expect(err.message).toBe("Invalid JSON syntax");
-        expect(err.details).toEqual({
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INVALID_JSON);
+        assert.strictEqual(err.message, "Invalid JSON syntax");
+        assert.deepStrictEqual(err.details, {
           source: "inline-json",
           reason: "SYNTAX_ERROR",
         });
         // 严禁包含敏感内容
-        expect(JSON.stringify(err)).not.toContain("very-secret-password-123");
+        assert.ok(!(JSON.stringify(err)).includes("very-secret-password-123"));
       }
     });
 
@@ -197,12 +198,12 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
             sanitizeInputErrors: true,
           },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err).toBeInstanceOf(InputError);
-        expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
-        expect(err.message).toBe("Input limit exceeded");
-        expect(err.details).toEqual({
+        assert.ok(err instanceof InputError);
+        assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
+        assert.strictEqual(err.message, "Input limit exceeded");
+        assert.deepStrictEqual(err.details, {
           source: "inline-json",
           reason: "MAX_INPUT_BYTES",
         });

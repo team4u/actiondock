@@ -26,9 +26,5 @@ try {
   // Ignore if already registered
 }
 
-// Load test-compat to initialize environment
-const compatUrl = pathToFileURL(join(rootDir, "scripts", "test-compat.ts")).href;
-await import(compatUrl);
-
 
 

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import { executeAction } from "../src/commands/run";
 import { main, runStandaloneCli } from "../src/index";
@@ -36,7 +37,7 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
     });
     sigintController.abort(new Error("Interrupted by SIGINT"));
     const sigintCode = await sigintPromise;
-    expect(sigintCode).toBe(ExitCode.SIGINT);
+    assert.strictEqual(sigintCode, ExitCode.SIGINT);
 
     // 2. 外部取消 -> 1 (FAILURE)
     const extController = new AbortController();
@@ -46,7 +47,7 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
     });
     extController.abort(new Error("External cancel"));
     const extCode = await extPromise;
-    expect(extCode).toBe(ExitCode.FAILURE);
+    assert.strictEqual(extCode, ExitCode.FAILURE);
   });
 
   it("executeAction: 纯净性保证，严禁写入 process.exitCode，区分外部 abort 与 SIGINT 取消", async () => {
@@ -69,10 +70,10 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
     await extPromise;
 
     // 校验 process.exitCode 未被写入
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
     // context.exitCode 记录了失败状态 1
-    expect(context.exitCode).toBe(1);
+    assert.strictEqual(context.exitCode, 1);
 
     // 2. SIGINT 取消：抛出 SigintError
     const sigintController = new AbortController();
@@ -88,9 +89,9 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
     const sigintPromise = executeAction("slow", { json: true }, sigintContext, undefined, sigintContext.control);
     sigintController.abort(new Error("Interrupted by SIGINT"));
 
-    await expect(sigintPromise).rejects.toThrow("Interrupted by SIGINT");
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    await assert.rejects(sigintPromise, /Interrupted by SIGINT/);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
   });
 
   it("main: 纯净可复用 API，严禁写入 process.exitCode，区分外部 abort 与 SIGINT", async () => {
@@ -104,9 +105,9 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
       signal: extController.signal,
       cancellationSource: "external",
     });
-    expect(extCode).toBe(ExitCode.FAILURE);
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(extCode, ExitCode.FAILURE);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
 
     // 2. SIGINT 取消 -> 返回 130
     const sigintController = new AbortController();
@@ -115,9 +116,9 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
       signal: sigintController.signal,
       cancellationSource: "sigint",
     });
-    expect(sigintCode).toBe(ExitCode.SIGINT);
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(sigintCode, ExitCode.SIGINT);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
   });
 
   it("并发可复用 API 调用互不干扰且无 process.exitCode 竞态", async () => {
@@ -137,16 +138,16 @@ describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", (
       cancellationSource: "external",
     });
 
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
 
     controllerA.abort(new Error("Cancelled A"));
 
     const [codeA, codeB] = await Promise.all([callA, callB]);
 
-    expect(codeA).toBe(ExitCode.FAILURE);
-    expect(codeB).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(codeA, ExitCode.FAILURE);
+    assert.strictEqual(codeB, ExitCode.SUCCESS);
 
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
   });
 });

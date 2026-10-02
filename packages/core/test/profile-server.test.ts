@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test, it } from "bun:test";
+import { afterAll, beforeAll, describe, test, it } from "node:test";
+import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -165,7 +166,7 @@ Follow these steps to greet a user.
 
   test("Profile Manager > adds, lists, uses, and removes profiles", () => {
     const initial = loadProfiles(tempDir);
-    expect(initial.currentProfile).toBe("local");
+    assert.strictEqual(initial.currentProfile, "local");
 
     // Add profile with deprecated direct token
     addProfile(
@@ -179,22 +180,22 @@ Follow these steps to greet a user.
     );
 
     const retrieved = getProfile("cloud-node-1", tempDir);
-    expect(retrieved).toBeDefined();
-    expect(retrieved?.serverUrl).toBe("http://10.0.0.1:5177");
-    expect(retrieved?.token).toBe("tok-abc");
+    assert.notStrictEqual(retrieved, undefined);
+    assert.strictEqual(retrieved?.serverUrl, "http://10.0.0.1:5177");
+    assert.strictEqual(retrieved?.token, "tok-abc");
 
     const list = listProfiles(tempDir);
-    expect(list.some((p) => p.name === "cloud-node-1")).toBe(true);
+    assert.strictEqual(list.some((p) => p.name === "cloud-node-1"), true);
 
     // Use profile
     useProfile("cloud-node-1", tempDir);
-    expect(loadProfiles(tempDir).currentProfile).toBe("cloud-node-1");
+    assert.strictEqual(loadProfiles(tempDir).currentProfile, "cloud-node-1");
 
     // Remove profile
     const removed = removeProfile("cloud-node-1", tempDir);
-    expect(removed).toBe(true);
-    expect(loadProfiles(tempDir).currentProfile).toBe("local");
-    expect(getProfile("cloud-node-1", tempDir)).toBeUndefined();
+    assert.strictEqual(removed, true);
+    assert.strictEqual(loadProfiles(tempDir).currentProfile, "local");
+    assert.strictEqual(getProfile("cloud-node-1", tempDir), undefined);
   });
 
   test("Profile Manager > multi-tier token resolution and tokenEnv support", () => {
@@ -214,8 +215,8 @@ Follow these steps to greet a user.
         tempDir
       );
       const res1 = resolveProfileToken("prod-explicit", getProfile("prod-explicit", tempDir));
-      expect(res1.token).toBe("secret-from-token-env");
-      expect(res1.source).toBe("tokenEnv");
+      assert.strictEqual(res1.token, "secret-from-token-env");
+      assert.strictEqual(res1.source, "tokenEnv");
 
       // 2. Derived profile environment variable
       addProfile(
@@ -226,8 +227,8 @@ Follow these steps to greet a user.
         tempDir
       );
       const res2 = resolveProfileToken("prod-cluster", getProfile("prod-cluster", tempDir));
-      expect(res2.token).toBe("secret-from-derived-env");
-      expect(res2.source).toBe("profileEnv");
+      assert.strictEqual(res2.token, "secret-from-derived-env");
+      assert.strictEqual(res2.source, "profileEnv");
 
       // 3. Stored token fallback
       addProfile(
@@ -239,8 +240,8 @@ Follow these steps to greet a user.
         tempDir
       );
       const res3 = resolveProfileToken("stored-profile", getProfile("stored-profile", tempDir));
-      expect(res3.token).toBe("stored-direct-secret");
-      expect(res3.source).toBe("profile");
+      assert.strictEqual(res3.token, "stored-direct-secret");
+      assert.strictEqual(res3.source, "profile");
 
       // 4. Global fallback
       addProfile(
@@ -251,8 +252,8 @@ Follow these steps to greet a user.
         tempDir
       );
       const res4 = resolveProfileToken("fallback-profile", getProfile("fallback-profile", tempDir));
-      expect(res4.token).toBe("global-fallback-token");
-      expect(res4.source).toBe("globalEnv");
+      assert.strictEqual(res4.token, "global-fallback-token");
+      assert.strictEqual(res4.source, "globalEnv");
 
       // 5. CLI token overrides everything
       const res5 = resolveProfileToken(
@@ -260,8 +261,8 @@ Follow these steps to greet a user.
         getProfile("prod-explicit", tempDir),
         "cli-override-token"
       );
-      expect(res5.token).toBe("cli-override-token");
-      expect(res5.source).toBe("cli");
+      assert.strictEqual(res5.token, "cli-override-token");
+      assert.strictEqual(res5.source, "cli");
     } finally {
       process.env = savedEnv;
     }
@@ -273,17 +274,17 @@ Follow these steps to greet a user.
       const stats = statSync(profilePath);
       // In POSIX mode check readable/writable by user only (0o600)
       const mode = stats.mode & 0o777;
-      expect([0o600, 0o666, 0o644]).toContain(mode); // Check mode is properly applied
+      assert.ok(([0o600, 0o666, 0o644]).includes(mode)); // Check mode is properly applied
     }
   });
 
   test("Profile Manager > resolves target priority correctly", () => {
     // 1. Explicit --server flag has highest priority
     const t1 = resolveTarget({ server: "http://direct-server:5177", token: "direct-tok" }, tempDir);
-    expect(t1.type).toBe("remote");
-    expect(t1.serverUrl).toBe("http://direct-server:5177");
-    expect(t1.token).toBe("direct-tok");
-    expect(t1.tokenSource).toBe("cli");
+    assert.strictEqual(t1.type, "remote");
+    assert.strictEqual(t1.serverUrl, "http://direct-server:5177");
+    assert.strictEqual(t1.token, "direct-tok");
+    assert.strictEqual(t1.tokenSource, "cli");
 
     // 2. Explicit --profile flag
     addProfile(
@@ -292,38 +293,38 @@ Follow these steps to greet a user.
       tempDir
     );
     const t2 = resolveTarget({ profile: "aliyun" }, tempDir);
-    expect(t2.type).toBe("remote");
-    expect(t2.profileName).toBe("aliyun");
-    expect(t2.serverUrl).toBe("http://aliyun.cloud:5177");
-    expect(t2.token).toBe("ali-tok");
-    expect(t2.tokenSource).toBe("profile");
+    assert.strictEqual(t2.type, "remote");
+    assert.strictEqual(t2.profileName, "aliyun");
+    assert.strictEqual(t2.serverUrl, "http://aliyun.cloud:5177");
+    assert.strictEqual(t2.token, "ali-tok");
+    assert.strictEqual(t2.tokenSource, "profile");
 
     // 3. Current profile
     useProfile("aliyun", tempDir);
     const t3 = resolveTarget({}, tempDir);
-    expect(t3.type).toBe("remote");
-    expect(t3.profileName).toBe("aliyun");
+    assert.strictEqual(t3.type, "remote");
+    assert.strictEqual(t3.profileName, "aliyun");
 
     // 4. Fallback to local
     useProfile("local", tempDir);
     const t4 = resolveTarget({}, tempDir);
-    expect(t4.type).toBe("local");
+    assert.strictEqual(t4.type, "local");
   });
 
   test("Security > Loopback host detection and non-loopback auth requirement", async () => {
-    expect(isLoopbackHost("127.0.0.1")).toBe(true);
-    expect(isLoopbackHost("localhost")).toBe(true);
-    expect(isLoopbackHost("::1")).toBe(true);
-    expect(isLoopbackHost("0.0.0.0")).toBe(false);
-    expect(isLoopbackHost("192.168.1.100")).toBe(false);
+    assert.strictEqual(isLoopbackHost("127.0.0.1"), true);
+    assert.strictEqual(isLoopbackHost("localhost"), true);
+    assert.strictEqual(isLoopbackHost("::1"), true);
+    assert.strictEqual(isLoopbackHost("0.0.0.0"), false);
+    assert.strictEqual(isLoopbackHost("192.168.1.100"), false);
 
     // Binding to 0.0.0.0 without token and without allowInsecureNoAuth should throw
-    await expect(
+    await assert.rejects(
       startActionDockServer({
         port: 0,
         host: "0.0.0.0",
       })
-    ).rejects.toThrow("Authentication token is required when binding to a non-loopback address");
+    , /Authentication token is required when binding to a non\-loopback address/);
 
     // Binding to 0.0.0.0 with allowInsecureNoAuth succeeds
     const insecureServer = await startActionDockServer({
@@ -331,7 +332,7 @@ Follow these steps to greet a user.
       host: "0.0.0.0",
       allowInsecureNoAuth: true,
     });
-    expect(insecureServer.port).toBeGreaterThan(0);
+    assert.ok((insecureServer.port) > 0);
     await insecureServer.stop();
 
     // Binding to 0.0.0.0 with token succeeds
@@ -340,62 +341,62 @@ Follow these steps to greet a user.
       host: "0.0.0.0",
       token: "secret-token-for-public",
     });
-    expect(secureServer.port).toBeGreaterThan(0);
+    assert.ok((secureServer.port) > 0);
     await secureServer.stop();
   }, 30000);
 
   test("Security > constant-time string comparison and token verification", () => {
-    expect(safeEqual("abc", "abc")).toBe(true);
-    expect(safeEqual("abc", "def")).toBe(false);
-    expect(safeEqual("abc", "abcd")).toBe(false);
+    assert.strictEqual(safeEqual("abc", "abc"), true);
+    assert.strictEqual(safeEqual("abc", "def"), false);
+    assert.strictEqual(safeEqual("abc", "abcd"), false);
 
     const reqWithBearer = new Request("http://127.0.0.1:5177/api/v2/health", {
       headers: { authorization: "Bearer secret-token" },
     });
-    expect(verifyBearerToken(reqWithBearer, "secret-token")).toBe(true);
-    expect(verifyBearerToken(reqWithBearer, "wrong-token")).toBe(false);
+    assert.strictEqual(verifyBearerToken(reqWithBearer, "secret-token"), true);
+    assert.strictEqual(verifyBearerToken(reqWithBearer, "wrong-token"), false);
 
     // URL Query token support (disabled by default, enabled when allowQueryToken is true)
     const reqWithQuery = new Request("http://127.0.0.1:5177/api/v2/health?token=secret-token");
-    expect(verifyBearerToken(reqWithQuery, "secret-token")).toBe(false);
-    expect(verifyBearerToken(reqWithQuery, "secret-token", { allowQueryToken: true })).toBe(true);
-    expect(verifyBearerToken(reqWithQuery, "wrong-token", { allowQueryToken: true })).toBe(false);
+    assert.strictEqual(verifyBearerToken(reqWithQuery, "secret-token"), false);
+    assert.strictEqual(verifyBearerToken(reqWithQuery, "secret-token", { allowQueryToken: true }), true);
+    assert.strictEqual(verifyBearerToken(reqWithQuery, "wrong-token", { allowQueryToken: true }), false);
   });
 
   test("Remote Server & Client > health check with auth token (Bearer & Query)", async () => {
     // Health without token should fail 401
     const healthNoAuth = await checkRemoteHealth(serverUrl, undefined);
-    expect(healthNoAuth.ok).toBe(false);
+    assert.strictEqual(healthNoAuth.ok, false);
 
     // Health with valid Bearer token should succeed
     const healthAuth = await checkRemoteHealth(serverUrl, SECRET_TOKEN);
-    expect(healthAuth.ok).toBe(true);
-    expect(healthAuth.status).toBe("healthy");
-    expect(healthAuth.version).toBe(ACTIONDOCK_VERSION);
-    expect(healthAuth.latencyMs).toBeGreaterThanOrEqual(0);
+    assert.strictEqual(healthAuth.ok, true);
+    assert.strictEqual(healthAuth.status, "healthy");
+    assert.strictEqual(healthAuth.version, ACTIONDOCK_VERSION);
+    assert.ok((healthAuth.latencyMs) >= 0);
 
     // Direct HTTP GET with query token is rejected by default (401)
     const resQuery = await fetch(`${serverUrl}/api/v2/health?token=${SECRET_TOKEN}`);
-    expect(resQuery.status).toBe(401);
+    assert.strictEqual(resQuery.status, 401);
 
     // Direct HTTP GET with Bearer token succeeds
     const resBearer = await fetch(`${serverUrl}/api/v2/health`, {
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
-    expect(resBearer.status).toBe(200);
+    assert.strictEqual(resBearer.status, 200);
     const queryJson = await resBearer.json();
-    expect(queryJson.status).toBe("healthy");
+    assert.strictEqual(queryJson.status, "healthy");
     // Default: projectRoot should be hidden
-    expect(queryJson.projectRoot).toBeUndefined();
+    assert.strictEqual(queryJson.projectRoot, undefined);
   });
 
   test("Remote Server & Client > checkRemoteHealth handles insecure HTTP rejection safely and cleans up timer", async () => {
     // 1. When non-loopback insecure HTTP is provided with token, assertSecureTransport throws
     // checkRemoteHealth catches it inside try and returns ok: false safely
     const insecureResult = await checkRemoteHealth("http://remote.example.com:5177", "some-token");
-    expect(insecureResult.ok).toBe(false);
-    expect(insecureResult.error).toContain("Insecure HTTP connection with authentication token");
-    expect(insecureResult.latencyMs).toBeGreaterThanOrEqual(0);
+    assert.strictEqual(insecureResult.ok, false);
+    assert.ok((insecureResult.error).includes("Insecure HTTP connection with authentication token"));
+    assert.ok((insecureResult.latencyMs) >= 0);
 
     // 2. Allow insecure HTTP override explicitly
     const allowedInsecure = await checkRemoteHealth(
@@ -404,8 +405,8 @@ Follow these steps to greet a user.
       200,
       { allowInsecureHttp: true }
     );
-    expect(allowedInsecure.ok).toBe(false);
-    expect(allowedInsecure.error).not.toContain("Insecure HTTP connection");
+    assert.strictEqual(allowedInsecure.ok, false);
+    assert.ok(!(allowedInsecure.error).includes("Insecure HTTP connection"));
 
     // 3. Verify timer cleanup via finally block on both success and failure
     let clearTimeoutCount = 0;
@@ -417,13 +418,13 @@ Follow these steps to greet a user.
       }) as any;
 
       const healthAuth = await checkRemoteHealth(serverUrl, SECRET_TOKEN, 1000);
-      expect(healthAuth.ok).toBe(true);
-      expect(clearTimeoutCount).toBeGreaterThanOrEqual(1);
+      assert.strictEqual(healthAuth.ok, true);
+      assert.ok((clearTimeoutCount) >= 1);
 
       const beforeFailCount = clearTimeoutCount;
       const failHealth = await checkRemoteHealth("http://127.0.0.1:59999", undefined, 200);
-      expect(failHealth.ok).toBe(false);
-      expect(clearTimeoutCount).toBeGreaterThan(beforeFailCount);
+      assert.strictEqual(failHealth.ok, false);
+      assert.ok((clearTimeoutCount) > beforeFailCount);
     } finally {
       globalThis.clearTimeout = originalClearTimeout;
     }
@@ -435,8 +436,8 @@ Follow these steps to greet a user.
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
     const jsonDefault = await resDefault.json();
-    expect(jsonDefault.ok).toBe(true);
-    expect(jsonDefault.projectRoot).toBeUndefined();
+    assert.strictEqual(jsonDefault.ok, true);
+    assert.strictEqual(jsonDefault.projectRoot, undefined);
 
     // Server with exposeDebugInfo: true reveals projectRoot
     const debugServer = await startActionDockServer({
@@ -452,8 +453,8 @@ Follow these steps to greet a user.
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
     const jsonDebug = await resDebug.json();
-    expect(jsonDebug.ok).toBe(true);
-    expect(jsonDebug.projectRoot).toBe(projectDir);
+    assert.strictEqual(jsonDebug.ok, true);
+    assert.strictEqual(jsonDebug.projectRoot, projectDir);
 
     await debugServer.stop();
   });
@@ -466,7 +467,7 @@ Follow these steps to greet a user.
         origin: "http://attacker.example.com",
       },
     });
-    expect(resDefault.headers.get("access-control-allow-origin")).toBeNull();
+    assert.strictEqual(resDefault.headers.get("access-control-allow-origin"), null);
 
     // Server with CORS whitelist
     const corsServer = await startActionDockServer({
@@ -484,7 +485,7 @@ Follow these steps to greet a user.
         origin: "http://allowed.local:3000",
       },
     });
-    expect(resAllowed.headers.get("access-control-allow-origin")).toBe("http://allowed.local:3000");
+    assert.strictEqual(resAllowed.headers.get("access-control-allow-origin"), "http://allowed.local:3000");
 
     // 2. Disallowed origin does not get CORS header
     const resDisallowed = await fetch(`${corsUrl}/api/v2/health`, {
@@ -493,15 +494,15 @@ Follow these steps to greet a user.
         origin: "http://disallowed.com",
       },
     });
-    expect(resDisallowed.headers.get("access-control-allow-origin")).toBeNull();
+    assert.strictEqual(resDisallowed.headers.get("access-control-allow-origin"), null);
 
     // 3. OPTIONS preflight
     const resOptions = await fetch(`${corsUrl}/api/v2/actions/sample.greet/run`, {
       method: "OPTIONS",
       headers: { origin: "http://allowed.local:3000" },
     });
-    expect(resOptions.status).toBe(204);
-    expect(resOptions.headers.get("access-control-allow-origin")).toBe("http://allowed.local:3000");
+    assert.strictEqual(resOptions.status, 204);
+    assert.strictEqual(resOptions.headers.get("access-control-allow-origin"), "http://allowed.local:3000");
 
     await corsServer.stop();
   });
@@ -531,40 +532,40 @@ Follow these steps to greet a user.
       body: largePayload,
     });
 
-    expect(res.status).toBe(413);
+    assert.strictEqual(res.status, 413);
     const json = await res.json();
-    expect(json.ok).toBe(false);
-    expect(json.error.code).toBe("REQUEST_TOO_LARGE");
+    assert.strictEqual(json.ok, false);
+    assert.strictEqual(json.error.code, "REQUEST_TOO_LARGE");
 
     await smallBodyServer.stop();
   });
 
   test("Remote Server & Client > queries remote info and actions", async () => {
     const info = await fetchRemoteInfo(serverUrl, SECRET_TOKEN);
-    expect(info.ok).toBe(true);
-    expect(info.id).toBe("test.profile-app");
+    assert.strictEqual(info.ok, true);
+    assert.strictEqual(info.id, "test.profile-app");
 
     const actions = await fetchRemoteActions(serverUrl, SECRET_TOKEN);
-    expect(Array.isArray(actions)).toBe(true);
-    expect(actions.length).toBeGreaterThan(0);
-    expect(actions.some((a: any) => a.id === "sample.greet")).toBe(true);
+    assert.strictEqual(Array.isArray(actions), true);
+    assert.ok((actions.length) > 0);
+    assert.strictEqual(actions.some((a: any) => a.id === "sample.greet"), true);
 
     // Filter remote actions by intent regex
     const matched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "greet");
-    expect(matched.length).toBe(1);
-    expect(matched[0].id).toBe("sample.greet");
+    assert.strictEqual(matched.length, 1);
+    assert.strictEqual(matched[0].id, "sample.greet");
 
 
     const unmatched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "nonexistent");
-    expect(unmatched.length).toBe(0);
+    assert.strictEqual(unmatched.length, 0);
 
     const actionDetail = await fetchRemoteActionShow(
       serverUrl,
       "sample.greet",
       SECRET_TOKEN
     );
-    expect(actionDetail.id).toBe("sample.greet");
-    expect(actionDetail.inputSchema).toBeDefined();
+    assert.strictEqual(actionDetail.id, "sample.greet");
+    assert.notStrictEqual(actionDetail.inputSchema, undefined);
   });
 
   test("Remote Server & Client > executes remote action via HTTP POST and returns JSON Envelope", async () => {
@@ -576,10 +577,10 @@ Follow these steps to greet a user.
       SECRET_TOKEN
     );
 
-    expect(result.ok).toBe(true);
+    assert.strictEqual(result.ok, true);
     if (result.ok) {
-      expect(result.runId).toBeDefined();
-      expect((result.data as any).message).toBe("Welcome from Cloud, CloudUser!");
+      assert.notStrictEqual(result.runId, undefined);
+      assert.strictEqual((result.data as any).message, "Welcome from Cloud, CloudUser!");
     }
   });
 
@@ -592,9 +593,9 @@ Follow these steps to greet a user.
       SECRET_TOKEN
     );
 
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(result.error.code, "INPUT_VALIDATION_FAILED");
     }
   });
 
@@ -609,22 +610,22 @@ Follow these steps to greet a user.
       }
     );
 
-    expect(res.ok).toBe(true);
-    expect(res.runId).toBeDefined();
-    expect(res.status).toBe("running");
+    assert.strictEqual(res.ok, true);
+    assert.notStrictEqual(res.runId, undefined);
+    assert.strictEqual(res.status, "running");
 
     // Query run status immediately while running
     const runWhileRunning = await fetchRemoteRun(serverUrl, res.runId, SECRET_TOKEN);
-    expect(runWhileRunning.id).toBe(res.runId);
-    expect(["running", "success"]).toContain(runWhileRunning.status);
+    assert.strictEqual(runWhileRunning.id, res.runId);
+    assert.ok((["running", "success"]).includes(runWhileRunning.status));
 
     // Wait for completion
     await new Promise((r) => setTimeout(r, 250));
 
     const runAfterComplete = await fetchRemoteRun(serverUrl, res.runId, SECRET_TOKEN);
-    expect(runAfterComplete.id).toBe(res.runId);
-    expect(runAfterComplete.status).toBe("success");
-    expect(runAfterComplete.output).toEqual({ completed: true, delay: 150 });
+    assert.strictEqual(runAfterComplete.id, res.runId);
+    assert.strictEqual(runAfterComplete.status, "success");
+    assert.deepStrictEqual(runAfterComplete.output, { completed: true, delay: 150 });
   });
 
   test("Execution Lifecycle > cancels in-flight async run via POST /runs/:id/cancel", async () => {
@@ -639,35 +640,35 @@ Follow these steps to greet a user.
       }
     );
 
-    expect(startRes.ok).toBe(true);
+    assert.strictEqual(startRes.ok, true);
     const runId = startRes.runId;
 
     // Cancel while in-flight
     const cancelRes = await cancelRemoteRun(serverUrl, runId, SECRET_TOKEN, "User stopped job");
-    expect(cancelRes.ok).toBe(true);
-    expect(cancelRes.runId).toBe(runId);
-    expect(cancelRes.status).toBe("cancelled");
+    assert.strictEqual(cancelRes.ok, true);
+    assert.strictEqual(cancelRes.runId, runId);
+    assert.strictEqual(cancelRes.status, "cancelled");
 
     // Fetch run to verify cancelled status in storage
     const run = await fetchRemoteRun(serverUrl, runId, SECRET_TOKEN);
-    expect(run.id).toBe(runId);
-    expect(run.status).toBe("cancelled");
-    expect(run.error?.code).toBe("ACTION_CANCELLED");
+    assert.strictEqual(run.id, runId);
+    assert.strictEqual(run.status, "cancelled");
+    assert.strictEqual(run.error?.code, "ACTION_CANCELLED");
 
     // Cancelling an already finished/cancelled run should return 409
-    await expect(
+    await assert.rejects(
       cancelRemoteRun(serverUrl, runId, SECRET_TOKEN)
-    ).rejects.toThrow("has already finished");
+    , /has already finished/);
   });
 
   test("Execution Lifecycle > returns 404 when cancelling or fetching non-existent run", async () => {
-    await expect(
+    await assert.rejects(
       fetchRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
-    ).rejects.toThrow("not found");
+    , /not found/);
 
-    await expect(
+    await assert.rejects(
       cancelRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
-    ).rejects.toThrow("not found");
+    , /not found/);
   });
 
   test("Execution Lifecycle > enforces server-side timeout", async () => {
@@ -681,9 +682,9 @@ Follow these steps to greet a user.
       }
     );
 
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_TIMEOUT");
+      assert.strictEqual(result.error.code, "ACTION_TIMEOUT");
     }
   });
 
@@ -701,9 +702,9 @@ Follow these steps to greet a user.
       }
     );
 
-    expect(result.ok).toBe(false);
+    assert.strictEqual(result.ok, false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ACTION_CANCELLED");
+      assert.strictEqual(result.error.code, "ACTION_CANCELLED");
     }
   });
 
@@ -711,48 +712,48 @@ Follow these steps to greet a user.
     test("GET /api/v2/info > supports tree, package, and intent query parameters", async () => {
       // 1. Info with intent filter
       const infoIntent = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { intent: "greet" });
-      expect(infoIntent).toBeDefined();
+      assert.notStrictEqual(infoIntent, undefined);
 
       // 2. Info with package drill-down
       const infoPkg = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { package: "test.profile-app" });
-      expect(infoPkg.type).toBe("package_detail");
-      expect(infoPkg.id).toBe("test.profile-app");
-      expect(infoPkg.actionsCount).toBeGreaterThanOrEqual(2);
+      assert.strictEqual(infoPkg.type, "package_detail");
+      assert.strictEqual(infoPkg.id, "test.profile-app");
+      assert.ok((infoPkg.actionsCount) >= 2);
 
       // 3. Info with tree=true
       const infoTree = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { tree: true });
-      expect(infoTree.type).toBe("tree");
-      expect(infoTree.packages).toBeDefined();
+      assert.strictEqual(infoTree.type, "tree");
+      assert.notStrictEqual(infoTree.packages, undefined);
     });
 
     test("GET /api/v2/playbooks > lists playbooks and shows SOP content", async () => {
       // List playbooks
       const pbs = await fetchRemotePlaybooks(serverUrl, SECRET_TOKEN);
-      expect(Array.isArray(pbs)).toBe(true);
-      expect(pbs.length).toBeGreaterThanOrEqual(1);
+      assert.strictEqual(Array.isArray(pbs), true);
+      assert.ok((pbs.length) >= 1);
       const sop = pbs.find((p: any) => p.id === "sample.sample-sop");
-      expect(sop).toBeDefined();
-      expect(sop?.description).toContain("SOP for greeting");
+      assert.notStrictEqual(sop, undefined);
+      assert.ok((sop?.description).includes("SOP for greeting"));
 
       // Show playbook
       const pbDetail = await fetchRemotePlaybookShow(serverUrl, "sample.sample-sop", SECRET_TOKEN);
-      expect(pbDetail.id).toBe("sample.sample-sop");
-      expect(pbDetail.content).toContain("# Greeting SOP");
-      expect(pbDetail.actions).toContain("sample.greet");
+      assert.strictEqual(pbDetail.id, "sample.sample-sop");
+      assert.ok((pbDetail.content).includes("# Greeting SOP"));
+      assert.ok((pbDetail.actions).includes("sample.greet"));
     });
 
     test("GET & POST /api/v2/runs > queries execution runs and clears records", async () => {
       // 1. Fetch runs list
       const runsList = await fetchRemoteRuns(serverUrl, SECRET_TOKEN, { limit: 10 });
-      expect(Array.isArray(runsList.items)).toBe(true);
-      expect(runsList.items.length).toBeGreaterThan(0);
+      assert.strictEqual(Array.isArray(runsList.items), true);
+      assert.ok((runsList.items.length) > 0);
 
       // 2. Clear runs
       const clearRes = await clearRemoteRuns(serverUrl, SECRET_TOKEN, {
         actionId: "sample.long-task",
       });
-      expect(clearRes.ok).toBe(true);
-      expect(typeof clearRes.clearedCount).toBe("number");
+      assert.strictEqual(clearRes.ok, true);
+      assert.strictEqual(typeof clearRes.clearedCount, "number");
     });
 
     test("State Endpoints > supports list, set, get, delete, and clear operations", async () => {
@@ -764,58 +765,58 @@ Follow these steps to greet a user.
         SECRET_TOKEN,
         { namespace: "session", ttl: 3600 }
       );
-      expect(setRes.ok).toBe(true);
+      assert.strictEqual(setRes.ok, true);
 
       // 2. Get state key
       const getRes = await getRemoteStateKey(serverUrl, "test_key", SECRET_TOKEN, {
         namespace: "session",
       });
-      expect(getRes.value).toEqual({ hello: "world", count: 42 });
+      assert.deepStrictEqual(getRes.value, { hello: "world", count: 42 });
 
       // 3. List state keys
       const listRes = await fetchRemoteStateList(serverUrl, SECRET_TOKEN, {
         namespace: "session",
       });
-      expect(listRes.keys).toContain("test_key");
+      assert.ok((listRes.keys).includes("test_key"));
 
       // 4. Delete state key
       const delRes = await deleteRemoteStateKey(serverUrl, "test_key", SECRET_TOKEN, {
         namespace: "session",
       });
-      expect(delRes.deleted).toBe(true);
+      assert.strictEqual(delRes.deleted, true);
 
       // 5. Clear state
       await setRemoteStateKey(serverUrl, "temp1", "val1", SECRET_TOKEN);
       await setRemoteStateKey(serverUrl, "temp2", "val2", SECRET_TOKEN);
       const clearStateRes = await clearRemoteState(serverUrl, SECRET_TOKEN, { all: true });
-      expect(clearStateRes.ok).toBe(true);
-      expect(clearStateRes.clearedCount).toBeGreaterThanOrEqual(2);
+      assert.strictEqual(clearStateRes.ok, true);
+      assert.ok((clearStateRes.clearedCount) >= 2);
     });
 
     test("State Endpoints > correctly roundtrips escaped colon keys and rejects ambiguous keys", async () => {
       // 1. Set key with escaped colon in namespace: "a\:b:c" -> namespace="a:b", key="c"
       const setRes1 = await setRemoteStateKey(serverUrl, "a\\:b:c", "val1", SECRET_TOKEN);
-      expect(setRes1.ok).toBe(true);
-      expect(setRes1.namespace).toBe("a:b");
-      expect(setRes1.key).toBe("c");
+      assert.strictEqual(setRes1.ok, true);
+      assert.strictEqual(setRes1.namespace, "a:b");
+      assert.strictEqual(setRes1.key, "c");
 
       // Get via escaped composite key
       const getRes1 = await getRemoteStateKey(serverUrl, "a\\:b:c", SECRET_TOKEN);
-      expect(getRes1.value).toBe("val1");
-      expect(getRes1.namespace).toBe("a:b");
-      expect(getRes1.key).toBe("c");
+      assert.strictEqual(getRes1.value, "val1");
+      assert.strictEqual(getRes1.namespace, "a:b");
+      assert.strictEqual(getRes1.key, "c");
 
       // 2. Set key with escaped colon in key: "a:b\:c" -> namespace="a", key="b:c"
       const setRes2 = await setRemoteStateKey(serverUrl, "a:b\\:c", "val2", SECRET_TOKEN);
-      expect(setRes2.ok).toBe(true);
-      expect(setRes2.namespace).toBe("a");
-      expect(setRes2.key).toBe("b:c");
+      assert.strictEqual(setRes2.ok, true);
+      assert.strictEqual(setRes2.namespace, "a");
+      assert.strictEqual(setRes2.key, "b:c");
 
       // Get via escaped composite key
       const getRes2 = await getRemoteStateKey(serverUrl, "a:b\\:c", SECRET_TOKEN);
-      expect(getRes2.value).toBe("val2");
-      expect(getRes2.namespace).toBe("a");
-      expect(getRes2.key).toBe("b:c");
+      assert.strictEqual(getRes2.value, "val2");
+      assert.strictEqual(getRes2.namespace, "a");
+      assert.strictEqual(getRes2.key, "b:c");
 
       // 3. Ambiguous key without escaping returns 400
       const ambiguousRes = await fetch(`${serverUrl}/api/v2/state/a:b:c`, {
@@ -826,10 +827,10 @@ Follow these steps to greet a user.
         },
         body: JSON.stringify({ value: "bad" }),
       });
-      expect(ambiguousRes.status).toBe(400);
+      assert.strictEqual(ambiguousRes.status, 400);
       const ambiguousData = await ambiguousRes.json();
-      expect(ambiguousData.ok).toBe(false);
-      expect(ambiguousData.error.code).toBe("INVALID_ARGUMENT");
+      assert.strictEqual(ambiguousData.ok, false);
+      assert.strictEqual(ambiguousData.error.code, "INVALID_ARGUMENT");
     });
 
     test("Config Endpoints > supports list, set, delete, and env verification", async () => {
@@ -840,7 +841,7 @@ Follow these steps to greet a user.
         "https://api.example.com",
         SECRET_TOKEN
       );
-      expect(setConf.ok).toBe(true);
+      assert.strictEqual(setConf.ok, true);
 
       const setSecretToken = await setRemoteConfig(
         serverUrl,
@@ -848,7 +849,7 @@ Follow these steps to greet a user.
         "super_secret_value",
         SECRET_TOKEN
       );
-      expect(setSecretToken.ok).toBe(true);
+      assert.strictEqual(setSecretToken.ok, true);
 
       const setSecretPass = await setRemoteConfig(
         serverUrl,
@@ -856,33 +857,33 @@ Follow these steps to greet a user.
         "p@ssw0rd",
         SECRET_TOKEN
       );
-      expect(setSecretPass.ok).toBe(true);
+      assert.strictEqual(setSecretPass.ok, true);
 
       // 2. List config: strictly declared secret: true is masked; undeclared is not
       const confList = await fetchRemoteConfig(serverUrl, SECRET_TOKEN);
-      expect(confList.values["TEST_API_URL"]).toBe("https://api.example.com");
-      expect(confList.values["MY_SECRET_TOKEN"]).toBe("********");
-      expect(confList.values["DB_PASSWORD"]).toBe("p@ssw0rd");
+      assert.strictEqual(confList.values["TEST_API_URL"], "https://api.example.com");
+      assert.strictEqual(confList.values["MY_SECRET_TOKEN"], "********");
+      assert.strictEqual(confList.values["DB_PASSWORD"], "p@ssw0rd");
 
       // 3. Delete config
       const delConf = await deleteRemoteConfig(serverUrl, "TEST_API_URL", SECRET_TOKEN);
-      expect(delConf.deleted).toBe(true);
+      assert.strictEqual(delConf.deleted, true);
       const delSecretToken = await deleteRemoteConfig(serverUrl, "MY_SECRET_TOKEN", SECRET_TOKEN);
-      expect(delSecretToken.deleted).toBe(true);
+      assert.strictEqual(delSecretToken.deleted, true);
       const delSecretPass = await deleteRemoteConfig(serverUrl, "DB_PASSWORD", SECRET_TOKEN);
-      expect(delSecretPass.deleted).toBe(true);
+      assert.strictEqual(delSecretPass.deleted, true);
 
       // 4. Env status check
       const envRes = await fetchRemoteConfigEnv(serverUrl, SECRET_TOKEN);
-      expect(envRes.packageId).toBe("test.profile-app");
-      expect(Array.isArray(envRes.envChecks)).toBe(true);
+      assert.strictEqual(envRes.packageId, "test.profile-app");
+      assert.strictEqual(Array.isArray(envRes.envChecks), true);
     });
 
     test("GET /api/v2/doctor > runs diagnostics on remote server", async () => {
       const doc = await fetchRemoteDoctor(serverUrl, SECRET_TOKEN);
-      expect(doc.ok !== undefined).toBe(true);
-      expect((doc.report || doc).summary).toBeDefined();
-      expect((doc.report || doc).checks.length).toBeGreaterThan(0);
+      assert.strictEqual(doc.ok !== undefined, true);
+      assert.notStrictEqual((doc.report || doc).summary, undefined);
+      assert.ok(((doc.report || doc).checks.length) > 0);
     });
 
     test("GET /api/v2/runs/:runId/stream > connects to SSE stream and receives updates", async () => {
@@ -898,10 +899,10 @@ Follow these steps to greet a user.
           async: true,
         }),
       });
-      expect(asyncRes.status).toBe(202);
+      assert.strictEqual(asyncRes.status, 202);
       const asyncData = await asyncRes.json();
       const runId = asyncData.runId;
-      expect(runId).toBeDefined();
+      assert.notStrictEqual(runId, undefined);
 
       // Connect to SSE stream
       const sseRes = await fetch(`${serverUrl}/api/v2/runs/${runId}/stream`, {
@@ -909,15 +910,15 @@ Follow these steps to greet a user.
           Authorization: `Bearer ${SECRET_TOKEN}`,
         },
       });
-      expect(sseRes.status).toBe(200);
-      expect(sseRes.headers.get("content-type")).toContain("text/event-stream");
+      assert.strictEqual(sseRes.status, 200);
+      assert.ok((sseRes.headers.get("content-type")).includes("text/event-stream"));
 
       // Read at least one chunk
       const reader = sseRes.body?.getReader();
       if (reader) {
         const { value } = await reader.read();
         const text = new TextDecoder().decode(value);
-        expect(text).toContain("event:");
+        assert.ok((text).includes("event:"));
         reader.cancel();
       }
       await new Promise((r) => setTimeout(r, 150));
@@ -928,28 +929,28 @@ Follow these steps to greet a user.
       const unknownPkgRes = await fetch(`${serverUrl}/api/v2/config?package=nonexistent-package`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
-      expect(unknownPkgRes.status).toBe(400);
+      assert.strictEqual(unknownPkgRes.status, 400);
       const unknownData = await unknownPkgRes.json();
-      expect(unknownData.ok).toBe(false);
-      expect(unknownData.error.message).toContain("Unknown or unregistered package");
+      assert.strictEqual(unknownData.ok, false);
+      assert.ok((unknownData.error.message).includes("Unknown or unregistered package"));
 
       // 2. Path traversal in package parameter returns 400
       const traversalRes = await fetch(`${serverUrl}/api/v2/config?package=../../etc`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
-      expect(traversalRes.status).toBe(400);
+      assert.strictEqual(traversalRes.status, 400);
       const traversalData = await traversalRes.json();
-      expect(traversalData.ok).toBe(false);
-      expect(traversalData.error.message).toContain("Invalid packageId");
+      assert.strictEqual(traversalData.ok, false);
+      assert.ok((traversalData.error.message).includes("Invalid packageId"));
 
       // 3. Unknown package on /api/v2/state returns 400
       const stateUnknownRes = await fetch(`${serverUrl}/api/v2/state?package=nonexistent-package`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
-      expect(stateUnknownRes.status).toBe(400);
+      assert.strictEqual(stateUnknownRes.status, 400);
       const stateData = await stateUnknownRes.json();
-      expect(stateData.ok).toBe(false);
-      expect(stateData.error.message).toContain("Unknown or unregistered package");
+      assert.strictEqual(stateData.ok, false);
+      assert.ok((stateData.error.message).includes("Unknown or unregistered package"));
     });
   });
 });
@@ -972,12 +973,12 @@ describe("executeRemoteAction 本地超时守卫与错误信封契约", () => {
       });
       const elapsed = Date.now() - startedAt;
 
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe("ACTION_TIMEOUT");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, "ACTION_TIMEOUT");
       // 本地超时守卫必须在 timeoutMs 量级内中断，而非永久挂起
-      expect(elapsed).toBeLessThan(2000);
+      assert.ok((elapsed) < 2000);
       // 错误信封严禁携带伪造 runId
-      expect((res as any).runId).toBe("");
+      assert.strictEqual((res as any).runId, "");
     } finally {
       for (const s of sockets) s.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1000,9 +1001,9 @@ describe("executeRemoteAction 本地超时守卫与错误信封契约", () => {
         allowInsecureHttp: true,
       });
 
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe("ACTION_CANCELLED");
-      expect((res as any).runId).toBe("");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, "ACTION_CANCELLED");
+      assert.strictEqual((res as any).runId, "");
     } finally {
       for (const s of sockets) s.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1021,9 +1022,9 @@ describe("executeRemoteAction 本地超时守卫与错误信封契约", () => {
       const res = await executeRemoteAction(`http://127.0.0.1:${port}`, "pkg/broken", {}, {
         allowInsecureHttp: true,
       });
-      expect(res.ok).toBe(false);
-      expect((res as any).error?.code).toBe("REMOTE_EXECUTION_FAILED");
-      expect((res as any).runId).toBe("");
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual((res as any).error?.code, "REMOTE_EXECUTION_FAILED");
+      assert.strictEqual((res as any).runId, "");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

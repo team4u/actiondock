@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
@@ -47,28 +48,28 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       const input = { value: 21 };
 
       const res1 = await service.execution.run("pkg.idemp/double", input, { requestId: reqId });
-      expect(res1.ok).toBe(true);
+      assert.strictEqual(res1.ok, true);
       if (res1.ok) {
-        expect(res1.data).toEqual({ doubled: 42 });
+        assert.deepStrictEqual(res1.data, { doubled: 42 });
       }
-      expect(runCount).toBe(1);
+      assert.strictEqual(runCount, 1);
 
       const res2 = await service.execution.run("pkg.idemp/double", input, { requestId: reqId });
-      expect(res2.ok).toBe(true);
+      assert.strictEqual(res2.ok, true);
       if (res2.ok) {
-        expect(res2.data).toEqual({ doubled: 42 });
+        assert.deepStrictEqual(res2.data, { doubled: 42 });
       }
-      expect(res2.runId).toBe(res1.runId);
-      expect(runCount).toBe(1);
+      assert.strictEqual(res2.runId, res1.runId);
+      assert.strictEqual(runCount, 1);
 
       const ticket = await service.execution.start("pkg.idemp/double", input, { requestId: reqId });
-      expect(ticket.runId).toBe(res1.runId);
+      assert.strictEqual(ticket.runId, res1.runId);
       const ticketRes = await ticket.result;
-      expect(ticketRes?.ok).toBe(true);
+      assert.strictEqual(ticketRes?.ok, true);
       if (ticketRes?.ok) {
-        expect(ticketRes.data).toEqual({ doubled: 42 });
+        assert.deepStrictEqual(ticketRes.data, { doubled: 42 });
       }
-      expect(runCount).toBe(1);
+      assert.strictEqual(runCount, 1);
 
       await host.close();
     });
@@ -104,19 +105,19 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       const service = host;
 
       const reqId = "client-conflict-001";
-      const res1 = await service.execution.run("pkg.conflict/echo", { message: "initial" }, { requestId: reqId });
-      expect(res1.ok).toBe(true);
+      const res1 = await service.execution.run("pkg.conflict/echo", "initial", { requestId: reqId });
+      assert.strictEqual(res1.ok, true);
 
       let conflictError: any;
       try {
-        await service.execution.run("pkg.conflict/echo", { message: "tampered" }, { requestId: reqId });
+        await service.execution.run("pkg.conflict/echo", "tampered", { requestId: reqId });
       } catch (err: any) {
         conflictError = err;
       }
 
-      expect(conflictError).toBeDefined();
-      expect(conflictError.code).toBe("IDEMPOTENCY_CONFLICT");
-      expect(conflictError.message).toContain("Idempotency conflict");
+      assert.notStrictEqual(conflictError, undefined);
+      assert.strictEqual(conflictError.code, "IDEMPOTENCY_CONFLICT");
+      assert.ok((conflictError.message).includes("Idempotency conflict"));
 
       await host.close();
     });
@@ -152,10 +153,10 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       const res1 = await service.execution.run("pkg.no-idemp/inc", {});
       const res2 = await service.execution.run("pkg.no-idemp/inc", {});
 
-      expect(res1.runId).not.toBe(res2.runId);
+      assert.notStrictEqual(res1.runId, res2.runId);
       if (res1.ok && res2.ok) {
-        expect(res1.data).toEqual({ count: 1 });
-        expect(res2.data).toEqual({ count: 2 });
+        assert.deepStrictEqual(res1.data, { count: 1 });
+        assert.deepStrictEqual(res2.data, { count: 2 });
       }
 
       await host.close();
@@ -181,15 +182,15 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       });
 
       const check1 = storage.checkAndRecordIdempotency(record);
-      expect(check1.outcome).toBe("new");
+      assert.strictEqual(check1.outcome, "new");
 
       const checkDup = storage.checkAndRecordIdempotency(record);
-      expect(checkDup.outcome).toBe("duplicate");
+      assert.strictEqual(checkDup.outcome, "duplicate");
 
       storage.clearRuns({ actionId: "action" });
 
       const check2 = storage.checkAndRecordIdempotency(record);
-      expect(check2.outcome).toBe("new");
+      assert.strictEqual(check2.outcome, "new");
 
       await storage.close();
     });
@@ -247,15 +248,15 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       });
 
       await slowConsumer;
-      expect(slowDone).toBe(true);
+      assert.strictEqual(slowDone, true);
 
       // 慢订阅者不会被切断通道，没有合成的错误事件
       const errorEvent = receivedEvents.find((e) => e.type === "error");
-      expect(errorEvent).toBeUndefined();
+      assert.strictEqual(errorEvent, undefined);
 
       // 慢订阅者因为消费慢，队列满时丢弃了旧事件，只收到了初始事件和队列保留的最新事件（含终态事件）
-      expect(receivedEvents.length).toBeLessThan(8);
-      expect(receivedEvents[receivedEvents.length - 1].type).toBe("finish");
+      assert.ok((receivedEvents.length) < 8);
+      assert.strictEqual(receivedEvents[receivedEvents.length - 1].type, "finish");
 
       eventSink.clear("run-backpressure-1");
     });
@@ -303,8 +304,8 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
 
       await Promise.all([normalConsumer, slowConsumer]);
 
-      expect(normalEvents.length).toBe(9);
-      expect(normalEvents.map((e) => e.sequence)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.strictEqual(normalEvents.length, 9);
+      assert.deepStrictEqual(normalEvents.map((e) => e.sequence), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
 
       eventSink.clear("run-multi-sub");
     });
@@ -341,10 +342,10 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         resumedEvents.push(evt);
       }
 
-      expect(resumedEvents.length).toBe(3);
-      expect(resumedEvents[0].sequence).toBe(3);
-      expect(resumedEvents[1].sequence).toBe(4);
-      expect(resumedEvents[2].sequence).toBe(5);
+      assert.strictEqual(resumedEvents.length, 3);
+      assert.strictEqual(resumedEvents[0].sequence, 3);
+      assert.strictEqual(resumedEvents[1].sequence, 4);
+      assert.strictEqual(resumedEvents[2].sequence, 5);
 
       eventSink.close();
     });
@@ -380,8 +381,8 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       }
 
       // 缓冲区上限为 5，早期事件已滚动淘汰，订阅直接消费剩余可用的最新 5 条事件
-      expect(events.length).toBe(5);
-      expect(events.map((e) => e.sequence)).toEqual([6, 7, 8, 9, 10]);
+      assert.strictEqual(events.length, 5);
+      assert.deepStrictEqual(events.map((e) => e.sequence), [6, 7, 8, 9, 10]);
 
       eventSink.close();
     });
@@ -394,7 +395,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
     let host: any;
     let service: any;
 
-    beforeAll(async () => {
+    before(async () => {
       const stepAction = defineAction({
         run: async (_input: unknown, ctx: ActionContext) => {
           for (let i = 0; i < 4; i++) {
@@ -440,7 +441,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (serverInstance) {
         await serverInstance.stop();
       }
@@ -462,19 +463,19 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         headers,
         body: JSON.stringify({ input: {} }),
       });
-      expect(res1.status).toBe(200);
+      assert.strictEqual(res1.status, 200);
       const data1 = (await res1.json()) as any;
-      expect(data1.ok).toBe(true);
+      assert.strictEqual(data1.ok, true);
 
       const res2 = await fetch(`${serverUrl}/api/v2/packages/pkg.stream/actions/step/run`, {
         method: "POST",
         headers,
         body: JSON.stringify({ input: {} }),
       });
-      expect(res2.status).toBe(200);
+      assert.strictEqual(res2.status, 200);
       const data2 = (await res2.json()) as any;
-      expect(data2.ok).toBe(true);
-      expect(data2.runId).toBe(data1.runId);
+      assert.strictEqual(data2.ok, true);
+      assert.strictEqual(data2.runId, data1.runId);
     });
 
     it("HTTP POST 携带相同 Idempotency-Key 但不同参数时返回 HTTP 409 状态码", async () => {
@@ -490,17 +491,17 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         headers,
         body: JSON.stringify({ input: { param: "A" } }),
       });
-      expect(res1.status).toBe(200);
+      assert.strictEqual(res1.status, 200);
 
       const res2 = await fetch(`${serverUrl}/api/v2/packages/pkg.stream/actions/step/run`, {
         method: "POST",
         headers,
         body: JSON.stringify({ input: { param: "B" } }),
       });
-      expect(res2.status).toBe(409);
+      assert.strictEqual(res2.status, 409);
       const errBody = (await res2.json()) as any;
-      expect(errBody.ok).toBe(false);
-      expect(errBody.error?.code).toBe("IDEMPOTENCY_CONFLICT");
+      assert.strictEqual(errBody.ok, false);
+      assert.strictEqual(errBody.error?.code, "IDEMPOTENCY_CONFLICT");
     });
 
     it("HTTP GET events 携带 Last-Event-ID 请求头续传事件流并在 SSE 输出 id 字段", async () => {
@@ -514,13 +515,13 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         },
       });
 
-      expect(eventsRes.status).toBe(200);
-      expect(eventsRes.headers.get("content-type")).toContain("text/event-stream");
+      assert.strictEqual(eventsRes.status, 200);
+      assert.ok((eventsRes.headers.get("content-type")).includes("text/event-stream"));
 
       const bodyText = await eventsRes.text();
-      expect(bodyText).toContain("id: ");
-      expect(bodyText).toContain("event: ");
-      expect(bodyText).toContain("data: ");
+      assert.ok((bodyText).includes("id: "));
+      assert.ok((bodyText).includes("event: "));
+      assert.ok((bodyText).includes("data: "));
     });
 
     it("HTTP GET events 传入早期游标时返回 HTTP 200 并续传后续事件流", async () => {
@@ -534,11 +535,11 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         },
       });
 
-      expect(eventsRes.status).toBe(200);
-      expect(eventsRes.headers.get("content-type")).toContain("text/event-stream");
+      assert.strictEqual(eventsRes.status, 200);
+      assert.ok((eventsRes.headers.get("content-type")).includes("text/event-stream"));
       const bodyText = await eventsRes.text();
-      expect(bodyText).toContain("id: ");
-      expect(bodyText).toContain("event: ");
+      assert.ok((bodyText).includes("id: "));
+      assert.ok((bodyText).includes("event: "));
     });
   });
 });

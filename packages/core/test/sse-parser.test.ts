@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { parseSseMessages, type SseMessage } from "../src/service/sse-parser";
 
 function sseStream(chunks: string[]): ReadableStream<Uint8Array> {
@@ -41,20 +42,20 @@ describe("SSE 流解析器单职责模块", () => {
         "data: {\"msg\": \"unknown field above ignored\"}\r\n\r\n",
     ]);
 
-    expect(messages.length).toBe(3);
-    expect(messages[0]).toEqual({
+    assert.strictEqual(messages.length, 3);
+    assert.deepStrictEqual(messages[0], {
       event: "status",
       id: "evt-1",
       data: '{"status": "running"}',
     });
-    expect(messages[1]).toEqual({
+    assert.deepStrictEqual(messages[1], {
       event: "finish",
       id: "evt-2",
       data: '{"ok": true}',
     });
-    expect(messages[2].event).toBe("note");
-    expect(messages[2].id).toBeUndefined();
-    expect(messages[2].data).toContain("unknown field above ignored");
+    assert.strictEqual(messages[2].event, "note");
+    assert.strictEqual(messages[2].id, undefined);
+    assert.ok((messages[2].data).includes("unknown field above ignored"));
   });
 
   it("跨 chunk 分割时正确缓冲：回车位于分片边界暂存等待下个分片", async () => {
@@ -68,8 +69,8 @@ describe("SSE 流解析器单职责模块", () => {
       "\n",
     ]);
 
-    expect(messages.length).toBe(1);
-    expect(messages[0]).toEqual({
+    assert.strictEqual(messages.length, 1);
+    assert.deepStrictEqual(messages[0], {
       event: "chunked",
       id: "chunk-1",
       data: '{"part": 1}',
@@ -89,11 +90,11 @@ describe("SSE 流解析器单职责模块", () => {
       "\r\n",
     ]);
 
-    expect(messages.length).toBe(2);
-    expect(messages[0].data).toBe(
+    assert.strictEqual(messages.length, 2);
+    assert.strictEqual(messages[0].data, 
       "{\n  \"line1\": \"hello\",\n  \"line2\": \"world\"\n}"
     );
     // 冒号后单空格剔除，载荷内部与末尾空格原样保留
-    expect(messages[1].data).toBe(' {"text": "  padded  "} ');
+    assert.strictEqual(messages[1].data, ' {"text": "  padded  "} ');
   });
 });

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -203,9 +204,9 @@ export default defineAction({
       }
     );
 
-    expect(res.status).not.toBe(0);
+    assert.notStrictEqual(res.status, 0);
     const combinedOutput = `${res.stdout}\n${res.stderr}`;
-    expect(combinedOutput).toContain("Package 'non-existent-package-id' not found in linked packages or path");
+    assert.ok((combinedOutput).includes("Package 'non-existent-package-id' not found in linked packages or path"));
   });
 
   it("通过 -P 指定单个包启动时，横幅正确展示且 HTTP 路由与 MCP 端点均受白名单限制", async () => {
@@ -260,46 +261,46 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 1. 验证启动横幅（banner）中清晰输出了当前服务的 Packages 清单
-    expect(bannerOutput).toContain("* Packages:        test.pkg-a");
+    assert.ok((bannerOutput).includes("* Packages:        test.pkg-a"));
 
     // 2. 验证 HTTP 路由：GET /api/v2/actions 仅返回 test.pkg-a 的 actions
     const actionsRes = await fetch(`${serverUrl}/api/v2/actions`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(actionsRes.status).toBe(200);
+    assert.strictEqual(actionsRes.status, 200);
     const actionsData = (await actionsRes.json()) as any[];
     const actionIds = actionsData.map((a: any) => a.id);
-    expect(actionIds.some((id: string) => id.includes("echo-a"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("echo-b"))).toBe(false);
-    expect(actionIds.some((id: string) => id.includes("echo-c"))).toBe(false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-a")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-b")), false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-c")), false);
 
     // 3. 验证 HTTP 路由：GET /api/v2/info 仅返回授权包
     const infoRes = await fetch(`${serverUrl}/api/v2/info`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(infoRes.status).toBe(200);
+    assert.strictEqual(infoRes.status, 200);
     const infoData = (await infoRes.json()) as any;
     const packagesList = infoData.packages || [infoData];
     const packageIdsInInfo = packagesList.map((p: any) => p.id);
-    expect(packageIdsInInfo).toContain("test.pkg-a");
-    expect(packageIdsInInfo).not.toContain("test.pkg-b");
-    expect(packageIdsInInfo).not.toContain("test.pkg-c");
+    assert.ok((packageIdsInInfo).includes("test.pkg-a"));
+    assert.ok(!(packageIdsInInfo).includes("test.pkg-b"));
+    assert.ok(!(packageIdsInInfo).includes("test.pkg-c"));
 
     // 4. 验证 HTTP 路由：已授权包详情返回 200，未授权包详情返回 403
     const showAllowedRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-a/actions/echo-a`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(showAllowedRes.status).toBe(200);
+    assert.strictEqual(showAllowedRes.status, 200);
 
     const showForbiddenRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-b/actions/echo-b`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(showForbiddenRes.status).toBe(403);
+    assert.strictEqual(showForbiddenRes.status, 403);
     const showForbiddenJson = (await showForbiddenRes.json()) as any;
-    expect(showForbiddenJson.error.code).toBe("PACKAGE_FORBIDDEN");
+    assert.strictEqual(showForbiddenJson.error.code, "PACKAGE_FORBIDDEN");
 
     // 5. 验证 HTTP 路由：未授权包执行返回 403，已授权包执行返回 200
     const runForbiddenRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-b/actions/echo-b/run`, {
@@ -310,9 +311,9 @@ export default defineAction({
       },
       body: JSON.stringify({ input: {} }),
     });
-    expect(runForbiddenRes.status).toBe(403);
+    assert.strictEqual(runForbiddenRes.status, 403);
     const runForbiddenJson = (await runForbiddenRes.json()) as any;
-    expect(runForbiddenJson.error.code).toBe("PACKAGE_FORBIDDEN");
+    assert.strictEqual(runForbiddenJson.error.code, "PACKAGE_FORBIDDEN");
 
     const runAllowedRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-a/actions/echo-a/run`, {
       method: "POST",
@@ -320,12 +321,12 @@ export default defineAction({
         Authorization: `Bearer ${SECRET}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input: { message: "run-success" } }),
+      body: JSON.stringify({ input: "run-success" }),
     });
-    expect(runAllowedRes.status).toBe(200);
+    assert.strictEqual(runAllowedRes.status, 200);
     const runAllowedJson = (await runAllowedRes.json()) as any;
-    expect(runAllowedJson.ok).toBe(true);
-    expect(runAllowedJson.data.echo).toBe("run-success");
+    assert.strictEqual(runAllowedJson.ok, true);
+    assert.strictEqual(runAllowedJson.data.echo, "run-success");
 
     // 6. 验证 MCP 端点 (/mcp)：tools/list 限制在指定包范围内
     const initRes = await fetch(`${serverUrl}/mcp`, {
@@ -346,7 +347,7 @@ export default defineAction({
         },
       }),
     });
-    expect(initRes.status).toBe(200);
+    assert.strictEqual(initRes.status, 200);
     const sessionId = initRes.headers.get("mcp-session-id");
     const mcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${SECRET}`,
@@ -367,7 +368,7 @@ export default defineAction({
         params: {},
       }),
     });
-    expect(listToolsRes.status).toBe(200);
+    assert.strictEqual(listToolsRes.status, 200);
     const listRawText = await listToolsRes.text();
     let listData: any;
     if (listRawText.startsWith("event:")) {
@@ -378,9 +379,9 @@ export default defineAction({
     }
 
     const toolNames = listData.result.tools.map((t: any) => t.name);
-    expect(toolNames.some((name: string) => name.includes("echo-a"))).toBe(true);
-    expect(toolNames.some((name: string) => name.includes("echo-b"))).toBe(false);
-    expect(toolNames.some((name: string) => name.includes("echo-c"))).toBe(false);
+    assert.strictEqual(toolNames.some((name: string) => name.includes("echo-a")), true);
+    assert.strictEqual(toolNames.some((name: string) => name.includes("echo-b")), false);
+    assert.strictEqual(toolNames.some((name: string) => name.includes("echo-c")), false);
 
     // 7. 验证 MCP 端点：调用已授权工具成功，调用未授权工具失败
     const callAllowedRes = await fetch(`${serverUrl}/mcp`, {
@@ -392,22 +393,22 @@ export default defineAction({
         method: "tools/call",
         params: {
           name: toolNames.find((name: string) => name.includes("echo-a")),
-          arguments: { message: "mcp-hello" },
+          arguments: "mcp-hello",
         },
       }),
     });
-    expect(callAllowedRes.status).toBe(200);
+    assert.strictEqual(callAllowedRes.status, 200);
     const callAllowedText = await callAllowedRes.text();
     const callAllowedData = JSON.parse(
       callAllowedText.startsWith("event:")
         ? callAllowedText.split("\n").find((l) => l.startsWith("data:"))!.slice(5).trim()
         : callAllowedText
     );
-    expect(callAllowedData.error).toBeUndefined();
-    expect(callAllowedData.result.isError).toBeFalsy();
+    assert.strictEqual(callAllowedData.error, undefined);
+    assert.ok(!(callAllowedData.result.isError));
     const parsedPayload = JSON.parse(callAllowedData.result.content[0].text);
-    expect(parsedPayload.ok).toBe(true);
-    expect(parsedPayload.data.echo).toBe("mcp-hello");
+    assert.strictEqual(parsedPayload.ok, true);
+    assert.strictEqual(parsedPayload.data.echo, "mcp-hello");
 
     const callForbiddenRes = await fetch(`${serverUrl}/mcp`, {
       method: "POST",
@@ -422,14 +423,14 @@ export default defineAction({
         },
       }),
     });
-    expect(callForbiddenRes.status).toBe(200);
+    assert.strictEqual(callForbiddenRes.status, 200);
     const callForbiddenText = await callForbiddenRes.text();
     const callForbiddenData = JSON.parse(
       callForbiddenText.startsWith("event:")
         ? callForbiddenText.split("\n").find((l) => l.startsWith("data:"))!.slice(5).trim()
         : callForbiddenText
     );
-    expect(callForbiddenData.error).toBeDefined();
+    assert.notStrictEqual(callForbiddenData.error, undefined);
   });
 
   it("支持通过逗号分隔或多次 -P 指定多个包，横幅聚合且服务限制在集合范围内", async () => {
@@ -483,39 +484,39 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 1. 横幅包含两个包
-    expect(bannerOutput).toContain("* Packages:        test.pkg-a, test.pkg-b");
+    assert.ok((bannerOutput).includes("* Packages:        test.pkg-a, test.pkg-b"));
 
     // 2. Actions 接口包含 A 和 B，不包含 C
     const actionsRes = await fetch(`${serverUrl}/api/v2/actions`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(actionsRes.status).toBe(200);
+    assert.strictEqual(actionsRes.status, 200);
     const actionsData = (await actionsRes.json()) as any[];
     const actionIds = actionsData.map((a: any) => a.id);
-    expect(actionIds.some((id: string) => id.includes("echo-a"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("echo-b"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("echo-c"))).toBe(false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-a")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-b")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-c")), false);
 
     // 3. A 和 B 均可访问，C 返回 403
     const showARes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-a/actions/echo-a`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(showARes.status).toBe(200);
+    assert.strictEqual(showARes.status, 200);
 
     const showBRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-b/actions/echo-b`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(showBRes.status).toBe(200);
+    assert.strictEqual(showBRes.status, 200);
 
     const showCRes = await fetch(`${serverUrl}/api/v2/packages/test.pkg-c/actions/echo-c`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(showCRes.status).toBe(403);
+    assert.strictEqual(showCRes.status, 403);
     const showCJson = (await showCRes.json()) as any;
-    expect(showCJson.error.code).toBe("PACKAGE_FORBIDDEN");
+    assert.strictEqual(showCJson.error.code, "PACKAGE_FORBIDDEN");
   });
 
   it("多次指定 -P 选项（-P pkgA -P pkgB）正确聚合参数", async () => {
@@ -571,18 +572,18 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
-    expect(bannerOutput).toContain("* Packages:        test.pkg-a, test.pkg-b");
+    assert.ok((bannerOutput).includes("* Packages:        test.pkg-a, test.pkg-b"));
 
     const actionsRes = await fetch(`${serverUrl}/api/v2/actions`, {
       headers: { Authorization: `Bearer ${SECRET}` },
     });
-    expect(actionsRes.status).toBe(200);
+    assert.strictEqual(actionsRes.status, 200);
     const actionsData = (await actionsRes.json()) as any[];
     const actionIds = actionsData.map((a: any) => a.id);
-    expect(actionIds.some((id: string) => id.includes("echo-a"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("echo-b"))).toBe(true);
-    expect(actionIds.some((id: string) => id.includes("echo-c"))).toBe(false);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-a")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-b")), true);
+    assert.strictEqual(actionIds.some((id: string) => id.includes("echo-c")), false);
   });
 });

@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, beforeEach, describe, it } from "node:test";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { join, resolve } from "node:path";
  *
  * Windows 兼容：Node 的 child.kill("SIGTERM") 仅硬杀直接子进程（supervisor），
  * 其派生的 worker 进程会成为孤儿并继续持有 tempDir 工作目录句柄——Windows
- * 禁止删除任何进程的 cwd，afterAll 清理将永久 EPERM。因此 Windows 下必须用
+ * 禁止删除任何进程的 cwd，after 清理将永久 EPERM。因此 Windows 下必须用
  * taskkill /T /F 按进程树整棵终止；POSIX 下保持 SIGTERM 语义。
  */
 async function killMcpChild(child: ChildProcess): Promise<void> {
@@ -122,14 +123,14 @@ export default defineAction({
     );
   });
 
-  afterAll(() => {
+  after(() => {
     if (tempDir && existsSync(tempDir)) {
       // Windows 兼容：ad mcp 子进程退出与句柄释放存在竞态，EPERM/EBUSY 需重试
       rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
-  it("physically isolates child process stdout and protects MCP JSON-RPC protocol framing", async () => {
+  it("physically isolates child process stdout and protects MCP JSON-RPC protocol framing", { timeout: 10000 }, async () => {
     const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
 
     const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
@@ -208,24 +209,24 @@ export default defineAction({
 
     await killMcpChild(child);
 
-    expect(receivedLines.length).toBeGreaterThanOrEqual(2);
+    assert.ok((receivedLines.length) >= 2);
     for (const line of receivedLines) {
       const parsed = JSON.parse(line);
-      expect(parsed.jsonrpc).toBe("2.0");
+      assert.strictEqual(parsed.jsonrpc, "2.0");
     }
 
     const callRespLine = receivedLines.find((l) => l.includes(`"id":2`));
-    expect(callRespLine).toBeDefined();
+    assert.notStrictEqual(callRespLine, undefined);
     const callResp = JSON.parse(callRespLine!);
-    expect(callResp.result.content[0].text).toContain("Hello World");
+    assert.ok((callResp.result.content[0].text).includes("Hello World"));
 
     const fullStderr = stderrChunks.join("");
-    expect(fullStderr).toContain("RAW POLLUTING LOG THAT MUST NOT CORRUPT MCP PROTOCOL");
-    expect(fullStderr).toContain("unframed business debug info");
-    expect(fullStderr).toContain("UNFORMATTED_RAW_STREAM_DATA");
-  }, 10000);
+    assert.ok((fullStderr).includes("RAW POLLUTING LOG THAT MUST NOT CORRUPT MCP PROTOCOL"));
+    assert.ok((fullStderr).includes("unframed business debug info"));
+    assert.ok((fullStderr).includes("UNFORMATTED_RAW_STREAM_DATA"));
+  });
 
-  it("converts child process sudden exit into structured JSON-RPC error without corrupting transport framing", async () => {
+  it("converts child process sudden exit into structured JSON-RPC error without corrupting transport framing", { timeout: 10000 }, async () => {
     const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
 
     const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
@@ -304,20 +305,20 @@ export default defineAction({
 
     // 校验：即使子进程崩溃，监督进程仍返回标准的 JSON-RPC 错误，未破坏通信协议
     const crashRespLine = receivedLines.find((l) => l.includes(`"id":20`));
-    expect(crashRespLine).toBeDefined();
+    assert.notStrictEqual(crashRespLine, undefined);
     const crashResp = JSON.parse(crashRespLine!);
-    expect(crashResp.jsonrpc).toBe("2.0");
+    assert.strictEqual(crashResp.jsonrpc, "2.0");
     // MCP tool error result (isError: true) or JSON-RPC error
     if (crashResp.result) {
-      expect(crashResp.result.isError).toBe(true);
-      expect(crashResp.result.content[0].text).toContain("HOST_PROCESS_EXITED");
+      assert.strictEqual(crashResp.result.isError, true);
+      assert.ok((crashResp.result.content[0].text).includes("HOST_PROCESS_EXITED"));
     } else {
-      expect(crashResp.error).toBeDefined();
-      expect(crashResp.error.message).toContain("HOST_PROCESS_EXITED");
+      assert.notStrictEqual(crashResp.error, undefined);
+      assert.ok((crashResp.error.message).includes("HOST_PROCESS_EXITED"));
     }
-  }, 10000);
+  });
 
-  it("exits the supervisor process after the MCP client closes stdin instead of hanging forever", async () => {
+  it("exits the supervisor process after the MCP client closes stdin instead of hanging forever", { timeout: 15000 }, async () => {
     const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
 
     const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
@@ -377,7 +378,7 @@ export default defineAction({
       });
     });
 
-    expect(exitInfo.signal).not.toBe("HANG_TIMEOUT");
-    expect(exitInfo.code).toBe(0);
-  }, 15000);
+    assert.notStrictEqual(exitInfo.signal, "HANG_TIMEOUT");
+    assert.strictEqual(exitInfo.code, 0);
+  });
 });

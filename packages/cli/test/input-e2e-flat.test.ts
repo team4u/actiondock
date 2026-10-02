@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -25,7 +26,7 @@ async function runCli(
 describe("CLI Action Input Resolution - Flat Arguments and Advice", () => {
   let tempDir: string;
 
-  beforeAll(async () => {
+  before(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-input-flat-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-input-flat-home-"));
 
@@ -38,7 +39,7 @@ describe("CLI Action Input Resolution - Flat Arguments and Advice", () => {
 
     // Initialize project
     const initProc = await runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
-    expect(initProc.exitCode).toBe(0);
+    assert.strictEqual(initProc.exitCode, 0);
 
     // Create an echo action that returns the exact received input
     const echoActionSource = `import { defineAction } from "@actiondock/sdk";
@@ -61,7 +62,7 @@ export default defineAction(async (input: any) => {
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -99,10 +100,10 @@ export default defineAction(async (input: any) => {
       ],
       tempDir
     );
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.received).toEqual({
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(res.data.received, {
       str: "hello",
       num: 123,
       bool: true,
@@ -121,11 +122,11 @@ export default defineAction(async (input: any) => {
       ["run", "test.echo", "--input", '{"a":1}', "--json", "--", "b=2"],
       tempDir
     );
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INPUT_CONFLICT");
-    expect(res.error.message).toContain("mutually exclusive");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INPUT_CONFLICT");
+    assert.ok((res.error.message).includes("mutually exclusive"));
   });
 
   // 20. Flat 参数与 --input-file 冲突返回退出码 2 及结构化错误
@@ -137,11 +138,11 @@ export default defineAction(async (input: any) => {
       ["run", "test.echo", "--input-file", filePath, "--json", "--", "b=2"],
       tempDir
     );
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INPUT_CONFLICT");
-    expect(res.error.message).toContain("mutually exclusive");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INPUT_CONFLICT");
+    assert.ok((res.error.message).includes("mutually exclusive"));
   });
 
   // 21. 非法 Flat 参数在 --json 模式下返回正确的错误信封
@@ -150,10 +151,10 @@ export default defineAction(async (input: any) => {
       ["run", "test.echo", "--json", "--", "num:=invalid_json"],
       tempDir
     );
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON_LITERAL");
   });
 
   it("rejects invalid path in flat args with exit code 2 and INVALID_FLAT_ARGUMENT", async () => {
@@ -161,10 +162,10 @@ export default defineAction(async (input: any) => {
       ["run", "test.echo", "--json", "--", "bad..path=1"],
       tempDir
     );
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_FLAT_ARGUMENT");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_FLAT_ARGUMENT");
   });
 
   it("rejects path conflict in flat args with exit code 2 and INPUT_PATH_CONFLICT", async () => {
@@ -172,20 +173,20 @@ export default defineAction(async (input: any) => {
       ["run", "test.echo", "--json", "--", "a=1", "a.b=2"],
       tempDir
     );
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INPUT_PATH_CONFLICT");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INPUT_PATH_CONFLICT");
   });
 
   // 22. --input '1e400' 抛出 INVALID_JSON
   it("rejects --input '1e400' (Infinity) with exit code 2 and INVALID_JSON code", async () => {
     const proc = await runCli(["run", "test.echo", "--input", "1e400", "--json"], tempDir);
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain("Number is non-finite or NaN");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes("Number is non-finite or NaN"));
   });
 
 
@@ -203,16 +204,16 @@ export default defineAction(async (input: any) => {
         required: ["name", "count"],
       },
     });
-    expect(formatted).toContain("Action: test.echo");
-    expect(formatted).toContain("Recommended Input: flat");
-    expect(formatted).toContain("Assignments:");
-    expect(formatted).toContain("  name=");
-    expect(formatted).toContain("  count:=");
-    expect(formatted).toContain("  meta:=");
-    expect(formatted).toContain("Syntax Reference:");
-    expect(formatted).toContain('key="value"');
-    expect(formatted).toContain("count:=10  enabled:=true");
-    expect(formatted).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
-    expect(formatted).toContain("--input-file input.json");
+    assert.ok((formatted).includes("Action: test.echo"));
+    assert.ok((formatted).includes("Recommended Input: flat"));
+    assert.ok((formatted).includes("Assignments:"));
+    assert.ok((formatted).includes("  name="));
+    assert.ok((formatted).includes("  count:="));
+    assert.ok((formatted).includes("  meta:="));
+    assert.ok((formatted).includes("Syntax Reference:"));
+    assert.ok((formatted).includes('key="value"'));
+    assert.ok((formatted).includes("count:=10  enabled:=true"));
+    assert.ok((formatted).includes('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")'));
+    assert.ok((formatted).includes("--input-file input.json"));
   });
 });

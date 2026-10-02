@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer } from "../src/adapter";
@@ -7,27 +8,27 @@ import { toMcpSchema } from "../src/schemas";
 
 describe("MCP adapter async execution mode semantics", () => {
   it("detects async mode only via execution.mode and legacy __async read-only probe", () => {
-    expect(isAsyncExecutionRequested({ execution: { mode: "async" } })).toBe(true);
-    expect(isAsyncExecutionRequested({ execution: { mode: "sync" } })).toBe(false);
-    expect(isAsyncExecutionRequested({ __async: true })).toBe(true);
-    expect(isAsyncExecutionRequested({ __async: false })).toBe(false);
-    expect(isAsyncExecutionRequested({ async: true })).toBe(false);
-    expect(isAsyncExecutionRequested(null)).toBe(false);
-    expect(isAsyncExecutionRequested("string")).toBe(false);
-    expect(isAsyncExecutionRequested([1, 2])).toBe(false);
+    assert.strictEqual(isAsyncExecutionRequested({ execution: { mode: "async" } }), true);
+    assert.strictEqual(isAsyncExecutionRequested({ execution: { mode: "sync" } }), false);
+    assert.strictEqual(isAsyncExecutionRequested({ __async: true }), true);
+    assert.strictEqual(isAsyncExecutionRequested({ __async: false }), false);
+    assert.strictEqual(isAsyncExecutionRequested({ async: true }), false);
+    assert.strictEqual(isAsyncExecutionRequested(null), false);
+    assert.strictEqual(isAsyncExecutionRequested("string"), false);
+    assert.strictEqual(isAsyncExecutionRequested([1, 2]), false);
   });
 
   it("strips only wrapper fields (execution, __async) and preserves business async field", () => {
-    expect(stripExecutionWrapper({ a: 1, execution: { mode: "sync" }, __async: false })).toEqual({
+    assert.deepStrictEqual(stripExecutionWrapper({ a: 1, execution: { mode: "sync" }, __async: false }), {
       a: 1,
     });
     // 业务自有的 async 入参字段原样透传，不再被吞没
-    expect(stripExecutionWrapper({ async: true, query: "x" })).toEqual({ async: true, query: "x" });
+    assert.deepStrictEqual(stripExecutionWrapper({ async: true, query: "x" }), { async: true, query: "x" });
     // 未携带包装字段时原样返回
     const untouched = { b: 2 };
-    expect(stripExecutionWrapper(untouched)).toBe(untouched);
+    assert.strictEqual(stripExecutionWrapper(untouched), untouched);
     // 非对象输入原样返回
-    expect(stripExecutionWrapper("raw")).toBe("raw");
+    assert.strictEqual(stripExecutionWrapper("raw"), "raw");
   });
 
   it("injects only execution wrapper into tool schema, no __async magic field", async () => {
@@ -41,11 +42,11 @@ describe("MCP adapter async execution mode semantics", () => {
 
     // execution 包装字段可被接受
     const withExecution = await validate({ q: "a", execution: { mode: "async" } });
-    expect(withExecution.value.execution).toEqual({ mode: "async" });
+    assert.deepStrictEqual(withExecution.value.execution, { mode: "async" });
 
     // __async 魔法字段不再注入 schema，严格模式下成为非法未知字段
     const withMagic = await validate({ q: "a", __async: true });
-    expect(withMagic.issues).toBeDefined();
+    assert.notStrictEqual(withMagic.issues, undefined);
   });
 
   it("does not inject execution wrapper into output schemas when injectExecution is false", async () => {
@@ -62,16 +63,16 @@ describe("MCP adapter async execution mode semantics", () => {
 
     // 出参不含 execution 包装字段，实际返回结构可直接通过校验
     const plain = await validate({ result: 42 });
-    expect(plain.issues).toBeUndefined();
+    assert.strictEqual(plain.issues, undefined);
 
     // 注入的 execution 字段反而应被拒绝（与实际 structuredContent 不符）
     const polluted = await validate({ result: 42, execution: { mode: "sync" } });
-    expect(polluted.issues).toBeDefined();
+    assert.notStrictEqual(polluted.issues, undefined);
 
     // 默认参数保持入参注入行为
     const input: any = toMcpSchema({ type: "object", properties: {} });
     const inputProps = await input["~standard"].validate({ execution: { timeoutMs: 100 } });
-    expect(inputProps.value.execution).toEqual({ timeoutMs: 100 });
+    assert.deepStrictEqual(inputProps.value.execution, { timeoutMs: 100 });
   });
 
   it("tool schema clone does not mutate the caller's original schema object", () => {
@@ -80,7 +81,7 @@ describe("MCP adapter async execution mode semantics", () => {
       properties: { q: { type: "string" } },
     };
     toMcpSchema(original);
-    expect(Object.keys(original.properties)).toEqual(["q"]);
+    assert.deepStrictEqual(Object.keys(original.properties), ["q"]);
   });
 
   it("passes through a business input field named async to the action", async () => {
@@ -133,10 +134,10 @@ describe("MCP adapter async execution mode semantics", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(callResult).toBeDefined();
-    expect(callResult.isError).toBeFalsy();
+    assert.notStrictEqual(callResult, undefined);
+    assert.ok(!(callResult.isError));
     // 名为 async 的业务入参字段完整送达，未被适配层吞没
-    expect(received).toEqual({ async: true, tag: "keep" });
+    assert.deepStrictEqual(received, { async: true, tag: "keep" });
 
     await server.close();
   });
@@ -161,7 +162,7 @@ describe("MCP adapter storage lifecycle semantics", () => {
       }),
     });
     await server.close();
-    expect(closed).toBe(false);
+    assert.strictEqual(closed, false);
   });
 
   it("ownStorageLifecycle: true cascades close through service.close()", async () => {
@@ -176,7 +177,7 @@ describe("MCP adapter storage lifecycle semantics", () => {
       cascadeServiceClose: true,
     });
     await server.close();
-    expect(closed).toBe(true);
+    assert.strictEqual(closed, true);
   });
 
   it("external storage view delegates reads while suppressing close", async () => {
@@ -202,10 +203,10 @@ describe("MCP adapter storage lifecycle semantics", () => {
     });
 
     const run = await server.service.runs.get("run-1");
-    expect(run?.id).toBe("run-1");
+    assert.strictEqual(run?.id, "run-1");
 
     await server.close();
-    expect(closed).toBe(false);
+    assert.strictEqual(closed, false);
   });
 });
 
@@ -283,9 +284,9 @@ describe("MCP adapter execution timeout combination", () => {
 
     await new Promise((r) => setTimeout(r, 200));
 
-    expect(receivedOptions.length).toBe(2);
-    expect(receivedOptions[0]?.timeoutMs).toBe(200);
-    expect(receivedOptions[1]?.timeoutMs).toBe(5000);
+    assert.strictEqual(receivedOptions.length, 2);
+    assert.strictEqual(receivedOptions[0]?.timeoutMs, 200);
+    assert.strictEqual(receivedOptions[1]?.timeoutMs, 5000);
 
     await server.close();
   });
@@ -313,20 +314,20 @@ describe("MCP tasks extension isolation", () => {
     });
 
     const handlers = (server.server as any)._requestHandlers;
-    expect(handlers.get("tasks/get")).toBeDefined();
-    expect(handlers.get("tasks/list")).toBeDefined();
-    expect(handlers.get("tasks/cancel")).toBeDefined();
+    assert.notStrictEqual(handlers.get("tasks/get"), undefined);
+    assert.notStrictEqual(handlers.get("tasks/list"), undefined);
+    assert.notStrictEqual(handlers.get("tasks/cancel"), undefined);
 
     // 缺少 taskId 时由 schema 校验拒绝，而非进入业务处理器
     const getHandler = handlers.get("tasks/get");
-    await expect(
+    await assert.rejects(
       getHandler({ method: "tasks/get", params: {} })
-    ).rejects.toThrow();
+    );
 
     // tasks/list 按启动时间倒序返回
     const listHandler = handlers.get("tasks/list");
     const listRes = await listHandler({ method: "tasks/list", params: { limit: 10 } });
-    expect(listRes.tasks.map((t: any) => t.taskId)).toEqual(["task-x"]);
+    assert.deepStrictEqual(listRes.tasks.map((t: any) => t.taskId), ["task-x"]);
 
     await server.close();
   });
@@ -353,7 +354,7 @@ describe("MCP tasks extension isolation", () => {
     } catch (err: any) {
       getCode = err?.code;
     }
-    expect(getCode).toBe(-32001);
+    assert.strictEqual(getCode, -32001);
 
     // tasks/cancel 未命中时同样携带语义码
     const cancelHandler = handlers.get("tasks/cancel");
@@ -363,7 +364,7 @@ describe("MCP tasks extension isolation", () => {
     } catch (err: any) {
       cancelCode = err?.code;
     }
-    expect(cancelCode).toBe(-32001);
+    assert.strictEqual(cancelCode, -32001);
 
     await server.close();
   });
@@ -399,13 +400,13 @@ describe("MCP tasks extension isolation", () => {
     } catch (err: any) {
       invalidCode = err?.code;
     }
-    expect(invalidCode).toBe(-32002);
+    assert.strictEqual(invalidCode, -32002);
 
     // 缺省 limit 默认 50，超上限钳制到 500：均正常返回不抛错
     const defaulted = await listHandler({ method: "tasks/list", params: {} });
-    expect(defaulted.tasks.length).toBe(3);
+    assert.strictEqual(defaulted.tasks.length, 3);
     const clamped = await listHandler({ method: "tasks/list", params: { limit: 99999 } });
-    expect(clamped.tasks.length).toBe(3);
+    assert.strictEqual(clamped.tasks.length, 3);
 
     await server.close();
   });
@@ -459,39 +460,39 @@ describe("MCP adapter packageAllowlist filtering semantics", () => {
     const toolsHandler = (server.server as any)._requestHandlers.get("tools/list");
     const toolsResult = await toolsHandler({ method: "tools/list", params: {} });
     const toolNames = toolsResult.tools.map((t: any) => t.name);
-    expect(toolNames).toContain("action-a");
-    expect(toolNames).not.toContain("action-b");
+    assert.ok((toolNames).includes("action-a"));
+    assert.ok(!(toolNames).includes("action-b"));
 
     // 2. Verify tasks/list filters out both pkg-b and unassigned runs
     const tasksListHandler = (server.server as any)._requestHandlers.get("tasks/list");
     const tasksResult = await tasksListHandler({ method: "tasks/list", params: {} });
     const taskIds = tasksResult.tasks.map((t: any) => t.taskId);
-    expect(taskIds).toContain("run-a");
-    expect(taskIds).not.toContain("run-b");
-    expect(taskIds).not.toContain("run-none");
+    assert.ok((taskIds).includes("run-a"));
+    assert.ok(!(taskIds).includes("run-b"));
+    assert.ok(!(taskIds).includes("run-none"));
 
     // 3. Verify tasks/get for forbidden package and unassigned package
     const tasksGetHandler = (server.server as any)._requestHandlers.get("tasks/get");
-    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } })).rejects.toThrow();
-    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-none" } })).rejects.toThrow();
+    await assert.rejects(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } }));
+    await assert.rejects(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-none" } }));
 
     // 4. Verify tasks/cancel for forbidden package and unassigned package
     const tasksCancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
-    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } })).rejects.toThrow();
-    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-none" } })).rejects.toThrow();
+    await assert.rejects(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } }));
+    await assert.rejects(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-none" } }));
 
     // 5. Verify resources and prompts
     const resourcesHandler = (server.server as any)._requestHandlers.get("resources/list");
     const resourcesResult = await resourcesHandler({ method: "resources/list", params: {} });
     const resourceUris = resourcesResult.resources.map((r: any) => r.uri);
-    expect(resourceUris.some((u: string) => u.includes("pb-a"))).toBe(true);
-    expect(resourceUris.some((u: string) => u.includes("pb-b"))).toBe(false);
+    assert.strictEqual(resourceUris.some((u: string) => u.includes("pb-a")), true);
+    assert.strictEqual(resourceUris.some((u: string) => u.includes("pb-b")), false);
 
     const promptsHandler = (server.server as any)._requestHandlers.get("prompts/list");
     const promptsResult = await promptsHandler({ method: "prompts/list", params: {} });
     const promptNames = promptsResult.prompts.map((p: any) => p.name);
-    expect(promptNames).toContain("pb-a");
-    expect(promptNames).not.toContain("pb-b");
+    assert.ok((promptNames).includes("pb-a"));
+    assert.ok(!(promptNames).includes("pb-b"));
 
     await server.close();
   });
@@ -537,25 +538,25 @@ describe("MCP adapter packageAllowlist filtering semantics", () => {
     const toolsHandler = (server.server as any)._requestHandlers.get("tools/list");
     const toolsResult = await toolsHandler({ method: "tools/list", params: {} });
     const toolNames = toolsResult.tools.map((t: any) => t.name);
-    expect(toolNames).toContain("action-a");
-    expect(toolNames).not.toContain("action-b");
+    assert.ok((toolNames).includes("action-a"));
+    assert.ok(!(toolNames).includes("action-b"));
 
     // 2. Verify tasks/list
     const tasksListHandler = (server.server as any)._requestHandlers.get("tasks/list");
     const tasksResult = await tasksListHandler({ method: "tasks/list", params: {} });
     const taskIds = tasksResult.tasks.map((t: any) => t.taskId);
-    expect(taskIds).toContain("run-a");
-    expect(taskIds).not.toContain("run-b");
+    assert.ok((taskIds).includes("run-a"));
+    assert.ok(!(taskIds).includes("run-b"));
 
     // 3. Verify tasks/get
     const tasksGetHandler = (server.server as any)._requestHandlers.get("tasks/get");
     const taskGetOk = await tasksGetHandler({ method: "tasks/get", params: { taskId: "run-a" } });
-    expect(taskGetOk.task.taskId).toBe("run-a");
-    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } })).rejects.toThrow();
+    assert.strictEqual(taskGetOk.task.taskId, "run-a");
+    await assert.rejects(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } }));
 
     // 4. Verify tasks/cancel
     const tasksCancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
-    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } })).rejects.toThrow();
+    await assert.rejects(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } }));
 
     await server.close();
   });

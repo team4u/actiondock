@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,7 +11,7 @@ import {
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
 function runCli(args: string[], cwd?: string) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: process.env,
     stdout: "pipe",
@@ -20,7 +22,7 @@ function runCli(args: string[], cwd?: string) {
 describe("CLI ad validate 本地相对依赖完整性校验", () => {
   let tempDir: string;
 
-  beforeAll(() => {
+  before(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-validate-deps-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
@@ -34,7 +36,7 @@ describe("CLI ad validate 本地相对依赖完整性校验", () => {
     });
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (tempDir && existsSync(tempDir)) {
       try {
         rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -68,13 +70,13 @@ export default defineAction(async () => {
 
     // 执行 ad validate
     const res = runCli(["validate"], tempDir);
-    expect(res.exitCode).not.toBe(0);
+    assert.notStrictEqual(res.exitCode, 0);
     const stderr = res.stderr.toString();
     const stdout = res.stdout.toString();
     const output = stdout + "\n" + stderr;
-    expect(output).toContain("Action dependency integrity validation failed");
-    expect(output).toContain("src/helper.js");
-    expect(output).toContain("files");
+    assert.ok((output).includes("Action dependency integrity validation failed"));
+    assert.ok((output).includes("src/helper.js"));
+    assert.ok((output).includes("files"));
 
     // 在 actiondock.json 中声明 files 后，再次 validate 应成功
     const configPath = join(tempDir, "actiondock.json");
@@ -83,6 +85,6 @@ export default defineAction(async () => {
     writeFileSync(configPath, JSON.stringify(raw, null, 2));
 
     const res2 = runCli(["validate"], tempDir);
-    expect(res2.exitCode).toBe(0);
+    assert.strictEqual(res2.exitCode, 0);
   });
 });

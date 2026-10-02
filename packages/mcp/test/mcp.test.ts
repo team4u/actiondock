@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import { afterAll, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -200,32 +201,32 @@ describe("@actiondock/mcp Adapter", () => {
     // Wait for response
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(toolsListResult).toBeDefined();
-    expect(Array.isArray(toolsListResult.tools)).toBe(true);
+    assert.notStrictEqual(toolsListResult, undefined);
+    assert.strictEqual(Array.isArray(toolsListResult.tools), true);
 
     const tools = toolsListResult.tools;
-    expect(tools.length).toBe(3);
+    assert.strictEqual(tools.length, 3);
 
     // M02: action.id == MCP tool.name
     const calcTool = tools.find((t: any) => t.name === "calc.multiply");
-    expect(calcTool).toBeDefined();
+    assert.notStrictEqual(calcTool, undefined);
 
     // M03: description matches
-    expect(calcTool.description).toBe("Multiply two numbers");
+    assert.strictEqual(calcTool.description, "Multiply two numbers");
 
     // M04: inputSchema matches
-    expect(calcTool.inputSchema).toBeDefined();
-    expect(calcTool.inputSchema.type).toBe("object");
-    expect(calcTool.inputSchema.properties.a.type).toBe("number");
-    expect(calcTool.inputSchema.properties.b.type).toBe("number");
-    expect(calcTool.inputSchema.required).toEqual(["a", "b"]);
+    assert.notStrictEqual(calcTool.inputSchema, undefined);
+    assert.strictEqual(calcTool.inputSchema.type, "object");
+    assert.strictEqual(calcTool.inputSchema.properties.a.type, "number");
+    assert.strictEqual(calcTool.inputSchema.properties.b.type, "number");
+    assert.deepStrictEqual(calcTool.inputSchema.required, ["a", "b"]);
 
     // M05: outputSchema matches（不注入 execution 包装字段，与实际 structuredContent 一致）
-    expect(calcTool.outputSchema).toBeDefined();
-    expect(calcTool.outputSchema.properties.result.type).toBe("number");
-    expect(calcTool.outputSchema.properties.execution).toBeUndefined();
+    assert.notStrictEqual(calcTool.outputSchema, undefined);
+    assert.strictEqual(calcTool.outputSchema.properties.result.type, "number");
+    assert.strictEqual(calcTool.outputSchema.properties.execution, undefined);
     // 入参 schema 仍注入 execution 执行控制包装字段
-    expect(calcTool.inputSchema.properties.execution).toBeDefined();
+    assert.notStrictEqual(calcTool.inputSchema.properties.execution, undefined);
   });
 
   it("M06, M09: tools/call executes through ActionRunner and writes run record", async () => {
@@ -271,14 +272,14 @@ describe("@actiondock/mcp Adapter", () => {
       await new Promise((r) => setTimeout(r, 20));
     }
 
-    expect(callResult).toBeDefined();
-    expect(callResult.structuredContent).toEqual({ result: 42 });
-    expect(callResult.content.length).toBe(1);
+    assert.notStrictEqual(callResult, undefined);
+    assert.deepStrictEqual(callResult.structuredContent, { result: 42 });
+    assert.strictEqual(callResult.content.length, 1);
 
     const parsedEnvelope = JSON.parse(callResult.content[0].text);
-    expect(parsedEnvelope.ok).toBe(true);
-    expect(parsedEnvelope.runId).toBeDefined();
-    expect(parsedEnvelope.data).toEqual({ result: 42 });
+    assert.strictEqual(parsedEnvelope.ok, true);
+    assert.notStrictEqual(parsedEnvelope.runId, undefined);
+    assert.deepStrictEqual(parsedEnvelope.data, { result: 42 });
   });
 
   it("M07: input validation fails gracefully in MCP tool call", async () => {
@@ -325,7 +326,7 @@ describe("@actiondock/mcp Adapter", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     // SDK validates schema and either rejects param or returns isError
-    expect(callResult?.isError || callError).toBeTruthy();
+    assert.ok(callResult?.isError || callError);
   });
 
   it("M10: action error maps to MCP isError=true", async () => {
@@ -368,11 +369,11 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(callResult).toBeDefined();
-    expect(callResult.isError).toBe(true);
+    assert.notStrictEqual(callResult, undefined);
+    assert.strictEqual(callResult.isError, true);
     const parsed = JSON.parse(callResult.content[0].text);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("ACTION_FAILED");
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "ACTION_FAILED");
   });
 
   it("M14: MCP client cancellation propagates to ActionRunner signal", async () => {
@@ -437,18 +438,18 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 200));
 
-    expect(actionSignalAborted).toBe(true);
+    assert.strictEqual(actionSignalAborted, true);
   });
 
   it("M12, M13: HTTP Transport enforces security defaults and handles MCP requests", async () => {
     // M13: non-loopback without token throws
-    expect(() => {
+    assert.throws(() => {
       startMcpHttpServer({
         host: "0.0.0.0",
         port: 6188,
         projectRoot: tmpDir,
       });
-    }).toThrow("Authentication token is required when binding to a non-loopback address");
+    }, /Authentication token is required when binding to a non\-loopback address/);
 
     // Start with loopback default
     const serverInstance = await startMcpHttpServer({
@@ -463,16 +464,16 @@ describe("@actiondock/mcp Adapter", () => {
 
       // 1. Unauthorized health check
       const unauthHealth = await fetch(`${baseUrl}/health`);
-      expect(unauthHealth.status).toBe(401);
+      assert.strictEqual(unauthHealth.status, 401);
 
       // 2. Authorized health check
       const authHealth = await fetch(`${baseUrl}/health`, {
         headers: { Authorization: "Bearer mcp-secret-123" },
       });
-      expect(authHealth.status).toBe(200);
+      assert.strictEqual(authHealth.status, 200);
       const healthData = await authHealth.json();
-      expect(healthData.status).toBe("ok");
-      expect(healthData.protocol).toBe("mcp");
+      assert.strictEqual(healthData.status, "ok");
+      assert.strictEqual(healthData.protocol, "mcp");
 
       // 3. Unauthorized MCP POST
       const unauthMcp = await fetch(`${baseUrl}/mcp`, {
@@ -480,7 +481,7 @@ describe("@actiondock/mcp Adapter", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
       });
-      expect(unauthMcp.status).toBe(401);
+      assert.strictEqual(unauthMcp.status, 401);
 
       // 4. Authorized MCP POST
       const authMcp = await fetch(`${baseUrl}/mcp`, {
@@ -501,7 +502,7 @@ describe("@actiondock/mcp Adapter", () => {
           },
         }),
       });
-      expect(authMcp.status).toBe(200);
+      assert.strictEqual(authMcp.status, 200);
     } finally {
       await serverInstance.stop();
     }
@@ -531,9 +532,9 @@ describe("@actiondock/mcp Adapter", () => {
         headers: { "Content-Type": "application/json" },
         body: oversizedPayload,
       });
-      expect(unauthOversizedRes.status).toBe(401);
+      assert.strictEqual(unauthOversizedRes.status, 401);
       const unauthData = await unauthOversizedRes.json();
-      expect(unauthData.error?.code).toBe(-32000);
+      assert.strictEqual(unauthData.error?.code, -32000);
 
       // 验证未认证请求访问健康检查端点携带超大请求体，同样优先被 401 拦截
       const unauthHealthRes = await fetch(`${baseUrl}/health`, {
@@ -541,7 +542,7 @@ describe("@actiondock/mcp Adapter", () => {
         headers: { "Content-Type": "application/json" },
         body: oversizedPayload,
       });
-      expect(unauthHealthRes.status).toBe(401);
+      assert.strictEqual(unauthHealthRes.status, 401);
 
       // 验证已认证请求若携带超过 maxBodyBytes 的超大请求体，则如期返回 413 REQUEST_TOO_LARGE
       const authOversizedRes = await fetch(`${baseUrl}/mcp`, {
@@ -552,9 +553,9 @@ describe("@actiondock/mcp Adapter", () => {
         },
         body: oversizedPayload,
       });
-      expect(authOversizedRes.status).toBe(413);
+      assert.strictEqual(authOversizedRes.status, 413);
       const authOversizedData = await authOversizedRes.json();
-      expect(authOversizedData.error?.code).toBe("REQUEST_TOO_LARGE");
+      assert.strictEqual(authOversizedData.error?.code, "REQUEST_TOO_LARGE");
 
       // 验证已认证请求通过流式传输超过 maxBodyBytes 时同样被流式截断并返回 413
       const chunkedStream = new ReadableStream({
@@ -573,7 +574,7 @@ describe("@actiondock/mcp Adapter", () => {
         // @ts-ignore
         duplex: "half",
       });
-      expect(authStreamRes.status).toBe(413);
+      assert.strictEqual(authStreamRes.status, 413);
 
       // 验证已认证且体积正常的请求正常交互
       const normalPayload = JSON.stringify({
@@ -595,7 +596,7 @@ describe("@actiondock/mcp Adapter", () => {
         },
         body: normalPayload,
       });
-      expect(authNormalRes.status).toBe(200);
+      assert.strictEqual(authNormalRes.status, 200);
     } finally {
       await serverInstance.stop();
     }
@@ -703,23 +704,23 @@ describe("@actiondock/mcp Adapter", () => {
     await new Promise((r) => setTimeout(r, 350));
 
     // Assert M15 / M16: Async tool call returned taskId and working status
-    expect(asyncCallResult).toBeDefined();
-    expect(asyncCallResult.taskId).toBeDefined();
-    expect(asyncCallResult.status).toBe("running");
+    assert.notStrictEqual(asyncCallResult, undefined);
+    assert.notStrictEqual(asyncCallResult.taskId, undefined);
+    assert.strictEqual(asyncCallResult.status, "running");
 
     // Assert M15: tasks/get returned task payload
-    expect(taskGetWorkingResult).toBeDefined();
-    expect(taskGetWorkingResult.task.taskId).toBe(asyncCallResult.taskId);
-    expect(["working", "completed"]).toContain(taskGetWorkingResult.task.status);
+    assert.notStrictEqual(taskGetWorkingResult, undefined);
+    assert.strictEqual(taskGetWorkingResult.task.taskId, asyncCallResult.taskId);
+    assert.ok((["working", "completed"]).includes(taskGetWorkingResult.task.status));
 
     // Assert M18: tasks/list returned list of tasks
-    expect(taskListResult).toBeDefined();
-    expect(Array.isArray(taskListResult.tasks)).toBe(true);
-    expect(taskListResult.tasks.some((t: any) => t.taskId === asyncCallResult.taskId)).toBe(true);
+    assert.notStrictEqual(taskListResult, undefined);
+    assert.strictEqual(Array.isArray(taskListResult.tasks), true);
+    assert.strictEqual(taskListResult.tasks.some((t: any) => t.taskId === asyncCallResult.taskId), true);
 
     // Assert M17: tasks/cancel successfully cancelled task
-    expect(taskCancelResult).toBeDefined();
-    expect(taskCancelResult.status).toBe("cancelled");
+    assert.notStrictEqual(taskCancelResult, undefined);
+    assert.strictEqual(taskCancelResult.status, "cancelled");
   });
 
   it("M19: supports multiple directories with namespacing on collision", async () => {
@@ -848,17 +849,17 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(toolsList).toBeDefined();
+    assert.notStrictEqual(toolsList, undefined);
     const toolNames = toolsList.map((t: any) => t.name);
     // Non-colliding tools keep original names
-    expect(toolNames).toContain("unique1");
-    expect(toolNames).toContain("unique2");
+    assert.ok((toolNames).includes("unique1"));
+    assert.ok((toolNames).includes("unique2"));
     // Colliding 'echo' tools are namespaced with packageId_actionId
-    expect(toolNames).toContain("pkg-one_echo");
-    expect(toolNames).toContain("pkg-two_echo");
+    assert.ok((toolNames).includes("pkg-one_echo"));
+    assert.ok((toolNames).includes("pkg-two_echo"));
 
-    expect(callResult1?.structuredContent).toEqual({ from: "pkg1", msg: "hello" });
-    expect(callResult2?.structuredContent).toEqual({ ok: true });
+    assert.deepStrictEqual(callResult1?.structuredContent, { from: "pkg1", msg: "hello" });
+    assert.deepStrictEqual(callResult2?.structuredContent, { ok: true });
   });
 
   it("M20: supports packageIds and --all with customHome registry", async () => {
@@ -896,8 +897,8 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(toolsList).toBeDefined();
-    expect(toolsList.length).toBeGreaterThanOrEqual(4);
+    assert.notStrictEqual(toolsList, undefined);
+    assert.ok((toolsList.length) >= 4);
   });
 
   it("M21: toMcpResult wraps non-plain objects into { value: result.data }", () => {
@@ -907,8 +908,8 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-1",
       data: { score: 100, name: "alpha" },
     });
-    expect(objResult.structuredContent).toEqual({ score: 100, name: "alpha" });
-    expect(JSON.parse(objResult.content[0].text).ok).toBe(true);
+    assert.deepStrictEqual(objResult.structuredContent, { score: 100, name: "alpha" });
+    assert.strictEqual(JSON.parse(objResult.content[0].text).ok, true);
 
     // 2. String primitive
     const strResult = toMcpResult({
@@ -916,7 +917,7 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-2",
       data: "hello world",
     });
-    expect(strResult.structuredContent).toEqual({ value: "hello world" });
+    assert.deepStrictEqual(strResult.structuredContent, { value: "hello world" });
 
     // 3. Number primitive
     const numResult = toMcpResult({
@@ -924,7 +925,7 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-3",
       data: 42,
     });
-    expect(numResult.structuredContent).toEqual({ value: 42 });
+    assert.deepStrictEqual(numResult.structuredContent, { value: 42 });
 
     // 4. Boolean primitive
     const boolResult = toMcpResult({
@@ -932,7 +933,7 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-4",
       data: true,
     });
-    expect(boolResult.structuredContent).toEqual({ value: true });
+    assert.deepStrictEqual(boolResult.structuredContent, { value: true });
 
     // 5. Array
     const arrResult = toMcpResult({
@@ -940,7 +941,7 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-5",
       data: [1, 2, 3],
     });
-    expect(arrResult.structuredContent).toEqual({ value: [1, 2, 3] });
+    assert.deepStrictEqual(arrResult.structuredContent, { value: [1, 2, 3] });
 
     // 6. null and undefined
     const nullResult = toMcpResult({
@@ -948,14 +949,14 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-6",
       data: null,
     });
-    expect(nullResult.structuredContent).toEqual({ value: null });
+    assert.deepStrictEqual(nullResult.structuredContent, { value: null });
 
     const undefResult = toMcpResult({
       ok: true,
       runId: "run-7",
       data: undefined as any,
     });
-    expect(undefResult.structuredContent).toEqual({ value: undefined });
+    assert.deepStrictEqual(undefResult.structuredContent, { value: undefined });
 
     // 7. Error case
     const errResult = toMcpResult({
@@ -963,8 +964,8 @@ describe("@actiondock/mcp Adapter", () => {
       runId: "run-8",
       error: { code: "ERR", message: "fail" },
     });
-    expect(errResult.isError).toBe(true);
-    expect(errResult.structuredContent).toBeUndefined();
+    assert.strictEqual(errResult.isError, true);
+    assert.strictEqual(errResult.structuredContent, undefined);
   });
 
   it("M22: server.close() preserves external storage and closes internal storage", async () => {
@@ -983,16 +984,16 @@ describe("@actiondock/mcp Adapter", () => {
       storage: mockStorage,
     });
 
-    expect(typeof server.close).toBe("function");
+    assert.strictEqual(typeof server.close, "function");
     await server.close();
     // External storage provided by caller must NOT be closed
-    expect(storageClosed).toBe(false);
+    assert.strictEqual(storageClosed, false);
 
     // Internal storage created by server should be closed cleanly
     const internalServer = await createActionDockMcpServer({
       projectRoot: tmpDir,
     });
-    await expect(internalServer.close()).resolves.toBeUndefined();
+    await (internalServer.close());
   });
 
   it("M23: sanitizes scoped package names and enforces 64-character limit on MCP tool names", async () => {
@@ -1069,19 +1070,19 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(toolsList).toBeDefined();
+    assert.notStrictEqual(toolsList, undefined);
     const toolNames = toolsList.map((t: any) => t.name);
 
     // simple-pkg_reconcile
-    expect(toolNames).toContain("simple-pkg_reconcile");
+    assert.ok((toolNames).includes("simple-pkg_reconcile"));
 
     // The long scoped tool name should not contain @ or /
     const longTool = toolsList.find((t: any) => !t.name.startsWith("simple-pkg"));
-    expect(longTool).toBeDefined();
-    expect(longTool.name).not.toContain("@");
-    expect(longTool.name).not.toContain("/");
+    assert.notStrictEqual(longTool, undefined);
+    assert.ok(!(longTool.name).includes("@"));
+    assert.ok(!(longTool.name).includes("/"));
     // Must be <= 64 characters
-    expect(longTool.name.length).toBeLessThanOrEqual(64);
+    assert.ok((longTool.name.length) <= 64);
 
     await server.close();
   });
@@ -1123,12 +1124,12 @@ describe("@actiondock/mcp Adapter", () => {
     // tasks/get for timed_out should map to failed
     const reqHandler = (server.server as any)._requestHandlers.get("tasks/get");
     const getRes = await reqHandler({ method: "tasks/get", params: { taskId: "task-timed-out" } });
-    expect(getRes.task.status).toBe("failed");
+    assert.strictEqual(getRes.task.status, "failed");
 
     // tasks/cancel on already success task should return completed, not cancelled
     const cancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
     const cancelRes = await cancelHandler({ method: "tasks/cancel", params: { taskId: "task-success" } });
-    expect(cancelRes.status).toBe("completed");
+    assert.strictEqual(cancelRes.status, "completed");
 
     await server.close();
   });
@@ -1187,11 +1188,11 @@ describe("@actiondock/mcp Adapter", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(callResult).toBeDefined();
-    expect(callResult.isError).toBeFalsy();
-    expect(receivedInput).toEqual({ query: "test" });
-    expect(receivedInput.execution).toBeUndefined();
-    expect(receivedInput.__async).toBeUndefined();
+    assert.notStrictEqual(callResult, undefined);
+    assert.ok(!(callResult.isError));
+    assert.deepStrictEqual(receivedInput, { query: "test" });
+    assert.strictEqual(receivedInput.execution, undefined);
+    assert.strictEqual(receivedInput.__async, undefined);
 
     await server.close();
   });
@@ -1212,7 +1213,7 @@ describe("@actiondock/mcp Adapter", () => {
     });
 
     await server.close();
-    expect(serviceClosed).toBe(true);
+    assert.strictEqual(serviceClosed, true);
   });
 
   it("coordinates service.close() on startMcpHttpServer stop()", async () => {
@@ -1231,7 +1232,7 @@ describe("@actiondock/mcp Adapter", () => {
     });
 
     await httpServer.stop();
-    expect(serviceClosed).toBe(true);
+    assert.strictEqual(serviceClosed, true);
   });
 
   it("passes customHome to service resolution correctly", async () => {
@@ -1246,7 +1247,7 @@ describe("@actiondock/mcp Adapter", () => {
         // 测试独立持有实例：close 必须级联释放 service 及其 SQLite 句柄，否则 Windows 下临时目录无法删除
         cascadeServiceClose: true,
       });
-      expect(server).toBeDefined();
+      assert.notStrictEqual(server, undefined);
       await server.close();
     } finally {
       rmSync(fakeHome, { recursive: true, force: true, maxRetries: 3 });
@@ -1271,7 +1272,7 @@ describe("@actiondock/mcp Adapter", () => {
       host: "127.0.0.1",
     });
 
-    await expect(httpServer.stop()).rejects.toThrow("Simulated Service Close Failure");
+    await assert.rejects(httpServer.stop(), /Simulated Service Close Failure/);
   });
 
   it("maps playbooks to read-only MCP Resource and Prompt", async () => {
@@ -1333,10 +1334,10 @@ describe("@actiondock/mcp Adapter", () => {
 
     await pbPromise;
 
-    expect(resourcesList.resources.some((r: any) => r.uri === "playbook://test.guide")).toBe(true);
-    expect(resourceRead.contents[0].text).toContain("Step 1");
-    expect(promptsList.prompts.some((p: any) => p.name === "test.guide")).toBe(true);
-    expect(promptGet.messages[0].content.text).toContain("Step 1");
+    assert.strictEqual(resourcesList.resources.some((r: any) => r.uri === "playbook://test.guide"), true);
+    assert.ok((resourceRead.contents[0].text).includes("Step 1"));
+    assert.strictEqual(promptsList.prompts.some((p: any) => p.name === "test.guide"), true);
+    assert.ok((promptGet.messages[0].content.text).includes("Step 1"));
 
     await server.close();
   });
@@ -1397,10 +1398,10 @@ describe("@actiondock/mcp Adapter", () => {
 
     await callPromise;
 
-    expect(callResult.isError).toBeFalsy();
+    assert.ok(!(callResult.isError));
     const parsed = JSON.parse(callResult.content[0].text);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.stdout).toBe("mcp process works");
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.stdout, "mcp process works");
 
     await server.close();
   });

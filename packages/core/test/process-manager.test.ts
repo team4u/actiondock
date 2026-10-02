@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   decodeText,
   encodeBytes,
@@ -79,24 +80,24 @@ describe("受管进程管理器 ProcessManager", () => {
         spec: defaultSpec,
       });
 
-      expect(startResult.process.id).toBeDefined();
-      expect(startResult.process.state).toBe("running");
-      expect(startResult.process.control).toBe("free");
-      expect(startResult.initialCursor.startsWith("cur_")).toBe(true);
+      assert.notStrictEqual(startResult.process.id, undefined);
+      assert.strictEqual(startResult.process.state, "running");
+      assert.strictEqual(startResult.process.control, "free");
+      assert.strictEqual(startResult.initialCursor.startsWith("cur_"), true);
 
       const inspectResult = await manager.inspect(ownerA, startResult.process.id);
-      expect(inspectResult.id).toBe(startResult.process.id);
-      expect(inspectResult.state).toBe("running");
-      expect(inspectResult.control).toBe("free");
+      assert.strictEqual(inspectResult.id, startResult.process.id);
+      assert.strictEqual(inspectResult.state, "running");
+      assert.strictEqual(inspectResult.control, "free");
 
-      expect(driver.handles.has(startResult.process.id)).toBe(true);
+      assert.strictEqual(driver.handles.has(startResult.process.id), true);
     });
 
     it("spec.io 为 pty 且 driver 不支持时抛出 UNSUPPORTED_CAPABILITY", async () => {
       const { manager, driver } = createManager();
       driver.setCapabilities({ pty: false });
 
-      await expect(
+      await assert.rejects(
         manager.start(ownerA, {
           requestId: "req-pty-1",
           spec: {
@@ -105,7 +106,7 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pty", cols: 80, rows: 24, term: "xterm" },
           },
         })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       try {
         await manager.start(ownerA, {
@@ -116,9 +117,9 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pty", cols: 80, rows: 24, term: "xterm" },
           },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
+        assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
       }
     });
 
@@ -135,8 +136,8 @@ describe("受管进程管理器 ProcessManager", () => {
         spec: defaultSpec,
       });
 
-      expect(second.process.id).toBe(first.process.id);
-      expect(second.initialCursor).toBe(first.initialCursor);
+      assert.strictEqual(second.process.id, first.process.id);
+      assert.strictEqual(second.initialCursor, first.initialCursor);
     });
 
     it("启动请求冲突校验：相同 requestId 与不同负载抛出 REQUEST_CONFLICT", async () => {
@@ -147,7 +148,7 @@ describe("受管进程管理器 ProcessManager", () => {
         spec: defaultSpec,
       });
 
-      await expect(
+      await assert.rejects(
         manager.start(ownerA, {
           requestId: "req-conflict-1",
           spec: {
@@ -156,7 +157,7 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pipe" },
           },
         })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       try {
         await manager.start(ownerA, {
@@ -167,9 +168,9 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pipe" },
           },
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(REQUEST_CONFLICT);
+        assert.strictEqual(err.code, REQUEST_CONFLICT);
       }
     });
 
@@ -194,12 +195,12 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       const converged = await manager.initialize();
-      expect(converged).toBe(1);
+      assert.strictEqual(converged, 1);
 
       const oldProc = await metadataStore.getProcess("proc-old-1");
-      expect(oldProc?.state).toBe("lost");
-      expect(oldProc?.control).toBe("closed");
-      expect(oldProc?.endReason).toBe("host-lost");
+      assert.strictEqual(oldProc?.state, "lost");
+      assert.strictEqual(oldProc?.control, "closed");
+      assert.strictEqual(oldProc?.endReason, "host-lost");
     });
   });
 
@@ -221,10 +222,10 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       const listA = await manager.list(ownerA, {});
-      expect(listA.processes.length).toBe(2);
+      assert.strictEqual(listA.processes.length, 2);
 
       const listB = await manager.list(ownerB, {});
-      expect(listB.processes.length).toBe(1);
+      assert.strictEqual(listB.processes.length, 1);
     });
   });
 
@@ -242,15 +243,15 @@ describe("受管进程管理器 ProcessManager", () => {
       await manager.start(ownerA, { requestId: "req-q-2", spec: defaultSpec });
 
       // 第三次超出配额 2
-      await expect(
+      await assert.rejects(
         manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       try {
         await manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(QUOTA_EXCEEDED);
+        assert.strictEqual(err.code, QUOTA_EXCEEDED);
       }
     });
 
@@ -270,8 +271,8 @@ describe("受管进程管理器 ProcessManager", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const info = await manager.inspect(ownerA, processId);
-      expect(info.state).toBe("exited");
-      expect(info.endReason).toBe("idle");
+      assert.strictEqual(info.state, "exited");
+      assert.strictEqual(info.endReason, "idle");
     });
   });
 
@@ -293,17 +294,17 @@ describe("受管进程管理器 ProcessManager", () => {
         maxOutputBytes: 1024,
       });
 
-      expect(result.exit.code).toBe(0);
-      expect(result.chunks.length).toBe(2);
-      expect(decodeText(result.chunks[0].data)).toBe("line 1\n");
-      expect(decodeText(result.chunks[1].data)).toBe("err 1\n");
-      expect(result.truncated).toBe(false);
+      assert.strictEqual(result.exit.code, 0);
+      assert.strictEqual(result.chunks.length, 2);
+      assert.strictEqual(decodeText(result.chunks[0].data), "line 1\n");
+      assert.strictEqual(decodeText(result.chunks[1].data), "err 1\n");
+      assert.strictEqual(result.truncated, false);
     });
 
     it("非 pipe 模式拒绝执行并抛出 UNSUPPORTED_CAPABILITY", async () => {
       const { manager } = createManager();
 
-      await expect(
+      await assert.rejects(
         manager.run(ownerA, {
           spec: {
             executable: "echo",
@@ -313,7 +314,7 @@ describe("受管进程管理器 ProcessManager", () => {
           timeoutMs: 1000,
           maxOutputBytes: 1024,
         })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       try {
         await manager.run(ownerA, {
@@ -325,9 +326,9 @@ describe("受管进程管理器 ProcessManager", () => {
           timeoutMs: 1000,
           maxOutputBytes: 1024,
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
+        assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
       }
     });
 
@@ -347,8 +348,8 @@ describe("受管进程管理器 ProcessManager", () => {
         maxOutputBytes: 5,
       });
 
-      expect(result.truncated).toBe(true);
-      expect(decodeText(result.chunks[0].data)).toBe("01234");
+      assert.strictEqual(result.truncated, true);
+      assert.strictEqual(decodeText(result.chunks[0].data), "01234");
     });
 
     it("执行超时自动清理进程并抛出 PROCESS_TIMEOUT", async () => {
@@ -358,13 +359,13 @@ describe("受管进程管理器 ProcessManager", () => {
         // 不触发 onExit 模拟超时
       };
 
-      await expect(
+      await assert.rejects(
         manager.run(ownerA, {
           spec: defaultSpec,
           timeoutMs: 50,
           maxOutputBytes: 1024,
         })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       try {
         await manager.run(ownerA, {
@@ -372,9 +373,9 @@ describe("受管进程管理器 ProcessManager", () => {
           timeoutMs: 50,
           maxOutputBytes: 1024,
         });
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
-        expect(err.code).toBe(PROCESS_TIMEOUT);
+        assert.strictEqual(err.code, PROCESS_TIMEOUT);
       }
     });
   });
@@ -404,14 +405,14 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       // 终止失败：保留 stopping，不伪造 exit
-      expect(stopped.state).toBe("stopping");
-      expect(stopped.exit).toBeUndefined();
+      assert.strictEqual(stopped.state, "stopping");
+      assert.strictEqual(stopped.exit, undefined);
 
       // 真实退出事件到达后正常收敛为 exited
       handle.emitExit(9, null);
       const info = await manager.inspect(ownerA, processId);
-      expect(info.state).toBe("exited");
-      expect(info.exit?.code).toBe(9);
+      assert.strictEqual(info.state, "exited");
+      assert.strictEqual(info.exit?.code, 9);
     });
 
     it("并发同 requestId 的 start 仅派生一个进程（幂等预占原子性）", async () => {
@@ -427,8 +428,8 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       const [r1, r2] = await Promise.all([p1, p2]);
-      expect(r2.process.id).toBe(r1.process.id);
-      expect(driver.handles.size).toBe(1);
+      assert.strictEqual(r2.process.id, r1.process.id);
+      assert.strictEqual(driver.handles.size, 1);
     });
 
     it("终态且输出关闭后的进程被驱逐出内存表且释放驱动句柄", async () => {
@@ -457,13 +458,13 @@ describe("受管进程管理器 ProcessManager", () => {
       await new Promise((resolve) => setTimeout(resolve, 40));
 
       // 记录已从内存表移除且驱动句柄已释放
-      expect((manager as any).processes.has(processId)).toBe(false);
-      expect(disposedIds).toContain(processId);
+      assert.strictEqual((manager as any).processes.has(processId), false);
+      assert.ok((disposedIds).includes(processId));
 
       // 驱逐后仍可查询状态与游标读取
       const info = await manager.inspect(ownerA, processId);
-      expect(info.state).toBe("exited");
-      expect(info.outputClosed).toBe(true);
+      assert.strictEqual(info.state, "exited");
+      assert.strictEqual(info.outputClosed, true);
     });
 
     it("shutdown 停止全部活跃进程并清理定时器", async () => {
@@ -476,13 +477,13 @@ describe("受管进程管理器 ProcessManager", () => {
 
       const i1 = await manager.inspect(ownerA, s1.process.id);
       const i2 = await manager.inspect(ownerA, s2.process.id);
-      expect(i1.state).toBe("exited");
-      expect(i2.state).toBe("exited");
+      assert.strictEqual(i1.state, "exited");
+      assert.strictEqual(i2.state, "exited");
 
       // 关闭后拒绝新请求
-      await expect(
+      await assert.rejects(
         manager.start(ownerA, { requestId: "req-sd-3", spec: defaultSpec })
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       // 重复 shutdown 幂等
       await manager.shutdown();
@@ -501,12 +502,12 @@ describe("受管进程管理器 ProcessManager", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const info = await manager.inspect(ownerA, processId);
-      expect(info.state).toBe("exited");
-      expect(info.endReason).toBe("idle");
+      assert.strictEqual(info.state, "exited");
+      assert.strictEqual(info.endReason, "idle");
 
       const { metadataStore } = { metadataStore: (manager as any).metadataStore };
       const record = await metadataStore.getProcess(processId);
-      expect(record?.endReason).toBe("idle");
+      assert.strictEqual(record?.endReason, "idle");
     });
 
     it("run 在派生前信号已中止时不派生进程直接抛出取消错误", async () => {
@@ -515,7 +516,7 @@ describe("受管进程管理器 ProcessManager", () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
+      await assert.rejects(
         manager.run(
           ownerA,
           {
@@ -525,22 +526,22 @@ describe("受管进程管理器 ProcessManager", () => {
           },
           { signal: controller.signal }
         )
-      ).rejects.toThrow(ProcessError);
+      , ProcessError);
 
       // 未派生任何进程
-      expect(driver.handles.size).toBe(0);
+      assert.strictEqual(driver.handles.size, 0);
     });
 
     it("ContextProcessAPI 暴露 manager、owner 与 runScoped 协同属性", async () => {
       const { manager } = createManager();
 
       const scopedApi = manager.forOwner(ownerA, "run-scoped-1");
-      expect(scopedApi.manager).toBe(manager);
-      expect(scopedApi.owner).toBe(ownerA);
-      expect(scopedApi.runScoped).toBe(true);
+      assert.strictEqual(scopedApi.manager, manager);
+      assert.strictEqual(scopedApi.owner, ownerA);
+      assert.strictEqual(scopedApi.runScoped, true);
 
       const unscopedApi = manager.forOwner(ownerA);
-      expect(unscopedApi.runScoped).toBe(false);
+      assert.strictEqual(unscopedApi.runScoped, false);
     });
 
   });
@@ -560,9 +561,9 @@ describe("受管进程管理器 ProcessManager", () => {
         }),
       ]);
 
-      expect(resA.process.id).toBeDefined();
-      expect(resB.process.id).toBeDefined();
-      expect(resA.process.id).not.toBe(resB.process.id);
+      assert.notStrictEqual(resA.process.id, undefined);
+      assert.notStrictEqual(resB.process.id, undefined);
+      assert.notStrictEqual(resA.process.id, resB.process.id);
     });
 
     it("[Issue 1] 相同所有者并发使用相同 requestId 但不同负载时，立即抛出 REQUEST_CONFLICT", async () => {
@@ -579,8 +580,8 @@ describe("受管进程管理器 ProcessManager", () => {
 
       const results = await Promise.allSettled([start1, start2]);
       const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
-      expect(rejected).toBeDefined();
-      expect(((rejected!.reason as ProcessError) || {}).code).toBe(REQUEST_CONFLICT);
+      assert.notStrictEqual(rejected, undefined);
+      assert.strictEqual(((rejected!.reason as ProcessError) || {}).code, REQUEST_CONFLICT);
     });
 
     it("[Issue 2] Runner 构造 Action 上下文时正确继承包实例所有者，实现跨包进程隔离", () => {
@@ -609,10 +610,10 @@ describe("受管进程管理器 ProcessManager", () => {
         owner: ownerB,
       });
 
-      expect((ctxA.process as any).owner.packageInstanceId).toBe("pkg-1");
-      expect((ctxB.process as any).owner.packageInstanceId).toBe("pkg-2");
-      expect((ctxA.process as any).owner.tenantId).toBe("tenant-a");
-      expect((ctxB.process as any).owner.tenantId).toBe("tenant-b");
+      assert.strictEqual((ctxA.process as any).owner.packageInstanceId, "pkg-1");
+      assert.strictEqual((ctxB.process as any).owner.packageInstanceId, "pkg-2");
+      assert.strictEqual((ctxA.process as any).owner.tenantId, "tenant-a");
+      assert.strictEqual((ctxB.process as any).owner.tenantId, "tenant-b");
     });
 
     it("[Issue 3] stop() 保持 stopping 状态且不提前关闭输出，真实输出关闭后才标记 outputClosed", async () => {
@@ -638,9 +639,9 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       // stop 完成时状态为 stopping，输出未关闭
-      expect(stopInfo.state).toBe("stopping");
-      expect(stopInfo.control).toBe("closed");
-      expect(stopInfo.outputClosed).toBe(false);
+      assert.strictEqual(stopInfo.state, "stopping");
+      assert.strictEqual(stopInfo.control, "closed");
+      assert.strictEqual(stopInfo.outputClosed, false);
 
       // 允许底层驱动在 stop 后继续刷入尾部输出
       handle.emitOutput("stdout", "trailing-output");
@@ -650,8 +651,8 @@ describe("受管进程管理器 ProcessManager", () => {
       handle.emitOutputClosed("natural");
 
       const finalInfo = await manager.inspect(ownerA, processId);
-      expect(finalInfo.state).toBe("exited");
-      expect(finalInfo.outputClosed).toBe(true);
+      assert.strictEqual(finalInfo.state, "exited");
+      assert.strictEqual(finalInfo.outputClosed, true);
 
       const readRes = await manager.read(ownerA, processId, {
         cursor: startRes.initialCursor,
@@ -659,7 +660,7 @@ describe("受管进程管理器 ProcessManager", () => {
         waitMs: 0,
         onGap: "error",
       });
-      expect(decodeText(readRes.chunks)).toContain("trailing-output");
+      assert.ok((decodeText(readRes.chunks)).includes("trailing-output"));
     });
 
     it("[Issue 6] 终态保留输出日志纳入宿主配额，超额时按 LRU 淘汰旧日志", async () => {
@@ -685,7 +686,7 @@ describe("受管进程管理器 ProcessManager", () => {
         spec: defaultSpec,
         limits: { outputBufferBytes: 1024 },
       });
-      expect(p2.process.id).toBeDefined();
+      assert.notStrictEqual(p2.process.id, undefined);
 
       // p1 终态日志已被淘汰，当 onGap="error" 时抛出 OUTPUT_UNAVAILABLE 错误
       let readErr: any;
@@ -699,8 +700,8 @@ describe("受管进程管理器 ProcessManager", () => {
       } catch (err) {
         readErr = err;
       }
-      expect(readErr).toBeInstanceOf(ProcessError);
-      expect(readErr?.code).toBe(OUTPUT_UNAVAILABLE);
+      assert.ok(readErr instanceof ProcessError);
+      assert.strictEqual(readErr?.code, OUTPUT_UNAVAILABLE);
 
       // 墓碑机制移除后，已淘汰进程直接抛出 OUTPUT_UNAVAILABLE
       let skipErr: any;
@@ -714,8 +715,8 @@ describe("受管进程管理器 ProcessManager", () => {
       } catch (err) {
         skipErr = err;
       }
-      expect(skipErr).toBeInstanceOf(ProcessError);
-      expect(skipErr?.code).toBe(OUTPUT_UNAVAILABLE);
+      assert.ok(skipErr instanceof ProcessError);
+      assert.strictEqual(skipErr?.code, OUTPUT_UNAVAILABLE);
     });
 
     it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {
@@ -736,12 +737,12 @@ describe("受管进程管理器 ProcessManager", () => {
       });
 
       // 启动结果中状态必须保留为 exited，不能被覆写为 running
-      expect(res.process.state).toBe("exited");
-      expect(res.process.exit?.code).toBe(42);
+      assert.strictEqual(res.process.state, "exited");
+      assert.strictEqual(res.process.exit?.code, 42);
 
       const inspectRes = await manager.inspect(ownerA, res.process.id);
-      expect(inspectRes.state).toBe("exited");
-      expect(inspectRes.exit?.code).toBe(42);
+      assert.strictEqual(inspectRes.state, "exited");
+      assert.strictEqual(inspectRes.exit?.code, 42);
     });
 
     it("[Issue 8] 首次 start 失败时，同 requestId 并发等待方收到原始错误码而非 REQUEST_CONFLICT", async () => {
@@ -762,15 +763,15 @@ describe("受管进程管理器 ProcessManager", () => {
       ]);
 
       // 首个执行者与并发等待方均应收到原始失败（PROCESS_SPAWN_ERROR），而非固定 REQUEST_CONFLICT
-      expect(r1.status).toBe("rejected");
-      expect(r2.status).toBe("rejected");
+      assert.strictEqual(r1.status, "rejected");
+      assert.strictEqual(r2.status, "rejected");
       const err1 = (r1 as PromiseRejectedResult).reason as ProcessError;
       const err2 = (r2 as PromiseRejectedResult).reason as ProcessError;
-      expect(err1).toBeInstanceOf(ProcessError);
-      expect(err2).toBeInstanceOf(ProcessError);
-      expect(err1.code).toBe(PROCESS_SPAWN_ERROR);
-      expect(err2.code).toBe(PROCESS_SPAWN_ERROR);
-      expect(err2.message).toContain("simulated driver spawn failure");
+      assert.ok(err1 instanceof ProcessError);
+      assert.ok(err2 instanceof ProcessError);
+      assert.strictEqual(err1.code, PROCESS_SPAWN_ERROR);
+      assert.strictEqual(err2.code, PROCESS_SPAWN_ERROR);
+      assert.ok((err2.message).includes("simulated driver spawn failure"));
     });
 
     it("[Issue 8] 并发同 requestId 的 write 幂等入队：仅一次入队且等待方收到一致收据", async () => {
@@ -795,13 +796,13 @@ describe("受管进程管理器 ProcessManager", () => {
       ]);
 
       // 入队幂等：两个并发调用都成功且收到同一收据
-      expect(w1.status).toBe("fulfilled");
-      expect(w2.status).toBe("fulfilled");
+      assert.strictEqual(w1.status, "fulfilled");
+      assert.strictEqual(w2.status, "fulfilled");
       const r1 = (w1 as PromiseFulfilledResult<any>).value;
       const r2 = (w2 as PromiseFulfilledResult<any>).value;
-      expect(r1.requestId).toBe("req-fail-prop-write");
-      expect(r2.requestId).toBe("req-fail-prop-write");
-      expect(r1.state).toBe(r2.state);
+      assert.strictEqual(r1.requestId, "req-fail-prop-write");
+      assert.strictEqual(r2.requestId, "req-fail-prop-write");
+      assert.strictEqual(r1.state, r2.state);
     });
 });
 });

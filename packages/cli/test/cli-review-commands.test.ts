@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -12,7 +14,7 @@ const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 let customHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -64,16 +66,16 @@ describe("CLI Review - Commands & Arguments Regression", () => {
 
   it("supports -v, -V, and --version flags returning exit code 0 and package version", async () => {
     const vProc = await runCliAsync(["-v"], tempDir, env);
-    expect(vProc.exitCode).toBe(0);
-    expect(vProc.stdout.toString().trim()).toBe(pkg.version);
+    assert.strictEqual(vProc.exitCode, 0);
+    assert.strictEqual(vProc.stdout.toString().trim(), pkg.version);
 
     const capVProc = await runCliAsync(["-V"], tempDir, env);
-    expect(capVProc.exitCode).toBe(0);
-    expect(capVProc.stdout.toString().trim()).toBe(pkg.version);
+    assert.strictEqual(capVProc.exitCode, 0);
+    assert.strictEqual(capVProc.stdout.toString().trim(), pkg.version);
 
     const fullVProc = await runCliAsync(["--version"], tempDir, env);
-    expect(fullVProc.exitCode).toBe(0);
-    expect(fullVProc.stdout.toString().trim()).toBe(pkg.version);
+    assert.strictEqual(fullVProc.exitCode, 0);
+    assert.strictEqual(fullVProc.stdout.toString().trim(), pkg.version);
   });
 
   it("supports full action resource subcommands and strictly rejects legacy new/create commands", async () => {
@@ -81,94 +83,94 @@ describe("CLI Review - Commands & Arguments Regression", () => {
 
     // 1. ad action list
     const listProc = await runCliAsync(["action", "list", "--json"], tempDir);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(listData.items.some((a: any) => a.id === "sample.greet")).toBe(true);
+    assert.strictEqual(listData.items.some((a: any) => a.id === "sample.greet"), true);
 
     // 2. ad action describe / show
     const descProc = await runCliAsync(["action", "describe", "sample.greet", "--json"], tempDir);
-    expect(descProc.exitCode).toBe(0);
+    assert.strictEqual(descProc.exitCode, 0);
     const descData = JSON.parse(descProc.stdout.toString());
-    expect(descData.id).toBe("sample.greet");
+    assert.strictEqual(descData.id, "sample.greet");
 
     const showProc = await runCliAsync(["action", "show", "sample.greet", "--json"], tempDir);
-    expect(showProc.exitCode).toBe(0);
-    expect(JSON.parse(showProc.stdout.toString()).id).toBe("sample.greet");
+    assert.strictEqual(showProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(showProc.stdout.toString()).id, "sample.greet");
 
     // 3. ad action validate
     const valProc = await runCliAsync(["action", "validate", "sample.greet", "--json"], tempDir);
-    expect(valProc.exitCode).toBe(0);
-    expect(JSON.parse(valProc.stdout.toString()).valid).toBe(true);
+    assert.strictEqual(valProc.exitCode, 0);
+    assert.strictEqual(JSON.parse(valProc.stdout.toString()).valid, true);
 
     // 4. ad action run
     const runProc = await runCliAsync(["action", "run", "sample.greet", "--input", '{"name":"Tester"}', "--json"], tempDir);
-    expect(runProc.exitCode).toBe(0);
+    assert.strictEqual(runProc.exitCode, 0);
     const runRes = JSON.parse(runProc.stdout.toString());
-    expect(runRes.ok).toBe(true);
-    expect(runRes.data.message).toBe("Hello, Tester!");
+    assert.strictEqual(runRes.ok, true);
+    assert.strictEqual(runRes.data.message, "Hello, Tester!");
 
     // 5. 验证彻底移除历史包袱：ad new、ad create 与 ad playbook new 均被拒绝
     const newActProc = await runCliAsync(["new", "action", "another-action"], tempDir);
-    expect(newActProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(newActProc.exitCode, 0);
 
     const createActProc = await runCliAsync(["create", "action", "another-action"], tempDir);
-    expect(createActProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(createActProc.exitCode, 0);
 
     const pbNewProc = await runCliAsync(["playbook", "new", "sop-task"], tempDir);
-    expect(pbNewProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(pbNewProc.exitCode, 0);
   });
 
   it("supports ad action create and rejects legacy action new alias", async () => {
     await runCliAsync(["init", "--id", "test.action-cmd", "."], tempDir);
 
     const createProc = await runCliAsync(["action", "create", "worker-task", "--desc", "Worker Task"], tempDir);
-    expect(createProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "actions", "worker-task.ts"))).toBe(true);
+    assert.strictEqual(createProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "worker-task.ts")), true);
     const workerContent = readFileSync(join(tempDir, "actions", "worker-task.ts"), "utf-8");
-    expect(workerContent).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
-    expect(workerContent).toContain('export type Input = ActionInput<"worker-task">;');
-    expect(workerContent).toContain('export type Output = ActionOutput<"worker-task">;');
+    assert.ok((workerContent).includes('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";'));
+    assert.ok((workerContent).includes('export type Input = ActionInput<"worker-task">;'));
+    assert.ok((workerContent).includes('export type Output = ActionOutput<"worker-task">;'));
 
     const create2Proc = await runCliAsync(["action", "create", "worker-task2", "--desc", "Worker Task 2"], tempDir);
-    expect(create2Proc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "actions", "worker-task2.ts"))).toBe(true);
+    assert.strictEqual(create2Proc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "worker-task2.ts")), true);
     const worker2Content = readFileSync(join(tempDir, "actions", "worker-task2.ts"), "utf-8");
-    expect(worker2Content).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
-    expect(worker2Content).toContain('export type Input = ActionInput<"worker-task2">;');
-    expect(worker2Content).toContain('export type Output = ActionOutput<"worker-task2">;');
+    assert.ok((worker2Content).includes('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";'));
+    assert.ok((worker2Content).includes('export type Input = ActionInput<"worker-task2">;'));
+    assert.ok((worker2Content).includes('export type Output = ActionOutput<"worker-task2">;'));
 
     // 验证废弃别名 action new 被严格拒绝
     const legacyNewProc = await runCliAsync(["action", "new", "worker-task3"], tempDir);
-    expect(legacyNewProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(legacyNewProc.exitCode, 0);
 
     const typesPath = join(tempDir, ".actiondock", "generated", "actions.d.ts");
-    expect(existsSync(typesPath)).toBe(true);
+    assert.strictEqual(existsSync(typesPath), true);
     const typesContent = readFileSync(typesPath, "utf-8");
-    expect(typesContent).toContain('"worker-task": {');
-    expect(typesContent).toContain('"worker-task2": {');
+    assert.ok((typesContent).includes('"worker-task": {'));
+    assert.ok((typesContent).includes('"worker-task2": {'));
 
     // 验证 --input 和 --output 快捷字段契约与中性占位模版生成
     const greetProc = await runCliAsync(
       ["action", "create", "custom-greet", "--desc", "Greet Action", "--input", "name:string", "--output", "message:string"],
       tempDir
     );
-    expect(greetProc.exitCode).toBe(0);
+    assert.strictEqual(greetProc.exitCode, 0);
     const greetActionFile = readFileSync(join(tempDir, "actions", "custom-greet.ts"), "utf-8");
-    expect(greetActionFile).toContain('message: "done",');
+    assert.ok((greetActionFile).includes('message: "done",'));
     const manifestJson = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(manifestJson.actions["custom-greet"].inputSchema.properties.name.type).toBe("string");
-    expect(manifestJson.actions["custom-greet"].outputSchema.properties.message.type).toBe("string");
+    assert.strictEqual(manifestJson.actions["custom-greet"].inputSchema.properties.name.type, "string");
+    assert.strictEqual(manifestJson.actions["custom-greet"].outputSchema.properties.message.type, "string");
 
     // 验证带有自定义输入与输出字段时的中性类型占位生成，确保不产生虚假字段访问
     const calcProc = await runCliAsync(
       ["action", "create", "calculate", "--input", "count:number", "--output", "success:boolean,total:number"],
       tempDir
     );
-    expect(calcProc.exitCode).toBe(0);
+    assert.strictEqual(calcProc.exitCode, 0);
     const calcContent = readFileSync(join(tempDir, "actions", "calculate.ts"), "utf-8");
-    expect(calcContent).toContain("success: true,");
-    expect(calcContent).toContain("total: 0,");
-    expect(calcContent).not.toContain("exampleParam");
+    assert.ok((calcContent).includes("success: true,"));
+    assert.ok((calcContent).includes("total: 0,"));
+    assert.ok(!(calcContent).includes("exampleParam"));
   });
 
   it("enforces strict target resolution with exit code 2 on nonexistent package across all commands", async () => {
@@ -176,74 +178,74 @@ describe("CLI Review - Commands & Arguments Regression", () => {
 
     // 1. ad info -P
     const infoProc = await runCliAsync(["info", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(infoProc.exitCode).toBe(2);
+    assert.strictEqual(infoProc.exitCode, 2);
     const infoJson = JSON.parse(infoProc.stdout.toString());
-    expect(infoJson.ok).toBe(false);
-    expect(infoJson.error.code).toBe("INVALID_ARGUMENT");
-    expect(infoJson.error.message).toContain(`Package '${nonExistentId}' not found`);
+    assert.strictEqual(infoJson.ok, false);
+    assert.strictEqual(infoJson.error.code, "INVALID_ARGUMENT");
+    assert.ok((infoJson.error.message).includes(`Package '${nonExistentId}' not found`));
 
     // 2. ad list -P
     const actListProc = await runCliAsync(["list", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(actListProc.exitCode).toBe(2);
+    assert.strictEqual(actListProc.exitCode, 2);
     const actListJson = JSON.parse(actListProc.stdout.toString());
-    expect(actListJson.ok).toBe(false);
-    expect(actListJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(actListJson.ok, false);
+    assert.strictEqual(actListJson.error.code, "INVALID_ARGUMENT");
 
     // 3. ad run -P
     const actRunProc = await runCliAsync(["run", "greet", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(actRunProc.exitCode).toBe(2);
+    assert.strictEqual(actRunProc.exitCode, 2);
     const actRunJson = JSON.parse(actRunProc.stdout.toString());
-    expect(actRunJson.ok).toBe(false);
-    expect(actRunJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(actRunJson.ok, false);
+    assert.strictEqual(actRunJson.error.code, "INVALID_ARGUMENT");
 
     // 4. ad config list -P
     const cfgListProc = await runCliAsync(["config", "list", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(cfgListProc.exitCode).toBe(2);
+    assert.strictEqual(cfgListProc.exitCode, 2);
     const cfgListJson = JSON.parse(cfgListProc.stdout.toString());
-    expect(cfgListJson.ok).toBe(false);
-    expect(cfgListJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(cfgListJson.ok, false);
+    assert.strictEqual(cfgListJson.error.code, "INVALID_ARGUMENT");
 
     // 5. ad config get -P
     const cfgGetProc = await runCliAsync(["config", "get", "api_key", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(cfgGetProc.exitCode).toBe(2);
+    assert.strictEqual(cfgGetProc.exitCode, 2);
     const cfgGetJson = JSON.parse(cfgGetProc.stdout.toString());
-    expect(cfgGetJson.ok).toBe(false);
-    expect(cfgGetJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(cfgGetJson.ok, false);
+    assert.strictEqual(cfgGetJson.error.code, "INVALID_ARGUMENT");
 
     // 6. ad state list -P
     const stateListProc = await runCliAsync(["state", "list", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(stateListProc.exitCode).toBe(2);
+    assert.strictEqual(stateListProc.exitCode, 2);
     const stateListJson = JSON.parse(stateListProc.stdout.toString());
-    expect(stateListJson.ok).toBe(false);
-    expect(stateListJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(stateListJson.ok, false);
+    assert.strictEqual(stateListJson.error.code, "INVALID_ARGUMENT");
 
     // 7. ad state get -P
     const stateGetProc = await runCliAsync(["state", "get", "mykey", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(stateGetProc.exitCode).toBe(2);
+    assert.strictEqual(stateGetProc.exitCode, 2);
     const stateGetJson = JSON.parse(stateGetProc.stdout.toString());
-    expect(stateGetJson.ok).toBe(false);
-    expect(stateGetJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(stateGetJson.ok, false);
+    assert.strictEqual(stateGetJson.error.code, "INVALID_ARGUMENT");
 
     // 8. ad runs list -P
     const runsListProc = await runCliAsync(["runs", "list", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(runsListProc.exitCode).toBe(2);
+    assert.strictEqual(runsListProc.exitCode, 2);
     const runsListJson = JSON.parse(runsListProc.stdout.toString());
-    expect(runsListJson.ok).toBe(false);
-    expect(runsListJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(runsListJson.ok, false);
+    assert.strictEqual(runsListJson.error.code, "INVALID_ARGUMENT");
 
     // 9. ad playbook list -P
     const pbListProc = await runCliAsync(["playbook", "list", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(pbListProc.exitCode).toBe(2);
+    assert.strictEqual(pbListProc.exitCode, 2);
     const pbListJson = JSON.parse(pbListProc.stdout.toString());
-    expect(pbListJson.ok).toBe(false);
-    expect(pbListJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(pbListJson.ok, false);
+    assert.strictEqual(pbListJson.error.code, "INVALID_ARGUMENT");
 
     // 10. ad playbook show -P
     const pbShowProc = await runCliAsync(["playbook", "show", "mypb", "-P", nonExistentId, "--json"], tempDir, env);
-    expect(pbShowProc.exitCode).toBe(2);
+    assert.strictEqual(pbShowProc.exitCode, 2);
     const pbShowJson = JSON.parse(pbShowProc.stdout.toString());
-    expect(pbShowJson.ok).toBe(false);
-    expect(pbShowJson.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(pbShowJson.ok, false);
+    assert.strictEqual(pbShowJson.error.code, "INVALID_ARGUMENT");
   });
 
   it("supports ad action run defaulting to raw mode and machine format with --json", async () => {
@@ -253,8 +255,8 @@ describe("CLI Review - Commands & Arguments Regression", () => {
       tempDir,
       env
     );
-    expect(rawProc.exitCode).toBe(0);
-    expect(rawProc.stdout.toString().trim()).toBe("Hello, Tester!");
+    assert.strictEqual(rawProc.exitCode, 0);
+    assert.strictEqual(rawProc.stdout.toString().trim(), "Hello, Tester!");
 
     // --json 模式输出标准机器信封
     const jsonProc = await runCliAsync(
@@ -262,26 +264,26 @@ describe("CLI Review - Commands & Arguments Regression", () => {
       tempDir,
       env
     );
-    expect(jsonProc.exitCode).toBe(0);
+    assert.strictEqual(jsonProc.exitCode, 0);
     const runRes = JSON.parse(jsonProc.stdout.toString());
-    expect(runRes.ok).toBe(true);
-    expect(runRes.data.message).toBe("Hello, Tester!");
+    assert.strictEqual(runRes.ok, true);
+    assert.strictEqual(runRes.data.message, "Hello, Tester!");
   });
 
   it("displays introspection guidance and flat input syntax in ad run and action run help", async () => {
     for (const cmdArgs of [["run", "--help"], ["action", "run", "--help"]]) {
       const res = await runCliAsync(cmdArgs, tempDir, env);
-      expect(res.exitCode).toBe(0);
+      assert.strictEqual(res.exitCode, 0);
       const output = res.stdout.toString();
-      expect(output).toContain("Introspection & Guidance:");
-      expect(output).toContain("ad describe <id>");
-      expect(output).toContain("ad playbook list");
-      expect(output).toContain("ad playbook show <id>");
-      expect(output).toContain("Flat Input Syntax & Examples:");
-      expect(output).toContain("key=\"value\"");
-      expect(output).toContain("count:=10");
-      expect(output).toContain("paths.0=\"src\"");
-      expect(output).toContain("--input-file");
+      assert.ok((output).includes("Introspection & Guidance:"));
+      assert.ok((output).includes("ad describe <id>"));
+      assert.ok((output).includes("ad playbook list"));
+      assert.ok((output).includes("ad playbook show <id>"));
+      assert.ok((output).includes("Flat Input Syntax & Examples:"));
+      assert.ok((output).includes("key=\"value\""));
+      assert.ok((output).includes("count:=10"));
+      assert.ok((output).includes("paths.0=\"src\""));
+      assert.ok((output).includes("--input-file"));
     }
   });
 });

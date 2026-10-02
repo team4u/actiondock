@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -24,75 +25,75 @@ describe("SqliteRuntimeStorage", () => {
 
   describe("Config", () => {
     it("should set, get, list, and delete config values", () => {
-      expect(storage.getConfig("API_KEY")).toBeUndefined();
+      assert.strictEqual(storage.getConfig("API_KEY"), undefined);
 
       storage.setConfig("API_KEY", "secret-123");
-      expect(storage.getConfig<string>("API_KEY")).toBe("secret-123");
+      assert.strictEqual(storage.getConfig<string>("API_KEY"), "secret-123");
 
       storage.setConfig("PORT", 8080);
-      expect(storage.getConfig<number>("PORT")).toBe(8080);
+      assert.strictEqual(storage.getConfig<number>("PORT"), 8080);
 
       storage.setConfig("FLAGS", { enabled: true, debug: false });
-      expect(storage.getConfig<{ enabled: boolean; debug: boolean }>("FLAGS")).toEqual({ enabled: true, debug: false });
+      assert.deepStrictEqual(storage.getConfig<{ enabled: boolean; debug: boolean }>("FLAGS"), { enabled: true, debug: false });
 
       const all = storage.listConfig();
-      expect(all).toEqual({
+      assert.deepStrictEqual(all, {
         API_KEY: "secret-123",
         PORT: 8080,
         FLAGS: { enabled: true, debug: false },
       });
 
       const deleted = storage.deleteConfig("API_KEY");
-      expect(deleted).toBe(true);
-      expect(storage.getConfig("API_KEY")).toBeUndefined();
+      assert.strictEqual(deleted, true);
+      assert.strictEqual(storage.getConfig("API_KEY"), undefined);
     });
   });
 
   describe("State", () => {
     it("should set, get, list, and delete state values with namespaces", async () => {
-      expect(await storage.getState("", "cursor")).toBeUndefined();
+      assert.strictEqual(await storage.getState("", "cursor"), undefined);
 
       await storage.setState("", "cursor", "001");
-      expect(await storage.getState<string>("", "cursor")).toBe("001");
+      assert.strictEqual(await storage.getState<string>("", "cursor"), "001");
 
       await storage.setState("ns1", "counter", 42);
-      expect(await storage.getState<number>("ns1", "counter")).toBe(42);
+      assert.strictEqual(await storage.getState<number>("ns1", "counter"), 42);
 
       const rootKeys = await storage.listStateKeys("");
-      expect(rootKeys).toEqual(["cursor"]);
+      assert.deepStrictEqual(rootKeys, ["cursor"]);
 
       const nsKeys = await storage.listStateKeys("ns1");
-      expect(nsKeys).toEqual(["counter"]);
+      assert.deepStrictEqual(nsKeys, ["counter"]);
 
       // Global scan (namespace = null/undefined)
       const allKeys = await storage.listStateKeys();
-      expect(allKeys).toEqual(["cursor", "ns1:counter"]);
+      assert.deepStrictEqual(allKeys, ["cursor", "ns1:counter"]);
 
       // Smart find
       const foundRoot = await storage.findState("cursor");
-      expect(foundRoot?.value).toBe("001");
-      expect(foundRoot?.namespace).toBe("");
+      assert.strictEqual(foundRoot?.value, "001");
+      assert.strictEqual(foundRoot?.namespace, "");
 
       const foundComposite = await storage.findState("ns1:counter");
-      expect(foundComposite?.value).toBe(42);
-      expect(foundComposite?.namespace).toBe("ns1");
-      expect(foundComposite?.key).toBe("counter");
+      assert.strictEqual(foundComposite?.value, 42);
+      assert.strictEqual(foundComposite?.namespace, "ns1");
+      assert.strictEqual(foundComposite?.key, "counter");
 
       // Smart delete with boolean check
       const deletedRoot = await storage.deleteState("", "cursor");
-      expect(deletedRoot).toBe(true);
-      expect(await storage.getState("", "cursor")).toBeUndefined();
+      assert.strictEqual(deletedRoot, true);
+      assert.strictEqual(await storage.getState("", "cursor"), undefined);
 
       const notFoundDeleted = await storage.deleteState("", "cursor");
-      expect(notFoundDeleted).toBe(false);
+      assert.strictEqual(notFoundDeleted, false);
 
       // Smart delete by composite key
       const deletedComposite = await storage.deleteStateSmart("ns1:counter");
-      expect(deletedComposite).toBe(true);
-      expect(await storage.getState("ns1", "counter")).toBeUndefined();
+      assert.strictEqual(deletedComposite, true);
+      assert.strictEqual(await storage.getState("ns1", "counter"), undefined);
 
       const notFoundSmart = await storage.deleteStateSmart("ns1:counter");
-      expect(notFoundSmart).toBe(false);
+      assert.strictEqual(notFoundSmart, false);
     });
 
     it("正确支持多段嵌套命名空间（a:b:c:key）的精确匹配与删除", async () => {
@@ -106,25 +107,25 @@ describe("SqliteRuntimeStorage", () => {
 
       // 精确 getState
       const val1 = await storage.getState<{ name: string }>("app:sub:cache", "user:123");
-      expect(val1).toEqual({ name: "Bob" });
+      assert.deepStrictEqual(val1, { name: "Bob" });
 
       // findState 支持多层冒号全名查找
       const found = await storage.findState("app:sub:config");
-      expect(found).toBeDefined();
-      expect(found?.namespace).toBe("app:sub");
-      expect(found?.key).toBe("config");
-      expect(found?.value).toBe("nested-value");
+      assert.notStrictEqual(found, undefined);
+      assert.strictEqual(found?.namespace, "app:sub");
+      assert.strictEqual(found?.key, "config");
+      assert.strictEqual(found?.value, "nested-value");
 
       // deleteStateSmart 依据多层冒号全名删除
       const deleted = await storage.deleteStateSmart("app:sub:config");
-      expect(deleted).toBe(true);
-      expect(await storage.getState("app:sub", "config")).toBeUndefined();
+      assert.strictEqual(deleted, true);
+      assert.strictEqual(await storage.getState("app:sub", "config"), undefined);
 
       // 验证未被误删的嵌套条目
-      expect(await storage.getState<{ name: string }>("app:sub:cache", "user:123")).toEqual({ name: "Bob" });
+      assert.deepStrictEqual(await storage.getState<{ name: string }>("app:sub:cache", "user:123"), { name: "Bob" });
       const del2 = await storage.deleteStateSmart("app:sub:cache:user:123");
-      expect(del2).toBe(true);
-      expect(await storage.getState("app:sub:cache", "user:123")).toBeUndefined();
+      assert.strictEqual(del2, true);
+      assert.strictEqual(await storage.getState("app:sub:cache", "user:123"), undefined);
     });
 
     it("should clear state by namespace, prefix, or all", async () => {
@@ -134,18 +135,18 @@ describe("SqliteRuntimeStorage", () => {
       await storage.setState("auth", "session", "123");
       await storage.setState("cache", "item1", "foo");
 
-      expect((await storage.listStateKeys()).length).toBe(5);
+      assert.strictEqual((await storage.listStateKeys()).length, 5);
 
       // Clear by namespace
       const clearedAuth = await storage.clearState({ namespace: "auth" });
-      expect(clearedAuth).toBe(2);
-      expect(await storage.listStateKeys("auth")).toEqual([]);
-      expect(await storage.getState("auth", "token")).toBeUndefined();
+      assert.strictEqual(clearedAuth, 2);
+      assert.deepStrictEqual(await storage.listStateKeys("auth"), []);
+      assert.strictEqual(await storage.getState("auth", "token"), undefined);
 
       // Clear all
       const clearedAll = await storage.clearState({ all: true });
-      expect(clearedAll).toBe(3); // k1, k2, cache:item1
-      expect(await storage.listStateKeys()).toEqual([]);
+      assert.strictEqual(clearedAll, 3); // k1, k2, cache:item1
+      assert.deepStrictEqual(await storage.listStateKeys(), []);
     });
 
     it("过期条目惰性删除失败时输出可观测告警而非静默吞没", async () => {
@@ -198,18 +199,16 @@ describe("SqliteRuntimeStorage", () => {
         currentTime += 2000;
 
         // 读取路径正常返回 undefined（过期），后台惰性删除失败仅告警
-        expect(await ttlStorage.getState("ns-warn", "stale-key")).toBeUndefined();
+        assert.strictEqual(await ttlStorage.getState("ns-warn", "stale-key"), undefined);
 
         // 惰性删除在后台 Promise 中执行，等待微任务周期后断言告警已产出
         await new Promise((r) => setTimeout(r, 50));
-        expect(
-          warnCalls.some(
+        assert.strictEqual(warnCalls.some(
             (m) =>
               m.includes("expired state lazy delete failed") &&
               m.includes("ns-warn") &&
               m.includes("stale-key")
-          )
-        ).toBe(true);
+          ), true);
       } finally {
         console.warn = originalWarn;
         ttlStorage.close();
@@ -234,27 +233,27 @@ describe("SqliteRuntimeStorage", () => {
       try {
         // 1. TTL in seconds (10s)
         await ttlStorage.setState("", "temp1", "val1", 10);
-        expect(await ttlStorage.getState<string>("", "temp1")).toBe("val1");
+        assert.strictEqual(await ttlStorage.getState<string>("", "temp1"), "val1");
 
         // 2. TTL in namespace
         await ttlStorage.setState("ns1", "temp2", { a: 1 }, 10);
-        expect(await ttlStorage.getState<{ a: number }>("ns1", "temp2")).toEqual({ a: 1 });
+        assert.deepStrictEqual(await ttlStorage.getState<{ a: number }>("ns1", "temp2"), { a: 1 });
 
         // 3. Permanent key
         await ttlStorage.setState("", "perm", "stay");
 
-        expect((await ttlStorage.listStateKeys("")).sort()).toEqual(["perm", "temp1"]);
-        expect(await ttlStorage.listStateKeys("ns1")).toEqual(["temp2"]);
+        assert.deepStrictEqual((await ttlStorage.listStateKeys("")).sort(), ["perm", "temp1"]);
+        assert.deepStrictEqual(await ttlStorage.listStateKeys("ns1"), ["temp2"]);
 
         // Advance clock by 11 seconds (11000ms)
         currentTime += 11000;
 
-        expect(await ttlStorage.getState("", "temp1")).toBeUndefined();
-        expect(await ttlStorage.getState("ns1", "temp2")).toBeUndefined();
-        expect(await ttlStorage.getState<string>("", "perm")).toBe("stay");
+        assert.strictEqual(await ttlStorage.getState("", "temp1"), undefined);
+        assert.strictEqual(await ttlStorage.getState("ns1", "temp2"), undefined);
+        assert.strictEqual(await ttlStorage.getState<string>("", "perm"), "stay");
 
-        expect(await ttlStorage.listStateKeys("")).toEqual(["perm"]);
-        expect(await ttlStorage.listStateKeys("ns1")).toEqual([]);
+        assert.deepStrictEqual(await ttlStorage.listStateKeys(""), ["perm"]);
+        assert.deepStrictEqual(await ttlStorage.listStateKeys("ns1"), []);
       } finally {
         ttlStorage.close();
       }
@@ -278,17 +277,17 @@ describe("SqliteRuntimeStorage", () => {
       rawDb.close();
 
       // 打开旧版本数据库，验证在写事务前直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动
-      expect(() => {
+      assert.throws(() => {
         new SqliteRuntimeStorage({
           packageId: "old-pkg",
           dbPath: tempDbPath,
         });
-      }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
+      }, /UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库未被修改且保留原版本号
       const checkDb = new NodeSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
-      expect(row.user_version).toBe(1);
+      assert.strictEqual(row.user_version, 1);
       checkDb.close();
 
       try {
@@ -314,17 +313,17 @@ describe("SqliteRuntimeStorage", () => {
       rawDb.close();
 
       // 打开未来版本数据库，验证直接抛出不支持异常并拒绝启动
-      expect(() => {
+      assert.throws(() => {
         new SqliteRuntimeStorage({
           packageId: "incompatible-pkg",
           dbPath: tempDbPath,
         });
-      }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
+      }, /UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库文件与 user_version 保持未修改
       const checkDb = new NodeSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
-      expect(row.user_version).toBe(999);
+      assert.strictEqual(row.user_version, 999);
       checkDb.close();
 
       try {
@@ -337,11 +336,11 @@ describe("SqliteRuntimeStorage", () => {
       try {
         // Encode and decode tests
         const { encodeStateKey, decodeStateKey } = await import("../src/storage/sqlite");
-        expect(encodeStateKey("a:b", "c")).toBe("a\\:b:c");
-        expect(encodeStateKey("a", "b:c")).toBe("a:b\\:c");
-        expect(decodeStateKey("a\\:b:c")).toEqual({ namespace: "a:b", key: "c" });
-        expect(decodeStateKey("a:b\\:c")).toEqual({ namespace: "a", key: "b:c" });
-        expect(() => decodeStateKey("a:b:c")).toThrow("Ambiguous state key");
+        assert.strictEqual(encodeStateKey("a:b", "c"), "a\\:b:c");
+        assert.strictEqual(encodeStateKey("a", "b:c"), "a:b\\:c");
+        assert.deepStrictEqual(decodeStateKey("a\\:b:c"), { namespace: "a:b", key: "c" });
+        assert.deepStrictEqual(decodeStateKey("a:b\\:c"), { namespace: "a", key: "b:c" });
+        assert.throws(() => decodeStateKey("a:b:c"), /Ambiguous state key/);
 
         // Insert conflicting rows: namespace "a:b", key "c" and namespace "a", key "b:c"
         await memStorage.setState("a:b", "c", { source: "a:b / c" });
@@ -349,24 +348,24 @@ describe("SqliteRuntimeStorage", () => {
 
         // Unambiguous query using encoded fullKey
         const res1 = await memStorage.findState("a\\:b:c");
-        expect(res1?.value).toEqual({ source: "a:b / c" });
-        expect(res1?.fullKey).toBe("a\\:b:c");
+        assert.deepStrictEqual(res1?.value, { source: "a:b / c" });
+        assert.strictEqual(res1?.fullKey, "a\\:b:c");
 
         const res2 = await memStorage.findState("a:b\\:c");
-        expect(res2?.value).toEqual({ source: "a / b:c" });
-        expect(res2?.fullKey).toBe("a:b\\:c");
+        assert.deepStrictEqual(res2?.value, { source: "a / b:c" });
+        assert.strictEqual(res2?.fullKey, "a:b\\:c");
 
         // Ambiguous query with unescaped composite key throws error
-        await expect(memStorage.findState("a:b:c")).rejects.toThrow("Ambiguous state key 'a:b:c': matches 2 entries");
-        await expect(memStorage.deleteStateSmart("a:b:c")).rejects.toThrow("Ambiguous state key 'a:b:c': matches 2 entries for deletion");
+        await assert.rejects(memStorage.findState("a:b:c"), /Ambiguous state key 'a:b:c': matches 2 entries/);
+        await assert.rejects(memStorage.deleteStateSmart("a:b:c"), /Ambiguous state key 'a:b:c': matches 2 entries for deletion/);
 
         // Delete unambiguously
         const deleted = await memStorage.deleteStateSmart("a\\:b:c");
-        expect(deleted).toBe(true);
+        assert.strictEqual(deleted, true);
 
         // Now only 1 entry remains, so legacy query "a:b:c" resolves without error
         const remaining = await memStorage.findState("a:b:c");
-        expect(remaining?.value).toEqual({ source: "a / b:c" });
+        assert.deepStrictEqual(remaining?.value, { source: "a / b:c" });
       } finally {
         memStorage.close();
       }
@@ -383,7 +382,7 @@ describe("SqliteRuntimeStorage", () => {
         const row = (s as any).driver.prepare("PRAGMA busy_timeout;").get() as {
           timeout?: number;
         } | undefined;
-        expect(Number(row?.timeout)).toBe(5000);
+        assert.strictEqual(Number(row?.timeout), 5000);
       } finally {
         s.close();
       }
@@ -403,20 +402,20 @@ describe("SqliteRuntimeStorage", () => {
 
       storage.createRun(run1);
       const fetched = storage.getRun("run-1");
-      expect(fetched).not.toBeNull();
-      expect(fetched?.status).toBe("running");
-      expect(fetched?.input).toEqual({ x: 1 });
+      assert.notStrictEqual(fetched, null);
+      assert.strictEqual(fetched?.status, "running");
+      assert.deepStrictEqual(fetched?.input, { x: 1 });
 
       storage.updateRun("run-1", "success", { y: 2 });
       const updated = storage.getRun("run-1");
-      expect(updated?.status).toBe("success");
-      expect(updated?.output).toEqual({ y: 2 });
-      expect(typeof updated?.durationMs).toBe("number");
-      expect(updated?.durationMs).toBeGreaterThanOrEqual(0);
+      assert.strictEqual(updated?.status, "success");
+      assert.deepStrictEqual(updated?.output, { y: 2 });
+      assert.strictEqual(typeof updated?.durationMs, "number");
+      assert.ok((updated?.durationMs) >= 0);
 
       const list = storage.listRuns();
-      expect(list.length).toBe(1);
-      expect(list[0].id).toBe("run-1");
+      assert.strictEqual(list.length, 1);
+      assert.strictEqual(list[0].id, "run-1");
     });
   });
 
@@ -447,19 +446,19 @@ describe("SqliteRuntimeStorage", () => {
           packageId: "race-pkg",
           dbPath,
         });
-        expect(observer.isOpen).toBe(true);
+        assert.strictEqual(observer.isOpen, true);
 
         // 旁观者打开后，持有者的在途记录仍为 running（未被误收割为 interrupted）
         const observed = observer.getRun("run-in-flight");
-        expect(observed).not.toBeNull();
-        expect(observed?.status).toBe("running");
+        assert.notStrictEqual(observed, null);
+        assert.strictEqual(observed?.status, "running");
         await observer.close();
 
         // 持有者侧终态结算正常写入，不因旁观者打开而丢失
         owner.updateRun("run-in-flight", "success", { done: true });
         const settled = owner.getRun("run-in-flight");
-        expect(settled?.status).toBe("success");
-        expect(settled?.output).toEqual({ done: true });
+        assert.strictEqual(settled?.status, "success");
+        assert.deepStrictEqual(settled?.output, { done: true });
         await owner.close();
 
         // 显式开启恢复开关的持有者打开后，遗留 running 记录才被收割为 interrupted
@@ -475,7 +474,7 @@ describe("SqliteRuntimeStorage", () => {
           status: "running" as const,
           startedAt: new Date().toISOString(),
         });
-        expect(nextOwnerRun).toBeUndefined(); // createRun 无返回值，仅确认不抛错
+        assert.strictEqual(nextOwnerRun, undefined); // createRun 无返回值，仅确认不抛错
         await nextOwner.close();
 
         const reclaimer = new SqliteRuntimeStorage({
@@ -484,8 +483,8 @@ describe("SqliteRuntimeStorage", () => {
           recoverOrphans: true,
         });
         const reclaimed = reclaimer.getRun("run-orphan");
-        expect(reclaimed?.status).toBe("interrupted");
-        expect(reclaimed?.error?.code).toBe("RUN_INTERRUPTED");
+        assert.strictEqual(reclaimed?.status, "interrupted");
+        assert.strictEqual(reclaimed?.error?.code, "RUN_INTERRUPTED");
         await reclaimer.close();
       } finally {
         try {
@@ -497,21 +496,21 @@ describe("SqliteRuntimeStorage", () => {
 
   describe("Database Path Security", () => {
     it("严格拦截包含路径遍历与非法字符的 packageId", () => {
-      expect(() => resolveDatabasePath("../malicious")).toThrow();
-      expect(() => resolveDatabasePath("../../etc/passwd")).toThrow();
-      expect(() => resolveDatabasePath("pkg/../../../outside")).toThrow();
-      expect(() => resolveDatabasePath("pkg:invalid")).toThrow();
-      expect(() => resolveDatabasePath("pkg$hack")).toThrow();
-      expect(() => resolveDatabasePath("")).toThrow();
+      assert.throws(() => resolveDatabasePath("../malicious"));
+      assert.throws(() => resolveDatabasePath("../../etc/passwd"));
+      assert.throws(() => resolveDatabasePath("pkg/../../../outside"));
+      assert.throws(() => resolveDatabasePath("pkg:invalid"));
+      assert.throws(() => resolveDatabasePath("pkg$hack"));
+      assert.throws(() => resolveDatabasePath(""));
     });
 
     it("支持合法普通标识符与带 scope 标识符并保持在目标目录下", () => {
       const dataDir = "/tmp/actiondock-test";
       const p1 = resolveDatabasePath("my-pkg", { dataDir });
-      expect(p1).toBe(resolve(dataDir, "my-pkg", "runtime.db"));
+      assert.strictEqual(p1, resolve(dataDir, "my-pkg", "runtime.db"));
 
       const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir });
-      expect(p2).toBe(resolve(dataDir, "my-org/my-pkg", "runtime.db"));
+      assert.strictEqual(p2, resolve(dataDir, "my-org/my-pkg", "runtime.db"));
     });
 
     it("统一存储路径规则：项目根目录不再改变路径，统一存放于全局数据目录", () => {
@@ -519,31 +518,31 @@ describe("SqliteRuntimeStorage", () => {
 
       // 默认路径
       const p1 = resolveDatabasePath("sample-pkg", { customHome });
-      expect(p1).toBe(resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+      assert.strictEqual(p1, resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
 
       // 即使传入 projectRoot，亦统一返回二进制模式全局数据路径
       const p2 = resolveDatabasePath("sample-pkg", { projectRoot: "/workspace/project", customHome });
-      expect(p2).toBe(resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+      assert.strictEqual(p2, resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
 
       // 带 scope 的包标识符
       const p3 = resolveDatabasePath("@team/my-pkg", { projectRoot: "/workspace/project", customHome });
-      expect(p3).toBe(resolve(customHome, ".actiondock", "data", "team/my-pkg", "runtime.db"));
+      assert.strictEqual(p3, resolve(customHome, ".actiondock", "data", "team/my-pkg", "runtime.db"));
 
       // inMemory 模式始终最高优先级返回 :memory:
-      expect(resolveDatabasePath("sample-pkg", { inMemory: true })).toBe(":memory:");
+      assert.strictEqual(resolveDatabasePath("sample-pkg", { inMemory: true }), ":memory:");
     });
   });
 
   describe("State Key Single Source of Truth", () => {
     it("shares identical state key codec implementation with @actiondock/sdk", () => {
-      expect(coreStorage.encodeStateKey).toBe(sdk.encodeStateKey);
-      expect(coreStorage.decodeStateKey).toBe(sdk.decodeStateKey);
-      expect(coreStorage.escapeStateSegment).toBe(sdk.escapeStateSegment);
-      expect(coreStorage.unescapeStateSegment).toBe(sdk.unescapeStateSegment);
+      assert.strictEqual(coreStorage.encodeStateKey, sdk.encodeStateKey);
+      assert.strictEqual(coreStorage.decodeStateKey, sdk.decodeStateKey);
+      assert.strictEqual(coreStorage.escapeStateSegment, sdk.escapeStateSegment);
+      assert.strictEqual(coreStorage.unescapeStateSegment, sdk.unescapeStateSegment);
 
       const encoded = coreStorage.encodeStateKey("ns:sub", "k:1");
-      expect(encoded).toBe("ns\\:sub:k\\:1");
-      expect(coreStorage.decodeStateKey(encoded)).toEqual({ namespace: "ns:sub", key: "k:1" });
+      assert.strictEqual(encoded, "ns\\:sub:k\\:1");
+      assert.deepStrictEqual(coreStorage.decodeStateKey(encoded), { namespace: "ns:sub", key: "k:1" });
     });
   });
 
@@ -564,7 +563,7 @@ describe("SqliteRuntimeStorage", () => {
 
         // Note: data directory does not exist yet!
         const resolved = resolveDatabasePath("my-pkg", { customHome: fakeHome });
-        expect(resolved).toBe(join(fakeHome, ".actiondock", "data", "my-pkg", "runtime.db"));
+        assert.strictEqual(resolved, join(fakeHome, ".actiondock", "data", "my-pkg", "runtime.db"));
       } finally {
         rmSync(tempBase, { recursive: true, force: true });
       }
@@ -579,7 +578,7 @@ describe("SqliteRuntimeStorage", () => {
         mkdirSync(cacheDataDir, { recursive: true });
 
         const resolved = resolveDatabasePath("my-pkg", { dataDir: cacheDataDir });
-        expect(resolved).toBe(join(cacheDataDir, "my-pkg", "runtime.db"));
+        assert.strictEqual(resolved, join(cacheDataDir, "my-pkg", "runtime.db"));
       } finally {
         rmSync(tempBase, { recursive: true, force: true });
       }
@@ -642,15 +641,15 @@ describe("SqliteRuntimeStorage", () => {
         minRetainRuns: 2,
       });
 
-      expect(cleaned).toBe(5);
+      assert.strictEqual(cleaned, 5);
 
       // 旧的 running 记录严禁被删除
-      expect(storage.getRun("run-old-running")).not.toBeNull();
+      assert.notStrictEqual(storage.getRun("run-old-running"), null);
       // 新记录依然存在
-      expect(storage.getRun("run-new-1")).not.toBeNull();
-      expect(storage.getRun("run-new-2")).not.toBeNull();
+      assert.notStrictEqual(storage.getRun("run-new-1"), null);
+      assert.notStrictEqual(storage.getRun("run-new-2"), null);
       // 旧记录已被删除
-      expect(storage.getRun("run-old-1")).toBeNull();
+      assert.strictEqual(storage.getRun("run-old-1"), null);
 
       await storage.close();
     });
@@ -688,12 +687,12 @@ describe("SqliteRuntimeStorage", () => {
       });
 
       // 应清理 10 - 3 = 7 条
-      expect(cleaned).toBe(7);
+      assert.strictEqual(cleaned, 7);
       // 最近的 3 条（8, 9, 10）必须保留
-      expect(storage.getRun("run-old-10")).not.toBeNull();
-      expect(storage.getRun("run-old-9")).not.toBeNull();
-      expect(storage.getRun("run-old-8")).not.toBeNull();
-      expect(storage.getRun("run-old-7")).toBeNull();
+      assert.notStrictEqual(storage.getRun("run-old-10"), null);
+      assert.notStrictEqual(storage.getRun("run-old-9"), null);
+      assert.notStrictEqual(storage.getRun("run-old-8"), null);
+      assert.strictEqual(storage.getRun("run-old-7"), null);
 
       await storage.close();
     });
@@ -721,14 +720,14 @@ describe("SqliteRuntimeStorage", () => {
         minRetainRuns: 0,
       });
 
-      expect(cleaned).toBe(15);
+      assert.strictEqual(cleaned, 15);
       // 保留最新的 5 条（16 到 20）
       for (let i = 16; i <= 20; i++) {
-        expect(storage.getRun(`run-seq-${i}`)).not.toBeNull();
+        assert.notStrictEqual(storage.getRun(`run-seq-${i}`), null);
       }
       // 前 15 条被删除
       for (let i = 1; i <= 15; i++) {
-        expect(storage.getRun(`run-seq-${i}`)).toBeNull();
+        assert.strictEqual(storage.getRun(`run-seq-${i}`), null);
       }
 
       await storage.close();
@@ -765,10 +764,10 @@ describe("SqliteRuntimeStorage", () => {
       });
 
       // 10 条均早于 7 天前，keep 2，所以删除了 8 条
-      expect(cleared).toBe(8);
-      expect(storage.getRun("run-f-10")).not.toBeNull();
-      expect(storage.getRun("run-f-9")).not.toBeNull();
-      expect(storage.getRun("run-f-8")).toBeNull();
+      assert.strictEqual(cleared, 8);
+      assert.notStrictEqual(storage.getRun("run-f-10"), null);
+      assert.notStrictEqual(storage.getRun("run-f-9"), null);
+      assert.strictEqual(storage.getRun("run-f-8"), null);
 
       await storage.close();
     });
@@ -803,9 +802,9 @@ describe("SqliteRuntimeStorage", () => {
 
       // 不传参数，自动从 config 解析 retentionDays=5, maxRuns=3, minRetainRuns=1
       const cleaned = storage.cleanExpiredRuns();
-      expect(cleaned).toBe(5);
-      expect(storage.getRun("run-c-6")).not.toBeNull();
-      expect(storage.getRun("run-c-5")).toBeNull();
+      assert.strictEqual(cleaned, 5);
+      assert.notStrictEqual(storage.getRun("run-c-6"), null);
+      assert.strictEqual(storage.getRun("run-c-5"), null);
 
       await storage.close();
     });

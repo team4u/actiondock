@@ -1,4 +1,6 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { runCommandSync } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import {
   chmodSync,
   createReadStream,
@@ -126,13 +128,13 @@ describe("@actiondock/builder 测试套件", () => {
   let tempHome: string;
   let caseIndex = 0;
 
-  beforeAll(() => {
+  before(() => {
     suiteBaseDir = mkdtempSync(join(tmpdir(), "ad-builder-suite-"));
     tempHome = join(suiteBaseDir, "home");
     mkdirSync(tempHome, { recursive: true });
   });
 
-  afterAll(() => {
+  after(() => {
     safeCleanDir(suiteBaseDir);
     flushDeferredCleanup();
   });
@@ -186,23 +188,23 @@ describe("@actiondock/builder 测试套件", () => {
       const planner = new SelectionPlanner({ projectRoot: tempDir });
       const plan = planner.plan();
 
-      expect(plan.packageId).toBe("test.builder-fixture");
-      expect(plan.actions.length).toBe(1);
-      expect(plan.actions[0].id).toBe("sample.greet");
+      assert.strictEqual(plan.packageId, "test.builder-fixture");
+      assert.strictEqual(plan.actions.length, 1);
+      assert.strictEqual(plan.actions[0].id, "sample.greet");
 
       // 验证依赖分类
-      expect(plan.dependencies.actions.length).toBe(1);
-      expect(plan.dependencies.actions[0].id).toBe("sample.greet");
-      expect(plan.dependencies.actions[0].resolvedPath).toBe(join(tempDir, "actions", "greet.ts"));
+      assert.strictEqual(plan.dependencies.actions.length, 1);
+      assert.strictEqual(plan.dependencies.actions[0].id, "sample.greet");
+      assert.strictEqual(plan.dependencies.actions[0].resolvedPath, join(tempDir, "actions", "greet.ts"));
 
       // 验证模块与资产依赖
       const assetDeps = plan.dependencies.modulesAndAssets;
-      expect(assetDeps.some((a) => a.path === "assets/template.txt" && a.type === "asset")).toBe(true);
-      expect(assetDeps.some((a) => a.path === "actiondock.json" && a.type === "config")).toBe(true);
+      assert.strictEqual(assetDeps.some((a) => a.path === "assets/template.txt" && a.type === "asset"), true);
+      assert.strictEqual(assetDeps.some((a) => a.path === "actiondock.json" && a.type === "config"), true);
 
       // 验证外部依赖解析
-      expect(Array.isArray(plan.dependencies.external)).toBe(true);
-      expect(plan.dependencies.external.some((d) => d.name === "@actiondock/sdk")).toBe(true);
+      assert.strictEqual(Array.isArray(plan.dependencies.external), true);
+      assert.strictEqual(plan.dependencies.external.some((d) => d.name === "@actiondock/sdk"), true);
     });
 
     it("绝不执行 Action 业务代码", () => {
@@ -237,8 +239,8 @@ export default {
         actions: ["sample.bomb"],
       });
 
-      expect(plan.actions.length).toBe(1);
-      expect(plan.actions[0].id).toBe("sample.bomb");
+      assert.strictEqual(plan.actions.length, 1);
+      assert.strictEqual(plan.actions[0].id, "sample.bomb");
     });
 
     it("正确解析多级传递依赖闭包（A -> B -> C）并排除无关 Action", () => {
@@ -283,11 +285,11 @@ export default {
       });
 
       const actionIds = plan.actions.map((a) => a.id);
-      expect(actionIds).toContain("action.a");
-      expect(actionIds).toContain("action.b");
-      expect(actionIds).toContain("action.c");
-      expect(actionIds).not.toContain("action.isolated");
-      expect(plan.actions.length).toBe(3);
+      assert.ok((actionIds).includes("action.a"));
+      assert.ok((actionIds).includes("action.b"));
+      assert.ok((actionIds).includes("action.c"));
+      assert.ok(!(actionIds).includes("action.isolated"));
+      assert.strictEqual(plan.actions.length, 3);
     });
 
     it("菱形依赖下闭包不重复解析：高入度节点只入队一次且结果集无重复", () => {
@@ -331,10 +333,10 @@ export default {
 
       const actionIds = plan.actions.map((a) => a.id);
       // 结果集恰好包含四个节点，无重复条目
-      expect(actionIds.length).toBe(4);
-      expect(new Set(actionIds).size).toBe(4);
+      assert.strictEqual(actionIds.length, 4);
+      assert.strictEqual(new Set(actionIds).size, 4);
       for (const expected of ["action.top", "action.left", "action.right", "action.bottom"]) {
-        expect(actionIds).toContain(expected);
+        assert.ok((actionIds).includes(expected));
       }
     });
 
@@ -383,8 +385,8 @@ export default {
       });
 
       const actionIds = plan.actions.map((a) => a.id);
-      expect(actionIds.length).toBe(5);
-      expect(new Set(actionIds).size).toBe(5);
+      assert.strictEqual(actionIds.length, 5);
+      assert.strictEqual(new Set(actionIds).size, 5);
     });
 
     it("支持环形依赖（A -> B -> A）安全终止并包含闭包中的所有节点", () => {
@@ -415,9 +417,9 @@ export default {
       });
 
       const actionIds = plan.actions.map((a) => a.id);
-      expect(actionIds).toContain("loop.a");
-      expect(actionIds).toContain("loop.b");
-      expect(plan.actions.length).toBe(2);
+      assert.ok((actionIds).includes("loop.a"));
+      assert.ok((actionIds).includes("loop.b"));
+      assert.strictEqual(plan.actions.length, 2);
     });
 
     it("支持按 Playbook 进行依赖闭包裁剪计算", () => {
@@ -473,13 +475,13 @@ export default {
       });
 
       const actionIds = plan.actions.map((a) => a.id);
-      expect(actionIds).toContain("task.main");
-      expect(actionIds).toContain("task.helper");
-      expect(actionIds).not.toContain("task.other");
-      expect(plan.actions.length).toBe(2);
+      assert.ok((actionIds).includes("task.main"));
+      assert.ok((actionIds).includes("task.helper"));
+      assert.ok(!(actionIds).includes("task.other"));
+      assert.strictEqual(plan.actions.length, 2);
 
       const pbIds = plan.playbooks.map((p) => p.id);
-      expect(pbIds).toEqual(["workflow-main"]);
+      assert.deepStrictEqual(pbIds, ["workflow-main"]);
     });
 
     it("当依赖闭包中引用的下游 Action 不存在时报错", () => {
@@ -496,12 +498,12 @@ export default {
       };
       saveManifest(tempDir, manifest);
 
-      expect(() => {
+      assert.throws(() => {
         SelectionPlanner.plan({
           projectRoot: tempDir,
           actions: ["broken.action"],
         });
-      }).toThrowError(/missing\.dependency/);
+      }, /missing\.dependency/);
     });
 
     it("通过 actiondock.json 或构建参数中的 files 声明收集模块文件，杜绝未声明导入猜测与 AST 扫描", () => {
@@ -521,7 +523,7 @@ import { defineAction } from "@actiondock/sdk";
 export default defineAction({
   id: "sample.custom-greet",
   description: "Greet action",
-  run: async () => ({ message: "hello" }),
+  run: async () => ("hello"),
 });
 `;
       writeFileSync(join(tempDir, "actions", "custom-greet.ts"), actionCode, "utf-8");
@@ -548,9 +550,9 @@ export default defineAction({
 
       const selectiveModules = selectivePlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
       const selectivePaths = selectiveModules.map((m) => m.path.replace(/\\/g, "/"));
-      expect(selectivePaths).toContain("lib/format.ts");
-      expect(selectivePaths).toContain("lib/utils/sanitize.ts");
-      expect(selectivePaths).not.toContain("lib/unused.ts");
+      assert.ok((selectivePaths).includes("lib/format.ts"));
+      assert.ok((selectivePaths).includes("lib/utils/sanitize.ts"));
+      assert.ok(!(selectivePaths).includes("lib/unused.ts"));
 
       // 2. actiondock.json 声明 files 为目录，目录内有效文件全部收集
       const configPath = join(tempDir, "actiondock.json");
@@ -564,9 +566,9 @@ export default defineAction({
 
       const dirModules = dirPlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
       const dirPaths = dirModules.map((m) => m.path.replace(/\\/g, "/"));
-      expect(dirPaths).toContain("lib/format.ts");
-      expect(dirPaths).toContain("lib/utils/sanitize.ts");
-      expect(dirPaths).toContain("lib/unused.ts");
+      assert.ok((dirPaths).includes("lib/format.ts"));
+      assert.ok((dirPaths).includes("lib/utils/sanitize.ts"));
+      assert.ok((dirPaths).includes("lib/unused.ts"));
     });
 
     it("支持锁文件探测、SHA-256 摘要计算及指纹一致性校验", () => {
@@ -577,18 +579,18 @@ export default defineAction({
         projectRoot: tempDir,
       });
 
-      expect(plan.lockfile).toBeDefined();
-      expect(plan.lockfile?.name).toBe("package-lock.json");
-      expect(plan.lockfile?.sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(plan.metadata.lockfileDigest).toBe(plan.lockfile?.sha256);
+      assert.notStrictEqual(plan.lockfile, undefined);
+      assert.strictEqual(plan.lockfile?.name, "package-lock.json");
+      assert.ok(/^[a-f0-9]{64}$/.test(plan.lockfile?.sha256));
+      assert.strictEqual(plan.metadata.lockfileDigest, plan.lockfile?.sha256);
 
       // 验证校验失败场景：期望摘要不匹配抛错
-      expect(() => {
+      assert.throws(() => {
         SelectionPlanner.plan({
           projectRoot: tempDir,
           expectedLockfileDigest: "invalid-digest-value",
         });
-      }).toThrowError(/Lockfile digest mismatch/);
+      }, /Lockfile digest mismatch/);
     });
 
     it("支持跨包 actiondock.json 声明传递依赖闭包的递归展开", async () => {
@@ -632,8 +634,8 @@ export default defineAction({
         });
 
         const actionIds = plan.actions.map((a) => a.id);
-        expect(actionIds).toContain("root.caller");
-        expect(actionIds).toContain("test.closure-dep/dep-action");
+        assert.ok((actionIds).includes("root.caller"));
+        assert.ok((actionIds).includes("test.closure-dep/dep-action"));
       } finally {
         safeCleanDir(extDir);
       }
@@ -660,9 +662,9 @@ export default defineAction({
         const assetPaths = assetDeps.map((d) => d.path.replace(/\\/g, "/"));
 
         // 内部资产应被纳入
-        expect(assetPaths).toContain("assets/local-asset.txt");
+        assert.ok((assetPaths).includes("assets/local-asset.txt"));
         // 逃逸外部的软链接应被忽略并跳过
-        expect(assetPaths).not.toContain("assets/escaped-link.txt");
+        assert.ok(!(assetPaths).includes("assets/escaped-link.txt"));
       } finally {
         safeCleanDir(externalDir);
       }
@@ -675,20 +677,20 @@ export default defineAction({
         projectRoot: tempDir,
       });
 
-      expect(existsSync(buildRes.outputDir)).toBe(true);
-      expect(existsSync(buildRes.entrypointPath)).toBe(true);
-      expect(existsSync(buildRes.metadataPath)).toBe(true);
-      expect(existsSync(join(buildRes.outputDir, "actiondock.json"))).toBe(true);
-      expect(existsSync(join(buildRes.outputDir, "actiondock.manifest.json"))).toBe(false);
-      expect(existsSync(join(buildRes.outputDir, "package.json"))).toBe(true);
-      expect(buildRes.reproducible).toBe(true);
+      assert.strictEqual(existsSync(buildRes.outputDir), true);
+      assert.strictEqual(existsSync(buildRes.entrypointPath), true);
+      assert.strictEqual(existsSync(buildRes.metadataPath), true);
+      assert.strictEqual(existsSync(join(buildRes.outputDir, "actiondock.json")), true);
+      assert.strictEqual(existsSync(join(buildRes.outputDir, "actiondock.manifest.json")), false);
+      assert.strictEqual(existsSync(join(buildRes.outputDir, "package.json")), true);
+      assert.strictEqual(buildRes.reproducible, true);
 
       const metadata = JSON.parse(readFileSync(buildRes.metadataPath, "utf-8"));
-      expect(metadata.packageId).toBe("test.builder-fixture");
-      expect(metadata.actions).toEqual(["sample.greet"]);
+      assert.strictEqual(metadata.packageId, "test.builder-fixture");
+      assert.deepStrictEqual(metadata.actions, ["sample.greet"]);
 
       // 执行生成的启动入口测试 list 与 describe
-      const listProc = Bun.spawnSync([buildRes.entrypointPath, "list", "--json"], {
+      const listProc = runCommandSync([buildRes.entrypointPath, "list", "--json"], {
         cwd: tempDir,
         env: {
           ...process.env,
@@ -702,10 +704,10 @@ export default defineAction({
           `listProc failed with exitCode ${listProc.exitCode}\nSTDOUT: ${listProc.stdout.toString()}\nSTDERR: ${listProc.stderr.toString()}`
         );
       }
-      expect(listProc.exitCode).toBe(0);
+      assert.strictEqual(listProc.exitCode, 0);
       const listJson = JSON.parse(listProc.stdout.toString());
-      expect(listJson.items.length).toBe(1);
-      expect(listJson.items[0].id).toBe("sample.greet");
+      assert.strictEqual(listJson.items.length, 1);
+      assert.strictEqual(listJson.items[0].id, "sample.greet");
     });
 
     it("支持 options.archive 生成标准 zip 压缩归档交付产物", async () => {
@@ -714,11 +716,11 @@ export default defineAction({
         archive: true,
       });
 
-      expect(buildRes.archivePath).toBeDefined();
-      expect(existsSync(buildRes.archivePath!)).toBe(true);
-      expect(buildRes.archivePath!.endsWith(".zip")).toBe(true);
+      assert.notStrictEqual(buildRes.archivePath, undefined);
+      assert.strictEqual(existsSync(buildRes.archivePath!), true);
+      assert.strictEqual(buildRes.archivePath!.endsWith(".zip"), true);
       const stat = statSync(buildRes.archivePath!);
-      expect(stat.size).toBeGreaterThan(0);
+      assert.ok((stat.size) > 0);
     });
 
     it("支持 options.vendorDeps 在干净暂存目录中物化依赖", async () => {
@@ -727,8 +729,8 @@ export default defineAction({
         vendorDeps: true,
       });
 
-      expect(buildRes.vendorDeps).toBe(true);
-      expect(existsSync(join(buildRes.outputDir, "node_modules"))).toBe(true);
+      assert.strictEqual(buildRes.vendorDeps, true);
+      assert.strictEqual(existsSync(join(buildRes.outputDir, "node_modules")), true);
     });
 
     it("含外部链接依赖的项目构建产物不混入外部包 entry 源文件", async () => {
@@ -758,20 +760,20 @@ export default defineAction({
         });
 
         // 本包 entry 正常物化
-        expect(existsSync(join(buildRes.outputDir, "actions", "greet.ts"))).toBe(true);
+        assert.strictEqual(existsSync(join(buildRes.outputDir, "actions", "greet.ts")), true);
         // 外部包 entry 绝不物化进本包产物目录（与清单剔除策略一致）
-        expect(existsSync(join(buildRes.outputDir, "actions", "calc.ts"))).toBe(false);
+        assert.strictEqual(existsSync(join(buildRes.outputDir, "actions", "calc.ts")), false);
 
         // 生成的 actiondock.json 清单不包含跨包外部 Action
         const outputManifest = JSON.parse(
           readFileSync(join(buildRes.outputDir, "actiondock.json"), "utf-8")
         );
-        expect(Object.keys(outputManifest.actions)).toEqual(["sample.greet"]);
+        assert.deepStrictEqual(Object.keys(outputManifest.actions), ["sample.greet"]);
 
         // host 入口脚本不得 import 未物化的外部源文件（避免孤儿模块）
         const hostEntry = readFileSync(join(buildRes.outputDir, "entry-host.js"), "utf-8");
-        expect(hostEntry).not.toContain("calc.ts");
-        expect(hostEntry).toContain("greet.ts");
+        assert.ok(!(hostEntry).includes("calc.ts"));
+        assert.ok((hostEntry).includes("greet.ts"));
       } finally {
         safeCleanDir(extDir);
       }
@@ -810,7 +812,7 @@ export default defineAction({
         vendorDeps: true,
       });
 
-      expect(buildRes.vendorDeps).toBe(true);
+      assert.strictEqual(buildRes.vendorDeps, true);
       // 嵌套 node_modules 内的传递依赖必须完整物化，否则产物运行时 Cannot find module
       const nestedPkg = join(
         buildRes.outputDir,
@@ -820,9 +822,9 @@ export default defineAction({
         "vendor-transitive-dep",
         "package.json"
       );
-      expect(existsSync(nestedPkg)).toBe(true);
+      assert.strictEqual(existsSync(nestedPkg), true);
       const nestedMeta = JSON.parse(readFileSync(nestedPkg, "utf-8"));
-      expect(nestedMeta.name).toBe("vendor-transitive-dep");
+      assert.strictEqual(nestedMeta.name, "vendor-transitive-dep");
     });
 
     it("生命周期脚本与可复现性检查：要求可复现且必须执行安装脚本时报错拒绝", async () => {
@@ -862,8 +864,8 @@ export default defineAction({
         error = err;
       }
 
-      expect(error).toBeInstanceOf(BuilderError);
-      expect(error.code).toBe("REPRODUCIBLE_BUILD_VIOLATION");
+      assert.ok(error instanceof BuilderError);
+      assert.strictEqual(error.code, "REPRODUCIBLE_BUILD_VIOLATION");
     });
   });
 
@@ -874,10 +876,10 @@ export default defineAction({
         dryRun: true,
       });
 
-      expect(dryResult.packageId).toBe("test.builder-fixture");
-      expect(dryResult.manifestSummary.actionsCount).toBe(1);
-      expect(dryResult.manifestSummary.actions).toContain("sample.greet");
-      expect(dryResult.tarballPath).toBeUndefined();
+      assert.strictEqual(dryResult.packageId, "test.builder-fixture");
+      assert.strictEqual(dryResult.manifestSummary.actionsCount, 1);
+      assert.ok((dryResult.manifestSummary.actions).includes("sample.greet"));
+      assert.strictEqual(dryResult.tarballPath, undefined);
     });
 
     it("npm 实名与本地拼接名不一致时 PackResult 采用 npm 原始产物名", async () => {
@@ -892,15 +894,15 @@ export default defineAction({
         projectRoot: tempDir,
       });
 
-      expect(packResult.tarballPath).toBeDefined();
-      expect(existsSync(packResult.tarballPath!)).toBe(true);
+      assert.notStrictEqual(packResult.tarballPath, undefined);
+      assert.strictEqual(existsSync(packResult.tarballPath!), true);
 
       // 产物名必须是 npm 实际生成的文件名（基于 package.json name 规范化），而非本地拼接的 builder-fixture-0.1.0.tgz
-      expect(packResult.tarballName).toBe("Test_Builder.Fixture-0.1.0.tgz");
-      expect(packResult.tarballName).not.toBe("builder-fixture-0.1.0.tgz");
-      expect(basename(packResult.tarballPath!)).toBe(packResult.tarballName);
-      expect(packResult.sizeBytes).toBeGreaterThan(0);
-      expect(packResult.sha256).toMatch(/^[a-f0-9]{64}$/);
+      assert.strictEqual(packResult.tarballName, "Test_Builder.Fixture-0.1.0.tgz");
+      assert.notStrictEqual(packResult.tarballName, "builder-fixture-0.1.0.tgz");
+      assert.strictEqual(basename(packResult.tarballPath!), packResult.tarballName);
+      assert.ok((packResult.sizeBytes) > 0);
+      assert.ok(/^[a-f0-9]{64}$/.test(packResult.sha256));
     });
 
     it("tsconfig 声明 paths 路径别名时 pack 显式拒绝而非静默编译出不可解析产物", async () => {
@@ -932,9 +934,9 @@ export default defineAction({
         caught = err;
       }
 
-      expect(caught).toBeInstanceOf(BuilderError);
-      expect(caught.code).toBe("PATHS_ALIAS_UNSUPPORTED");
-      expect(caught.message).toContain("paths");
+      assert.ok(caught instanceof BuilderError);
+      assert.strictEqual(caught.code, "PATHS_ALIAS_UNSUPPORTED");
+      assert.ok((caught.message).includes("paths"));
     });
 
     it("将 TypeScript Action 项目打包为标准 tgz 压缩包且不修改源工程", async () => {
@@ -945,15 +947,15 @@ export default defineAction({
         projectRoot: tempDir,
       });
 
-      expect(packResult.tarballPath).toBeDefined();
-      expect(existsSync(packResult.tarballPath!)).toBe(true);
-      expect(packResult.tarballName.endsWith(".tgz")).toBe(true);
-      expect(packResult.sizeBytes).toBeGreaterThan(0);
-      expect(packResult.sha256).toMatch(/^[a-f0-9]{64}$/);
+      assert.notStrictEqual(packResult.tarballPath, undefined);
+      assert.strictEqual(existsSync(packResult.tarballPath!), true);
+      assert.strictEqual(packResult.tarballName.endsWith(".tgz"), true);
+      assert.ok((packResult.sizeBytes) > 0);
+      assert.ok(/^[a-f0-9]{64}$/.test(packResult.sha256));
 
       // 验证源工程文件未被改写
-      expect(readFileSync(join(tempDir, "package.json"), "utf-8")).toBe(sourcePkgJson);
-      expect(readFileSync(join(tempDir, "actions", "greet.ts"), "utf-8")).toBe(sourceGreetCode);
+      assert.strictEqual(readFileSync(join(tempDir, "package.json"), "utf-8"), sourcePkgJson);
+      assert.strictEqual(readFileSync(join(tempDir, "actions", "greet.ts"), "utf-8"), sourceGreetCode);
     });
   });
 
@@ -996,50 +998,50 @@ export default defineAction({
         outDir,
       });
 
-      expect(exportRes.mode).toBe("source");
-      expect(exportRes.actionsCount).toBe(1);
-      expect(exportRes.playbooksCount).toBe(1);
-      expect(existsSync(exportRes.skillDir)).toBe(true);
+      assert.strictEqual(exportRes.mode, "source");
+      assert.strictEqual(exportRes.actionsCount, 1);
+      assert.strictEqual(exportRes.playbooksCount, 1);
+      assert.strictEqual(existsSync(exportRes.skillDir), true);
 
       // 1. 验证 SKILL.md
       const skillMdPath = join(exportRes.skillDir, "SKILL.md");
-      expect(existsSync(skillMdPath)).toBe(true);
+      assert.strictEqual(existsSync(skillMdPath), true);
       const skillMd = readFileSync(skillMdPath, "utf-8");
-      expect(skillMd.startsWith("---\nname:")).toBe(true);
-      expect(skillMd).toContain("sample.greet");
+      assert.strictEqual(skillMd.startsWith("---\nname:"), true);
+      assert.ok((skillMd).includes("sample.greet"));
 
       // 2. 验证已废弃且不再生成 actiondock.skill.json
       const skillJsonPath = join(exportRes.skillDir, "actiondock.skill.json");
-      expect(existsSync(skillJsonPath)).toBe(false);
+      assert.strictEqual(existsSync(skillJsonPath), false);
 
       // 3. 验证不再生成已废弃的 actiondock.manifest.json 清单
       const manifestPath = join(exportRes.skillDir, "actiondock.manifest.json");
-      expect(existsSync(manifestPath)).toBe(false);
+      assert.strictEqual(existsSync(manifestPath), false);
 
       // 4. 验证 actiondock.json 配置（单一事实源）
       const configPath = join(exportRes.skillDir, "actiondock.json");
-      expect(existsSync(configPath)).toBe(true);
+      assert.strictEqual(existsSync(configPath), true);
       const exportedConfig = JSON.parse(readFileSync(configPath, "utf-8"));
-      expect(exportedConfig.id).toBe("test.builder-fixture");
-      expect(exportedConfig.schemaVersion).toBe(2);
-      expect(exportedConfig.actions["sample.greet"]).toBeDefined();
+      assert.strictEqual(exportedConfig.id, "test.builder-fixture");
+      assert.strictEqual(exportedConfig.schemaVersion, 2);
+      assert.notStrictEqual(exportedConfig.actions["sample.greet"], undefined);
 
       // 5. 验证 package.json
       const pkgPath = join(exportRes.skillDir, "package.json");
-      expect(existsSync(pkgPath)).toBe(true);
+      assert.strictEqual(existsSync(pkgPath), true);
 
       // 6. 验证保留相对路径的 Action 源码
       const actionSrcPath = join(exportRes.skillDir, "actions", "greet.ts");
-      expect(existsSync(actionSrcPath)).toBe(true);
+      assert.strictEqual(existsSync(actionSrcPath), true);
 
       // 7. 验证保留相对路径的资产文件
       const assetPath = join(exportRes.skillDir, "assets", "nested", "data.json");
-      expect(existsSync(assetPath)).toBe(true);
-      expect(readFileSync(assetPath, "utf-8")).toBe('{"key": "value"}');
+      assert.strictEqual(existsSync(assetPath), true);
+      assert.strictEqual(readFileSync(assetPath, "utf-8"), '{"key": "value"}');
 
       // 8. 验证 Playbook 文件
       const pbPath = join(exportRes.skillDir, "playbooks", "greet-user.md");
-      expect(existsSync(pbPath)).toBe(true);
+      assert.strictEqual(existsSync(pbPath), true);
     });
 
     it("sanitizes dependencies: resolves workspace:* actual versions, excludes file: dependencies, and omits devDependencies", async () => {
@@ -1082,25 +1084,25 @@ export default defineAction({
       });
 
       const exportedPkgPath = join(exportRes.skillDir, "package.json");
-      expect(existsSync(exportedPkgPath)).toBe(true);
+      assert.strictEqual(existsSync(exportedPkgPath), true);
 
       const exportedPkg = JSON.parse(readFileSync(exportedPkgPath, "utf-8"));
 
       // @actiondock/* workspace:* resolves to internal dependency version
-      expect(exportedPkg.dependencies["@actiondock/core"]).toBeDefined();
-      expect(exportedPkg.dependencies["@actiondock/sdk"]).toBeDefined();
+      assert.notStrictEqual(exportedPkg.dependencies["@actiondock/core"], undefined);
+      assert.notStrictEqual(exportedPkg.dependencies["@actiondock/sdk"], undefined);
 
       // Non-actiondock workspace:* resolves to actual package version
-      expect(exportedPkg.dependencies["custom-helper"]).toBe("^3.4.5");
+      assert.strictEqual(exportedPkg.dependencies["custom-helper"], "^3.4.5");
 
       // Explicit workspace constraint is stripped cleanly
-      expect(exportedPkg.dependencies["explicit-dep"]).toBe("^2.1.0");
+      assert.strictEqual(exportedPkg.dependencies["explicit-dep"], "^2.1.0");
 
       // Normal dependencies are preserved
-      expect(exportedPkg.dependencies["external-dep"]).toBe("^1.0.0");
+      assert.strictEqual(exportedPkg.dependencies["external-dep"], "^1.0.0");
 
       // devDependencies are omitted entirely
-      expect(exportedPkg.devDependencies).toBeUndefined();
+      assert.strictEqual(exportedPkg.devDependencies, undefined);
     });
 
     it("exportSkill 对 file: runtime dependencies 严格校验并抛出 BuilderError", async () => {
@@ -1116,13 +1118,13 @@ export default defineAction({
       );
 
       const outDir = join(tempDir, "dist", "exported-file-dep-skill");
-      await expect(
+      await assert.rejects(
         exportSkill({
           projectRoot: tempDir,
           mode: "source",
           outDir,
         })
-      ).rejects.toThrow(BuilderError);
+      , BuilderError);
     });
 
     it("exportSkill 当 workspace:* 依赖无法解析目标版本时抛出 BuilderError", async () => {
@@ -1138,25 +1140,25 @@ export default defineAction({
       );
 
       const outDir = join(tempDir, "dist", "exported-unresolvable-skill");
-      await expect(
+      await assert.rejects(
         exportSkill({
           projectRoot: tempDir,
           mode: "source",
           outDir,
         })
-      ).rejects.toThrow(BuilderError);
+      , BuilderError);
     });
 
     it("getInternalDependencyVersion 正确对齐预发布版本与正式版本", () => {
       // 预发布版本对齐为精确版本
-      expect(getInternalDependencyVersion("2.0.0-beta.1")).toBe("2.0.0-beta.1");
-      expect(getInternalDependencyVersion("2.0.0-rc.3")).toBe("2.0.0-rc.3");
+      assert.strictEqual(getInternalDependencyVersion("2.0.0-beta.1"), "2.0.0-beta.1");
+      assert.strictEqual(getInternalDependencyVersion("2.0.0-rc.3"), "2.0.0-rc.3");
       // 正式发布版本采用 ^ 语义范围
-      expect(getInternalDependencyVersion("2.0.0")).toBe("^2.0.0");
-      expect(getInternalDependencyVersion("2.1.3")).toBe("^2.1.3");
+      assert.strictEqual(getInternalDependencyVersion("2.0.0"), "^2.0.0");
+      assert.strictEqual(getInternalDependencyVersion("2.1.3"), "^2.1.3");
     });
 
-    it("导出 Node 目录型 Skill 包并验证可执行性", async () => {
+    it("导出 Node 目录型 Skill 包并验证可执行性", { timeout: 35000 }, async () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
         id: "test.builder-fixture",
@@ -1177,18 +1179,18 @@ export default defineAction({
         outDir,
       });
 
-      expect(exportRes.mode).toBe("node");
-      expect(existsSync(exportRes.skillDir)).toBe(true);
+      assert.strictEqual(exportRes.mode, "node");
+      assert.strictEqual(existsSync(exportRes.skillDir), true);
 
       const entryPath = join(exportRes.skillDir, "entry.mjs");
-      expect(existsSync(entryPath)).toBe(true);
+      assert.strictEqual(existsSync(entryPath), true);
 
       // 验证生成的 SKILL.md 包含 node 执行说明
       const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-      expect(skillMd).toContain("node ./entry.mjs");
+      assert.ok((skillMd).includes("node ./entry.mjs"));
 
       // 直接执行导出的 Node 入口
-      const runProc = Bun.spawnSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}', "--json"], {
+      const runProc = runCommandSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}', "--json"], {
         env: {
           ...process.env,
           ACTIONDOCK_HOME: tempHome,
@@ -1201,11 +1203,11 @@ export default defineAction({
           `runProc failed with exitCode ${runProc.exitCode}\nSTDOUT: ${runProc.stdout.toString()}\nSTDERR: ${runProc.stderr.toString()}`
         );
       }
-      expect(runProc.exitCode).toBe(0);
+      assert.strictEqual(runProc.exitCode, 0);
       const res = JSON.parse(runProc.stdout.toString().trim());
-      expect(res.ok).toBe(true);
-      expect(res.data.message).toBe("Hello, SkillUser!");
-    }, 35000);
+      assert.strictEqual(res.ok, true);
+      assert.strictEqual(res.data.message, "Hello, SkillUser!");
+    });
 
     it("支持 .zip 与 .tar.gz 两种归档压缩格式", async () => {
       const manifest: ActionDockManifest = {
@@ -1227,9 +1229,9 @@ export default defineAction({
         outDir: join(tempDir, "dist", "skill-for-zip"),
         archive: "zip",
       });
-      expect(zipRes.archivePath).toBeDefined();
-      expect(zipRes.archivePath!.endsWith(".zip")).toBe(true);
-      expect(existsSync(zipRes.archivePath!)).toBe(true);
+      assert.notStrictEqual(zipRes.archivePath, undefined);
+      assert.strictEqual(zipRes.archivePath!.endsWith(".zip"), true);
+      assert.strictEqual(existsSync(zipRes.archivePath!), true);
 
       // 2. 验证 tar.gz 归档
       const tarRes = await exportSkill({
@@ -1237,32 +1239,32 @@ export default defineAction({
         outDir: join(tempDir, "dist", "skill-for-tar"),
         archive: "tar.gz",
       });
-      expect(tarRes.archivePath).toBeDefined();
-      expect(tarRes.archivePath!.endsWith(".tar.gz")).toBe(true);
-      expect(existsSync(tarRes.archivePath!)).toBe(true);
+      assert.notStrictEqual(tarRes.archivePath, undefined);
+      assert.strictEqual(tarRes.archivePath!.endsWith(".tar.gz"), true);
+      assert.strictEqual(existsSync(tarRes.archivePath!), true);
 
       // 3. 纯代码解包两种归档，与各自导出目录逐文件比对内容（不依赖外部解压命令）
       const zipExpected = collectFiles(zipRes.skillDir);
-      expect(zipExpected.size).toBeGreaterThan(0);
+      assert.ok((zipExpected.size) > 0);
 
       const zipEntries = readZipEntries(zipRes.archivePath!);
       // zip 含目录条目，文件条目数应与源一致
       const zipFiles = [...zipEntries].filter(([, v]) => v !== null);
-      expect(zipFiles.length).toBe(zipExpected.size);
+      assert.strictEqual(zipFiles.length, zipExpected.size);
       for (const [relPath, content] of zipExpected) {
         const archived = zipEntries.get(relPath);
-        expect(archived).toBeDefined();
-        expect(archived!.equals(content)).toBe(true);
+        assert.notStrictEqual(archived, undefined);
+        assert.strictEqual(archived!.equals(content), true);
       }
 
       const tarExpected = collectFiles(tarRes.skillDir);
-      expect(tarExpected.size).toBe(zipExpected.size);
+      assert.strictEqual(tarExpected.size, zipExpected.size);
       const tarEntries = readTarGzEntries(tarRes.archivePath!);
       // tar 条目包含目录行，文件条目逐项比对
       for (const [relPath, content] of tarExpected) {
         const archived = tarEntries.get(relPath);
-        expect(archived).toBeDefined();
-        expect(archived!.equals(content)).toBe(true);
+        assert.notStrictEqual(archived, undefined);
+        assert.strictEqual(archived!.equals(content), true);
       }
     });
 
@@ -1290,15 +1292,15 @@ export default defineAction({
 
         // 验证 zip 权限位
         const zipModes = readZipEntryModes(zipOut);
-        expect(zipModes.get(`${rootName}/bin/run.sh`)).toBe(0o100755);
-        expect(zipModes.get(`${rootName}/readme.txt`)).toBe(0o100644);
-        expect(zipModes.get(`${rootName}/bin`)).toBe(0o40755);
+        assert.strictEqual(zipModes.get(`${rootName}/bin/run.sh`), 0o100755);
+        assert.strictEqual(zipModes.get(`${rootName}/readme.txt`), 0o100644);
+        assert.strictEqual(zipModes.get(`${rootName}/bin`), 0o40755);
 
         // 验证 tar.gz 权限位
         const tarModes = readTarGzEntryModes(tarOut);
-        expect(tarModes.get(`${rootName}/bin/run.sh`)).toBe(0o755);
-        expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
-        expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
+        assert.strictEqual(tarModes.get(`${rootName}/bin/run.sh`), 0o755);
+        assert.strictEqual(tarModes.get(`${rootName}/readme.txt`), 0o644);
+        assert.strictEqual(tarModes.get(`${rootName}/bin`), 0o755);
       } finally {
         safeCleanDir(archiveTestDir);
       }
@@ -1334,23 +1336,23 @@ export default defineAction({
         const zipOut = join(tempDir, "stream-test.zip");
         await createZipArchiveAsync(archiveTestDir, zipOut);
 
-        expect(existsSync(zipOut)).toBe(true);
+        assert.strictEqual(existsSync(zipOut), true);
         const rootName = basename(archiveTestDir);
 
         // 解包并验证内容一致性
         const zipEntries = readZipEntries(zipOut);
-        expect(zipEntries.get(`${rootName}/empty.txt`)?.length).toBe(0);
-        expect(zipEntries.get(`${rootName}/readme.txt`)?.toString("utf8")).toBe("Hello Streaming Zip Archive\n");
-        expect(zipEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8")).toBe("#!/bin/sh\necho streamed-ok\n");
+        assert.strictEqual(zipEntries.get(`${rootName}/empty.txt`)?.length, 0);
+        assert.strictEqual(zipEntries.get(`${rootName}/readme.txt`)?.toString("utf8"), "Hello Streaming Zip Archive\n");
+        assert.strictEqual(zipEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8"), "#!/bin/sh\necho streamed-ok\n");
         const readLarge = zipEntries.get(`${rootName}/subdir/large.dat`);
-        expect(readLarge).toBeDefined();
-        expect(readLarge!.equals(largeContent)).toBe(true);
+        assert.notStrictEqual(readLarge, undefined);
+        assert.strictEqual(readLarge!.equals(largeContent), true);
 
         // 验证权限位
         const zipModes = readZipEntryModes(zipOut);
-        expect(zipModes.get(`${rootName}/bin/run.sh`)).toBe(0o100755);
-        expect(zipModes.get(`${rootName}/readme.txt`)).toBe(0o100644);
-        expect(zipModes.get(`${rootName}/bin`)).toBe(0o40755);
+        assert.strictEqual(zipModes.get(`${rootName}/bin/run.sh`), 0o100755);
+        assert.strictEqual(zipModes.get(`${rootName}/readme.txt`), 0o100644);
+        assert.strictEqual(zipModes.get(`${rootName}/bin`), 0o40755);
 
         // 二进制结构校验：验证 PKZIP Data Descriptor 规范
         const zipBuf = readFileSync(zipOut);
@@ -1363,13 +1365,13 @@ export default defineAction({
             break;
           }
         }
-        expect(eocd).toBeGreaterThan(0);
+        assert.ok((eocd) > 0);
 
         const entryCount = zipBuf.readUInt16LE(eocd + 10);
         let ptr = zipBuf.readUInt32LE(eocd + 16);
 
         for (let i = 0; i < entryCount; i++) {
-          expect(zipBuf.readUInt32LE(ptr)).toBe(0x02014b50);
+          assert.strictEqual(zipBuf.readUInt32LE(ptr), 0x02014b50);
           const flag = zipBuf.readUInt16LE(ptr + 8);
           const method = zipBuf.readUInt16LE(ptr + 10);
           const crc = zipBuf.readUInt32LE(ptr + 16);
@@ -1382,7 +1384,7 @@ export default defineAction({
           const entryName = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
 
           // Local Header 检验
-          expect(zipBuf.readUInt32LE(localOffset)).toBe(0x04034b50);
+          assert.strictEqual(zipBuf.readUInt32LE(localOffset), 0x04034b50);
           const localFlag = zipBuf.readUInt16LE(localOffset + 6);
           const localMethod = zipBuf.readUInt16LE(localOffset + 8);
           const localCrc = zipBuf.readUInt32LE(localOffset + 14);
@@ -1391,35 +1393,35 @@ export default defineAction({
 
           if (entryName.endsWith("/") || entryName.endsWith("empty.txt")) {
             // 目录与空文件：Stored 模式，无需 Data Descriptor
-            expect(localFlag).toBe(0x0800);
-            expect(localMethod).toBe(0);
-            expect(localCrc).toBe(0);
-            expect(localComp).toBe(0);
-            expect(localUncomp).toBe(0);
+            assert.strictEqual(localFlag, 0x0800);
+            assert.strictEqual(localMethod, 0);
+            assert.strictEqual(localCrc, 0);
+            assert.strictEqual(localComp, 0);
+            assert.strictEqual(localUncomp, 0);
           } else {
             // 非空文件：Deflate 模式且启用 bit 3 Data Descriptor
-            expect(localFlag).toBe(0x0808);
-            expect(flag).toBe(0x0808);
-            expect(localMethod).toBe(8);
-            expect(method).toBe(8);
+            assert.strictEqual(localFlag, 0x0808);
+            assert.strictEqual(flag, 0x0808);
+            assert.strictEqual(localMethod, 8);
+            assert.strictEqual(method, 8);
             // Local Header 中的 crc/尺寸字段置 0
-            expect(localCrc).toBe(0);
-            expect(localComp).toBe(0);
-            expect(localUncomp).toBe(0);
+            assert.strictEqual(localCrc, 0);
+            assert.strictEqual(localComp, 0);
+            assert.strictEqual(localUncomp, 0);
             // Central Directory 中必须记录真实值
-            expect(crc).toBeGreaterThan(0);
-            expect(compSize).toBeGreaterThan(0);
-            expect(uncompSize).toBeGreaterThan(0);
+            assert.ok((crc) > 0);
+            assert.ok((compSize) > 0);
+            assert.ok((uncompSize) > 0);
 
             // 紧随压缩数据之后存在 16 字节 Data Descriptor
             const localNameLen = zipBuf.readUInt16LE(localOffset + 26);
             const localExtraLen = zipBuf.readUInt16LE(localOffset + 28);
             const ddOffset = localOffset + 30 + localNameLen + localExtraLen + compSize;
 
-            expect(zipBuf.readUInt32LE(ddOffset)).toBe(0x08074b50); // 签名
-            expect(zipBuf.readUInt32LE(ddOffset + 4)).toBe(crc); // CRC32
-            expect(zipBuf.readUInt32LE(ddOffset + 8)).toBe(compSize); // 压缩尺寸
-            expect(zipBuf.readUInt32LE(ddOffset + 12)).toBe(uncompSize); // 原始尺寸
+            assert.strictEqual(zipBuf.readUInt32LE(ddOffset), 0x08074b50); // 签名
+            assert.strictEqual(zipBuf.readUInt32LE(ddOffset + 4), crc); // CRC32
+            assert.strictEqual(zipBuf.readUInt32LE(ddOffset + 8), compSize); // 压缩尺寸
+            assert.strictEqual(zipBuf.readUInt32LE(ddOffset + 12), uncompSize); // 原始尺寸
           }
 
           ptr += 46 + nameLen + extraLen + commentLen;
@@ -1459,23 +1461,23 @@ export default defineAction({
         const tarOut = join(tempDir, "stream-test.tar.gz");
         await createTarGzArchiveAsync(archiveTestDir, tarOut);
 
-        expect(existsSync(tarOut)).toBe(true);
+        assert.strictEqual(existsSync(tarOut), true);
         const rootName = basename(archiveTestDir);
 
         // 解包并验证各条目内容与尺寸一致性
         const tarEntries = readTarGzEntries(tarOut);
-        expect(tarEntries.get(`${rootName}/empty.txt`)?.length).toBe(0);
-        expect(tarEntries.get(`${rootName}/readme.txt`)?.toString("utf8")).toBe("Hello Streaming TarGz Archive\n");
-        expect(tarEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8")).toBe("#!/bin/sh\necho streamed-tar-ok\n");
+        assert.strictEqual(tarEntries.get(`${rootName}/empty.txt`)?.length, 0);
+        assert.strictEqual(tarEntries.get(`${rootName}/readme.txt`)?.toString("utf8"), "Hello Streaming TarGz Archive\n");
+        assert.strictEqual(tarEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8"), "#!/bin/sh\necho streamed-tar-ok\n");
         const readLarge = tarEntries.get(`${rootName}/subdir/large.dat`);
-        expect(readLarge).toBeDefined();
-        expect(readLarge!.equals(largeContent)).toBe(true);
+        assert.notStrictEqual(readLarge, undefined);
+        assert.strictEqual(readLarge!.equals(largeContent), true);
 
         // 验证权限属性一致性
         const tarModes = readTarGzEntryModes(tarOut);
-        expect(tarModes.get(`${rootName}/bin/run.sh`)).toBe(0o755);
-        expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
-        expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
+        assert.strictEqual(tarModes.get(`${rootName}/bin/run.sh`), 0o755);
+        assert.strictEqual(tarModes.get(`${rootName}/readme.txt`), 0o644);
+        assert.strictEqual(tarModes.get(`${rootName}/bin`), 0o755);
       } finally {
         safeCleanDir(archiveTestDir);
       }
@@ -1540,15 +1542,15 @@ export default defineAction({
         });
 
         // 确认背压事件切实触发并被安全等待与恢复
-        expect(gzipBackpressureCount).toBeGreaterThan(0);
-        expect(gzipDrainEventCount).toBeGreaterThan(0);
+        assert.ok((gzipBackpressureCount) > 0);
+        assert.ok((gzipDrainEventCount) > 0);
 
         // 验证归档内容在背压等待恢复后无损完整
         const rootName = basename(archiveTestDir);
         const tarEntries = readTarGzEntries(tarOut);
         const archivedPayload = tarEntries.get(`${rootName}/payload.bin`);
-        expect(archivedPayload).toBeDefined();
-        expect(archivedPayload!.equals(payload)).toBe(true);
+        assert.notStrictEqual(archivedPayload, undefined);
+        assert.strictEqual(archivedPayload!.equals(payload), true);
       } finally {
         safeCleanDir(archiveTestDir);
       }
@@ -1588,8 +1590,8 @@ export default defineAction({
           caughtError = err as Error;
         }
 
-        expect(caughtError).toBeDefined();
-        expect(caughtError?.message).toBe("SIMULATED_DISK_IO_READ_FAILURE");
+        assert.notStrictEqual(caughtError, undefined);
+        assert.strictEqual(caughtError?.message, "SIMULATED_DISK_IO_READ_FAILURE");
       } finally {
         safeCleanDir(archiveTestDir);
       }
@@ -1622,8 +1624,8 @@ export default defineAction({
           caughtError = err as Error;
         }
 
-        expect(caughtError).toBeDefined();
-        expect(caughtError?.message).toBe("SIMULATED_DISK_FULL_WRITE_FAILURE");
+        assert.notStrictEqual(caughtError, undefined);
+        assert.strictEqual(caughtError?.message, "SIMULATED_DISK_FULL_WRITE_FAILURE");
       } finally {
         safeCleanDir(archiveTestDir);
       }
@@ -1637,11 +1639,11 @@ export default defineAction({
           callback();
         },
       });
-      await expect(writeToStream(stream, Buffer.from("quick chunk"))).resolves.toBeUndefined();
+      await (writeToStream(stream, Buffer.from("quick chunk")));
 
       // 校验已销毁流直接拒绝
       stream.destroy();
-      await expect(writeToStream(stream, Buffer.from("fail chunk"))).rejects.toThrow("Target stream has been destroyed");
+      await assert.rejects(writeToStream(stream, Buffer.from("fail chunk")), /Target stream has been destroyed/);
 
       // 校验背压挂起并在 drain 后成功恢复
       const callbacks: (() => void)[] = [];
@@ -1661,13 +1663,13 @@ export default defineAction({
       });
 
       // 验证在 drain 事件触发前 Promise 保持挂起
-      expect(writePromiseResolved).toBe(false);
+      assert.strictEqual(writePromiseResolved, false);
 
       // 消费底层缓冲区触发 drain
       callbacks[0]();
       callbacks[1]();
       await writePromise;
-      expect(writePromiseResolved).toBe(true);
+      assert.strictEqual(writePromiseResolved, true);
 
       // 校验在等待 drain 期间流发生错误时安全拒绝
       const failingStream = new Writable({
@@ -1678,7 +1680,7 @@ export default defineAction({
       const testError = new Error("STREAM_ASYNC_ERROR");
       const failingPromise = writeToStream(failingStream, Buffer.alloc(10));
       failingStream.destroy(testError);
-      await expect(failingPromise).rejects.toThrow("STREAM_ASYNC_ERROR");
+      await assert.rejects(failingPromise, /STREAM_ASYNC_ERROR/);
     });
 
     it("指向归档目录外部的软链接不会被打包进归档 (zip 与 tar.gz)", async () => {
@@ -1713,20 +1715,20 @@ export default defineAction({
 
         for (const out of [zipOut, zipAsyncOut]) {
           const zipEntries = readZipEntries(out);
-          expect(zipEntries.has(`${rootName}/normal.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("safe normal content");
-          expect(zipEntries.has(`${rootName}/escaped-link.txt`)).toBe(false);
-          expect(zipEntries.has(`${rootName}/escaped-dir`)).toBe(false);
-          expect(zipEntries.has(`${rootName}/escaped-dir/secret.txt`)).toBe(false);
+          assert.strictEqual(zipEntries.has(`${rootName}/normal.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8"), "safe normal content");
+          assert.strictEqual(zipEntries.has(`${rootName}/escaped-link.txt`), false);
+          assert.strictEqual(zipEntries.has(`${rootName}/escaped-dir`), false);
+          assert.strictEqual(zipEntries.has(`${rootName}/escaped-dir/secret.txt`), false);
         }
 
         for (const out of [tarOut, tarAsyncOut]) {
           const tarEntries = readTarGzEntries(out);
-          expect(tarEntries.has(`${rootName}/normal.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("safe normal content");
-          expect(tarEntries.has(`${rootName}/escaped-link.txt`)).toBe(false);
-          expect(tarEntries.has(`${rootName}/escaped-dir`)).toBe(false);
-          expect(tarEntries.has(`${rootName}/escaped-dir/secret.txt`)).toBe(false);
+          assert.strictEqual(tarEntries.has(`${rootName}/normal.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8"), "safe normal content");
+          assert.strictEqual(tarEntries.has(`${rootName}/escaped-link.txt`), false);
+          assert.strictEqual(tarEntries.has(`${rootName}/escaped-dir`), false);
+          assert.strictEqual(tarEntries.has(`${rootName}/escaped-dir/secret.txt`), false);
         }
       } finally {
         safeCleanDir(archiveTestDir);
@@ -1765,18 +1767,18 @@ export default defineAction({
 
         for (const out of [zipOut, zipAsyncOut]) {
           const zipEntries = readZipEntries(out);
-          expect(zipEntries.has(`${rootName}/root-file.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8")).toBe("root file content");
-          expect(zipEntries.has(`${rootName}/subdir/sub-file.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8")).toBe("sub file content");
+          assert.strictEqual(zipEntries.has(`${rootName}/root-file.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8"), "root file content");
+          assert.strictEqual(zipEntries.has(`${rootName}/subdir/sub-file.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8"), "sub file content");
         }
 
         for (const out of [tarOut, tarAsyncOut]) {
           const tarEntries = readTarGzEntries(out);
-          expect(tarEntries.has(`${rootName}/root-file.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8")).toBe("root file content");
-          expect(tarEntries.has(`${rootName}/subdir/sub-file.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8")).toBe("sub file content");
+          assert.strictEqual(tarEntries.has(`${rootName}/root-file.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8"), "root file content");
+          assert.strictEqual(tarEntries.has(`${rootName}/subdir/sub-file.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8"), "sub file content");
         }
       } finally {
         safeCleanDir(archiveTestDir);
@@ -1816,24 +1818,24 @@ export default defineAction({
 
         for (const out of [zipOut, zipAsyncOut]) {
           const zipEntries = readZipEntries(out);
-          expect(zipEntries.has(`${rootName}/normal.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("normal content");
-          expect(zipEntries.has(`${rootName}/nested/nested-file.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8")).toBe("nested content");
+          assert.strictEqual(zipEntries.has(`${rootName}/normal.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8"), "normal content");
+          assert.strictEqual(zipEntries.has(`${rootName}/nested/nested-file.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8"), "nested content");
           // 验证指向内部文件的软链接能够成功打包且内容解析正确
-          expect(zipEntries.has(`${rootName}/link-to-target.txt`)).toBe(true);
-          expect(zipEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8")).toBe("target content");
+          assert.strictEqual(zipEntries.has(`${rootName}/link-to-target.txt`), true);
+          assert.strictEqual(zipEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8"), "target content");
         }
 
         for (const out of [tarOut, tarAsyncOut]) {
           const tarEntries = readTarGzEntries(out);
-          expect(tarEntries.has(`${rootName}/normal.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("normal content");
-          expect(tarEntries.has(`${rootName}/nested/nested-file.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8")).toBe("nested content");
+          assert.strictEqual(tarEntries.has(`${rootName}/normal.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8"), "normal content");
+          assert.strictEqual(tarEntries.has(`${rootName}/nested/nested-file.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8"), "nested content");
           // 验证指向内部文件的软链接能够成功打包且内容解析正确
-          expect(tarEntries.has(`${rootName}/link-to-target.txt`)).toBe(true);
-          expect(tarEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8")).toBe("target content");
+          assert.strictEqual(tarEntries.has(`${rootName}/link-to-target.txt`), true);
+          assert.strictEqual(tarEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8"), "target content");
         }
       } finally {
         safeCleanDir(archiveTestDir);
@@ -1854,21 +1856,21 @@ export default defineAction({
           outDir: join(tempDir, "dist", "batch-skills"),
         });
 
-        expect(batchRes.results.length).toBe(2);
-        expect(batchRes.results[0].packageId).toBe("test.builder-fixture");
-        expect(batchRes.results[1].packageId).toBe("test.second-package");
+        assert.strictEqual(batchRes.results.length, 2);
+        assert.strictEqual(batchRes.results[0].packageId, "test.builder-fixture");
+        assert.strictEqual(batchRes.results[1].packageId, "test.second-package");
 
-        expect(existsSync(join(batchRes.outDir, "builder-fixture-skill", "SKILL.md"))).toBe(true);
-        expect(existsSync(join(batchRes.outDir, "second-package-skill", "SKILL.md"))).toBe(true);
-        expect(existsSync(join(batchRes.outDir, "builder-fixture-skill", "actiondock.skill.json"))).toBe(false);
+        assert.strictEqual(existsSync(join(batchRes.outDir, "builder-fixture-skill", "SKILL.md")), true);
+        assert.strictEqual(existsSync(join(batchRes.outDir, "second-package-skill", "SKILL.md")), true);
+        assert.strictEqual(existsSync(join(batchRes.outDir, "builder-fixture-skill", "actiondock.skill.json")), false);
       } finally {
         safeCleanDir(pkg2Dir);
       }
     });
 
     it("批量与复合导出拒绝空项目列表", async () => {
-      await expect(exportSkillBatch({ projectRoots: [] })).rejects.toThrow(BuilderError);
-      await expect(exportCompositeSkill({ bundleName: "empty-suite", projectRoots: [] })).rejects.toThrow(BuilderError);
+      await assert.rejects(exportSkillBatch({ projectRoots: [] }), BuilderError);
+      await assert.rejects(exportCompositeSkill({ bundleName: "empty-suite", projectRoots: [] }), BuilderError);
     });
 
     it("支持多包复合套件导出与归档压缩 (exportCompositeSkill)", async () => {
@@ -1902,33 +1904,33 @@ export default defineAction({
           archive: true,
         });
 
-        expect(compositeRes.bundleName).toBe("test-composite-suite");
-        expect(compositeRes.packagesCount).toBe(2);
-        expect(compositeRes.playbooksCount).toBeGreaterThanOrEqual(1);
-        expect(existsSync(join(compositeRes.skillDir, "SKILL.md"))).toBe(true);
-        expect(existsSync(join(compositeRes.skillDir, "actiondock.skill.json"))).toBe(false);
-        expect(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture"))).toBe(true);
-        expect(existsSync(join(compositeRes.skillDir, "packages", "second-package"))).toBe(true);
+        assert.strictEqual(compositeRes.bundleName, "test-composite-suite");
+        assert.strictEqual(compositeRes.packagesCount, 2);
+        assert.ok((compositeRes.playbooksCount) >= 1);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "SKILL.md")), true);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "actiondock.skill.json")), false);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture")), true);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "packages", "second-package")), true);
         // 验证子包原位保留代码但不再包含独立的 SKILL.md，对外保持单一 Skill 入口
-        expect(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture", "SKILL.md"))).toBe(false);
-        expect(existsSync(join(compositeRes.skillDir, "packages", "second-package", "SKILL.md"))).toBe(false);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture", "SKILL.md")), false);
+        assert.strictEqual(existsSync(join(compositeRes.skillDir, "packages", "second-package", "SKILL.md")), false);
 
         // 验证物理 Playbook 文件与 SKILL.md 相对路径严格一致
         const expectedPbPath = join(compositeRes.skillDir, "packages", "second-package", "playbooks", "deploy.md");
-        expect(existsSync(expectedPbPath)).toBe(true);
+        assert.strictEqual(existsSync(expectedPbPath), true);
 
         const skillMd = readFileSync(join(compositeRes.skillDir, "SKILL.md"), "utf-8");
-        expect(skillMd).toContain("test-composite-suite");
-        expect(skillMd).toContain("test.builder-fixture");
-        expect(skillMd).toContain("test.second-package");
-        expect(skillMd).toContain("packages/second-package/playbooks/deploy.md");
-        expect(skillMd).toContain("ad link");
-        expect(skillMd).toContain("故障排查与环境安装指引");
-        expect(skillMd).toContain("npm install --omit=dev");
+        assert.ok((skillMd).includes("test-composite-suite"));
+        assert.ok((skillMd).includes("test.builder-fixture"));
+        assert.ok((skillMd).includes("test.second-package"));
+        assert.ok((skillMd).includes("packages/second-package/playbooks/deploy.md"));
+        assert.ok((skillMd).includes("ad link"));
+        assert.ok((skillMd).includes("故障排查与环境安装指引"));
+        assert.ok((skillMd).includes("npm install --omit=dev"));
 
         // 验证归档产物
-        expect(compositeRes.archivePath).toBeDefined();
-        expect(existsSync(compositeRes.archivePath!)).toBe(true);
+        assert.notStrictEqual(compositeRes.archivePath, undefined);
+        assert.strictEqual(existsSync(compositeRes.archivePath!), true);
       } finally {
         safeCleanDir(pkg2Dir);
       }
@@ -1956,17 +1958,17 @@ export default defineAction({
         caught = err;
       }
 
-      expect(caught).toBeInstanceOf(BuilderError);
-      expect(caught.message).toContain("Failed to create zip archive");
+      assert.ok(caught instanceof BuilderError);
+      assert.ok((caught.message).includes("Failed to create zip archive"));
 
       // 已有产物原样保留，未被删除或改写
-      expect(existsSync(join(occupiedArchivePath, "previous-good.txt"))).toBe(true);
-      expect(readFileSync(join(occupiedArchivePath, "previous-good.txt"), "utf-8")).toBe(
+      assert.strictEqual(existsSync(join(occupiedArchivePath, "previous-good.txt")), true);
+      assert.strictEqual(readFileSync(join(occupiedArchivePath, "previous-good.txt"), "utf-8"), 
         "PREVIOUS-GOOD-ARCHIVE-CONTENT"
       );
 
       // 临时半成品被清理，不残留 .tmp 中间态
-      expect(existsSync(`${occupiedArchivePath}.tmp`)).toBe(false);
+      assert.strictEqual(existsSync(`${occupiedArchivePath}.tmp`), false);
     });
 
     it("归档成功时临时文件原子重命名到位且无 .tmp 残留", async () => {
@@ -1979,14 +1981,14 @@ export default defineAction({
         archiveFormat: "zip",
       });
 
-      expect(res.archivePath).toBe(`${outDir}.zip`);
-      expect(existsSync(res.archivePath!)).toBe(true);
-      expect(existsSync(`${res.archivePath}.tmp`)).toBe(false);
+      assert.strictEqual(res.archivePath, `${outDir}.zip`);
+      assert.strictEqual(existsSync(res.archivePath!), true);
+      assert.strictEqual(existsSync(`${res.archivePath}.tmp`), false);
       // 归档内容可用且包含核心产物
       const entries = readZipEntries(res.archivePath!);
       const rootName = basename(outDir);
-      expect(entries.has(`${rootName}/SKILL.md`)).toBe(true);
-      expect(entries.has(`${rootName}/actiondock.json`)).toBe(true);
+      assert.strictEqual(entries.has(`${rootName}/SKILL.md`), true);
+      assert.strictEqual(entries.has(`${rootName}/actiondock.json`), true);
     });
 
     it("单包导出若当前动作目录已有 SKILL.md 则直接复用不再自动生成", async () => {
@@ -2000,10 +2002,10 @@ export default defineAction({
           outDir: join(tempDir, "dist", "custom-reused-skill"),
         });
 
-        expect(res.usedExistingSkillMd).toBe(customSkillPath);
-        expect(existsSync(join(res.skillDir, "SKILL.md"))).toBe(true);
+        assert.strictEqual(res.usedExistingSkillMd, customSkillPath);
+        assert.strictEqual(existsSync(join(res.skillDir, "SKILL.md")), true);
         const copiedContent = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
-        expect(copiedContent).toBe(customSkillContent);
+        assert.strictEqual(copiedContent, customSkillContent);
       } finally {
         try {
           rmSync(customSkillPath, { force: true });
@@ -2033,13 +2035,13 @@ export default defineAction({
           workspaceRoot: workspaceDir,
         });
 
-        expect(res.usedExistingSkillMd).toBe(join(wsSkillDir, "SKILL.md"));
-        expect(existsSync(join(res.skillDir, "SKILL.md"))).toBe(true);
+        assert.strictEqual(res.usedExistingSkillMd, join(wsSkillDir, "SKILL.md"));
+        assert.strictEqual(existsSync(join(res.skillDir, "SKILL.md")), true);
         const copiedContent = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
-        expect(copiedContent).toBe(customSkillContent);
+        assert.strictEqual(copiedContent, customSkillContent);
         // 内部子包不生成 SKILL.md
-        expect(existsSync(join(res.skillDir, "packages", "pkg-a", "SKILL.md"))).toBe(false);
-        expect(existsSync(join(res.skillDir, "packages", "pkg-b", "SKILL.md"))).toBe(false);
+        assert.strictEqual(existsSync(join(res.skillDir, "packages", "pkg-a", "SKILL.md")), false);
+        assert.strictEqual(existsSync(join(res.skillDir, "packages", "pkg-b", "SKILL.md")), false);
       } finally {
         safeCleanDir(workspaceDir);
       }
@@ -2070,7 +2072,7 @@ export default defineAction({
           },
         });
 
-        expect(plan.actions.some((a) => a.id === "test.ext-tools/calc")).toBe(true);
+        assert.strictEqual(plan.actions.some((a) => a.id === "test.ext-tools/calc"), true);
       } finally {
         safeCleanDir(extDir);
       }
@@ -2109,23 +2111,23 @@ export default defineAction({
 
         const planner = new SelectionPlanner({ projectRoot: customDir });
         const plan = planner.plan({ projectRoot: customDir });
-        expect(plan.actionsDir).toBe("src/my-actions");
-        expect(plan.playbooksDir).toBe("docs/my-playbooks");
+        assert.strictEqual(plan.actionsDir, "src/my-actions");
+        assert.strictEqual(plan.playbooksDir, "docs/my-playbooks");
 
         const outDir = join(customDir, "dist", "exported");
         const expResult = await exportSkill({
           projectRoot: customDir,
           outDir,
         });
-        expect(expResult.skillDir).toBe(outDir);
+        assert.strictEqual(expResult.skillDir, outDir);
 
         const exportedConfig = JSON.parse(readFileSync(join(outDir, "actiondock.json"), "utf-8"));
-        expect(exportedConfig.actionsDir).toBe("src/my-actions");
-        expect(exportedConfig.playbooksDir).toBe("docs/my-playbooks");
-        expect(existsSync(join(outDir, "docs", "my-playbooks", "guide.md"))).toBe(true);
+        assert.strictEqual(exportedConfig.actionsDir, "src/my-actions");
+        assert.strictEqual(exportedConfig.playbooksDir, "docs/my-playbooks");
+        assert.strictEqual(existsSync(join(outDir, "docs", "my-playbooks", "guide.md")), true);
 
         const exportedSkillMd = readFileSync(join(outDir, "SKILL.md"), "utf-8");
-        expect(exportedSkillMd).toContain("./docs/my-playbooks/guide.md");
+        assert.ok((exportedSkillMd).includes("./docs/my-playbooks/guide.md"));
       } finally {
         safeCleanDir(customDir);
       }
@@ -2146,19 +2148,19 @@ export default defineAction({
         writeFileSync(join(deepDir, "sample.txt"), "hello long path");
 
         await createTarGzArchiveAsync(archiveDir, outTarGz);
-        expect(existsSync(outTarGz)).toBe(true);
+        assert.strictEqual(existsSync(outTarGz), true);
 
         const entries = readTarGzEntries(outTarGz);
         const keys = Array.from(entries.keys());
         const dirKey = keys.find((k) => k.includes("third_long_nested_directory_level_3"));
-        expect(dirKey).toBeDefined();
+        assert.notStrictEqual(dirKey, undefined);
         // Dir entry path in tar header ends with / or is registered as directory
-        expect(dirKey!.length).toBeGreaterThan(100);
-        expect(entries.get(dirKey!)).toBeNull();
+        assert.ok((dirKey!.length) > 100);
+        assert.strictEqual(entries.get(dirKey!), null);
 
         const fileKey = keys.find((k) => k.endsWith("sample.txt"));
-        expect(fileKey).toBeDefined();
-        expect(entries.get(fileKey!)?.toString("utf-8")).toBe("hello long path");
+        assert.notStrictEqual(fileKey, undefined);
+        assert.strictEqual(entries.get(fileKey!)?.toString("utf-8"), "hello long path");
       } finally {
         safeCleanDir(archiveDir);
       }
@@ -2166,26 +2168,26 @@ export default defineAction({
 
     it("在写入端强制自检：assertValidManifestActionIds 拦截不符合规范的 Action ID", () => {
       // 合法 ID 校验通过
-      expect(() => {
+      assert.doesNotThrow(() => {
         assertValidManifestActionIds({
           "sample.greet": { entry: "actions/greet.ts" },
           "valid_action-123": { entry: "actions/valid.ts" },
         });
-      }).not.toThrow();
+      });
 
       // 拦截包含命名空间分隔符 / 的 Action ID
-      expect(() => {
+      assert.throws(() => {
         assertValidManifestActionIds({
           "test.ext-tools/calc": { entry: "actions/calc.ts" },
         });
-      }).toThrow(BuilderError);
+      }, BuilderError);
 
       // 拦截包含大写字母与非法符号的 Action ID
-      expect(() => {
+      assert.throws(() => {
         assertValidManifestActionIds({
           "Invalid_Upper": { entry: "actions/test.ts" },
         });
-      }).toThrow(BuilderError);
+      }, BuilderError);
     });
 
     it("往返测试：export skill --bundle 与单包源码导出对每个导出包运行 loadActions 零错误", async () => {
@@ -2220,40 +2222,40 @@ export default defineAction({
           outDir: bundleOut,
         });
 
-        expect(compositeRes.packagesCount).toBe(2);
+        assert.strictEqual(compositeRes.packagesCount, 2);
         const exportedPkgsDir = join(bundleOut, "packages");
-        expect(existsSync(exportedPkgsDir)).toBe(true);
+        assert.strictEqual(existsSync(exportedPkgsDir), true);
 
         const subpkgs = readdirSync(exportedPkgsDir);
-        expect(subpkgs).toContain("builder-fixture");
-        expect(subpkgs).toContain("ext-tools");
+        assert.ok((subpkgs).includes("builder-fixture"));
+        assert.ok((subpkgs).includes("ext-tools"));
 
         // 验证主包清单只包含自有 Action，跨包依赖不写入主包清单
         const mainExportedManifest = JSON.parse(
           readFileSync(join(exportedPkgsDir, "builder-fixture", "actiondock.json"), "utf-8")
         );
-        expect(Object.keys(mainExportedManifest.actions)).toEqual(["sample.greet"]);
-        expect(mainExportedManifest.actions["test.ext-tools/calc"]).toBeUndefined();
-        expect(mainExportedManifest.actions["calc"]).toBeUndefined();
+        assert.deepStrictEqual(Object.keys(mainExportedManifest.actions), ["sample.greet"]);
+        assert.strictEqual(mainExportedManifest.actions["test.ext-tools/calc"], undefined);
+        assert.strictEqual(mainExportedManifest.actions["calc"], undefined);
 
         // 验证跨包依赖不物化进消费包目录
-        expect(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "greet.ts"))).toBe(true);
-        expect(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "calc.ts"))).toBe(false);
+        assert.strictEqual(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "greet.ts")), true);
+        assert.strictEqual(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "calc.ts")), false);
 
         // 验证外部依赖包整包完整保留
         const extExportedManifest = JSON.parse(
           readFileSync(join(exportedPkgsDir, "ext-tools", "actiondock.json"), "utf-8")
         );
-        expect(Object.keys(extExportedManifest.actions)).toEqual(["calc"]);
-        expect(existsSync(join(exportedPkgsDir, "ext-tools", "actions", "calc.ts"))).toBe(true);
+        assert.deepStrictEqual(Object.keys(extExportedManifest.actions), ["calc"]);
+        assert.strictEqual(existsSync(join(exportedPkgsDir, "ext-tools", "actions", "calc.ts")), true);
 
         // 往返测试断言：对每个导出包执行 loadActions，必须零错误
         for (const subpkg of subpkgs) {
           const subpkgDir = join(exportedPkgsDir, subpkg);
           const loaded = await loadActions(subpkgDir);
-          expect(loaded.size).toBeGreaterThan(0);
+          assert.ok((loaded.size) > 0);
           for (const [id] of loaded) {
-            expect(ACTION_ID_REGEX.test(id)).toBe(true);
+            assert.strictEqual(ACTION_ID_REGEX.test(id), true);
           }
         }
 
@@ -2265,17 +2267,17 @@ export default defineAction({
           outDir: singleOut,
         });
 
-        expect(existsSync(join(singleOut, "packages", "builder-fixture"))).toBe(true);
-        expect(existsSync(join(singleOut, "packages", "ext-tools"))).toBe(true);
+        assert.strictEqual(existsSync(join(singleOut, "packages", "builder-fixture")), true);
+        assert.strictEqual(existsSync(join(singleOut, "packages", "ext-tools")), true);
 
         // 对 mini-workspace 下的每个包执行 loadActions，零错误
         const singleSubpkgs = readdirSync(join(singleOut, "packages"));
         for (const subpkg of singleSubpkgs) {
           const subpkgDir = join(singleOut, "packages", subpkg);
           const loaded = await loadActions(subpkgDir);
-          expect(loaded.size).toBeGreaterThan(0);
+          assert.ok((loaded.size) > 0);
           for (const [id] of loaded) {
-            expect(ACTION_ID_REGEX.test(id)).toBe(true);
+            assert.strictEqual(ACTION_ID_REGEX.test(id), true);
           }
         }
       } finally {
@@ -2297,13 +2299,13 @@ export default defineAction({
 
         const files = collectRelativeFiles(sortRoot);
         // 最终相对路径统一字典序：z-dir/0000.txt 应排在 a-dir/zzzz.txt 之后，与逐层目录名排序结果相反
-        expect(files).toEqual([
+        assert.deepStrictEqual(files, [
           "a-dir/zzzz.txt",
           "root.txt",
           "z-dir/0000.txt",
         ]);
         const sortedCopy = [...files].sort();
-        expect(files).toEqual(sortedCopy);
+        assert.deepStrictEqual(files, sortedCopy);
       } finally {
         safeCleanDir(sortRoot);
       }
@@ -2319,7 +2321,7 @@ export default defineAction({
         symlinkSync(linkRoot, join(linkRoot, "loop-to-root"), "junction");
 
         const files = collectRelativeFiles(linkRoot);
-        expect(files).toEqual(["normal.txt"]);
+        assert.deepStrictEqual(files, ["normal.txt"]);
       } finally {
         safeCleanDir(linkRoot);
         safeCleanDir(outsideDir);
@@ -2331,13 +2333,13 @@ export default defineAction({
     it("pre-1980 时间统一映射为 1980-01-01 00:00:00，年份上限 2107 不溢出", async () => {
       // 1. 纯函数级别验证对极端时间戳的数学边界钳制，规避部分操作系统 utimes（如 Windows 32 位 time_t）的底层截断
       const pastDos = dosDateTime(new Date("1975-06-15T12:34:56Z").getTime());
-      expect(pastDos.date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
-      expect(pastDos.time).toBe(0);
+      assert.strictEqual(pastDos.date, ((1980 - 1980) << 9) | (1 << 5) | 1);
+      assert.strictEqual(pastDos.time, 0);
 
       const futureDos = dosDateTime(new Date("2200-01-01T00:00:00Z").getTime());
-      expect(((futureDos.date >> 9) & 0x7f) + 1980).toBe(2107);
-      expect(futureDos.date).toBeLessThanOrEqual(0xffff);
-      expect(futureDos.time).toBeLessThanOrEqual(0xffff);
+      assert.strictEqual(((futureDos.date >> 9) & 0x7f) + 1980, 2107);
+      assert.ok((futureDos.date) <= 0xffff);
+      assert.ok((futureDos.time) <= 0xffff);
 
       // 2. 归档级集成验证：验证 pre-1980 文件在 zip 归档中的时间头映射
       const timeRoot = mkdtempSync(join(tmpdir(), "ad-dos-time-test-"));
@@ -2349,7 +2351,7 @@ export default defineAction({
 
         const zipOut = join(tempDir, "dos-time-test.zip");
         await createZipArchiveAsync(timeRoot, zipOut);
-        expect(existsSync(zipOut)).toBe(true);
+        assert.strictEqual(existsSync(zipOut), true);
 
         const rootName = basename(timeRoot);
         const zipBuf = readFileSync(zipOut);
@@ -2362,20 +2364,20 @@ export default defineAction({
             break;
           }
         }
-        expect(eocd).toBeGreaterThan(0);
+        assert.ok((eocd) > 0);
         const entryCount = zipBuf.readUInt16LE(eocd + 10);
-        expect(entryCount).toBe(1);
+        assert.strictEqual(entryCount, 1);
         const ptr = zipBuf.readUInt32LE(eocd + 16);
 
         const nameLen = zipBuf.readUInt16LE(ptr + 28);
         const name = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
-        expect(name).toBe(`${rootName}/old.txt`);
+        assert.strictEqual(name, `${rootName}/old.txt`);
         const date = zipBuf.readUInt16LE(ptr + 14);
         const time = zipBuf.readUInt16LE(ptr + 12);
 
         // pre-1980：映射为 1980-01-01 00:00:00（date=0x0021, time=0）
-        expect(date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
-        expect(time).toBe(0);
+        assert.strictEqual(date, ((1980 - 1980) << 9) | (1 << 5) | 1);
+        assert.strictEqual(time, 0);
       } finally {
         safeCleanDir(timeRoot);
       }
@@ -2416,8 +2418,8 @@ export default defineAction({
         } catch (err) {
           errActions = err;
         }
-        expect(errActions).toBeInstanceOf(BuilderError);
-        expect(errActions.code).toBe("FILTERS_UNSUPPORTED_FOR_COMPOSITE");
+        assert.ok(errActions instanceof BuilderError);
+        assert.strictEqual(errActions.code, "FILTERS_UNSUPPORTED_FOR_COMPOSITE");
 
         // playbooks 过滤 + 外部依赖闭包：同样应拒绝
         let errPlaybooks: any;
@@ -2431,8 +2433,8 @@ export default defineAction({
         } catch (err) {
           errPlaybooks = err;
         }
-        expect(errPlaybooks).toBeInstanceOf(BuilderError);
-        expect(errPlaybooks.code).toBe("FILTERS_UNSUPPORTED_FOR_COMPOSITE");
+        assert.ok(errPlaybooks instanceof BuilderError);
+        assert.strictEqual(errPlaybooks.code, "FILTERS_UNSUPPORTED_FOR_COMPOSITE");
 
         // 不带过滤时仍可正常走复合导出路径
         const okRes = await exportSkill({
@@ -2440,8 +2442,8 @@ export default defineAction({
           mode: "source",
           outDir: join(tempDir, "dist", "filter-composite-ok"),
         });
-        expect(existsSync(join(okRes.skillDir, "packages", "builder-fixture"))).toBe(true);
-        expect(existsSync(join(okRes.skillDir, "packages", "ext-filter-dep"))).toBe(true);
+        assert.strictEqual(existsSync(join(okRes.skillDir, "packages", "builder-fixture")), true);
+        assert.strictEqual(existsSync(join(okRes.skillDir, "packages", "ext-filter-dep")), true);
       } finally {
         safeCleanDir(extDir);
       }
@@ -2469,10 +2471,10 @@ export default defineAction({
         });
 
         // 产物 SKILL.md 必须是自动生成的复合说明书，而非祖父目录的无关文件
-        expect(res.usedExistingSkillMd).toBeUndefined();
+        assert.strictEqual(res.usedExistingSkillMd, undefined);
         const md = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
-        expect(md).not.toContain("Unrelated Global Skill");
-        expect(md).toContain("deep-bundle");
+        assert.ok(!(md).includes("Unrelated Global Skill"));
+        assert.ok((md).includes("deep-bundle"));
       } finally {
         safeCleanDir(deepBase);
       }
@@ -2494,15 +2496,15 @@ export default defineAction({
             outDir,
             skillMdOnly: true,
           });
-          expect(result.skillMdFile).toBe(join(outDir, "SKILL.md"));
-          expect(readFileSync(join(outDir, "SKILL.md"), "utf-8")).not.toContain("# Old Existing");
+          assert.strictEqual(result.skillMdFile, join(outDir, "SKILL.md"));
+          assert.ok(!(readFileSync(join(outDir, "SKILL.md"), "utf-8")).includes("# Old Existing"));
           return true;
         } finally {
           safeCleanDir(wsDir);
         }
       });
-      expect(captured.output).toContain("[WARN]");
-      expect(captured.output).toContain("overwritten");
+      assert.ok((captured.output).includes("[WARN]"));
+      assert.ok((captured.output).includes("overwritten"));
     });
   });
 
@@ -2554,15 +2556,15 @@ export default defineAction({
       ).dependencies;
 
       // 两条链路对同一依赖字典的清洗结果必须一致
-      expect(Object.keys(singleDeps).sort()).toEqual(Object.keys(compositeDeps).sort());
+      assert.deepStrictEqual(Object.keys(singleDeps).sort(), Object.keys(compositeDeps).sort());
       for (const dep of Object.keys(singleDeps)) {
-        expect(compositeDeps[dep]).toBe(singleDeps[dep]);
+        assert.strictEqual(compositeDeps[dep], singleDeps[dep]);
       }
-      expect(singleDeps["shared-helper"]).toBe("^7.8.9");
-      expect(singleDeps["pinned-dep"]).toBe("~3.0.0");
-      expect(singleDeps["plain-dep"]).toBe("^2.0.0");
-      expect(singleDeps["@actiondock/sdk"]).toBeDefined();
-      expect(singleDeps.devDependencies).toBeUndefined();
+      assert.strictEqual(singleDeps["shared-helper"], "^7.8.9");
+      assert.strictEqual(singleDeps["pinned-dep"], "~3.0.0");
+      assert.strictEqual(singleDeps["plain-dep"], "^2.0.0");
+      assert.notStrictEqual(singleDeps["@actiondock/sdk"], undefined);
+      assert.strictEqual(singleDeps.devDependencies, undefined);
     });
 
     it("目录名冲突回退后仍同名时追加数字后缀，两个同尾段 ID 包目录互不覆盖", async () => {
@@ -2576,12 +2578,12 @@ export default defineAction({
           projectRoots: [join(clashBase, "a"), join(clashBase, "b")],
           outDir: join(clashBase, "dist", "batch"),
         });
-        expect(batchRes.results.length).toBe(2);
+        assert.strictEqual(batchRes.results.length, 2);
 
         // 两个导出目录必须同时存在（互不覆盖）
-        expect(existsSync(join(batchRes.results[0].skillDir, "SKILL.md"))).toBe(true);
-        expect(existsSync(join(batchRes.results[1].skillDir, "SKILL.md"))).toBe(true);
-        expect(batchRes.results[0].skillDir).not.toBe(batchRes.results[1].skillDir);
+        assert.strictEqual(existsSync(join(batchRes.results[0].skillDir, "SKILL.md")), true);
+        assert.strictEqual(existsSync(join(batchRes.results[1].skillDir, "SKILL.md")), true);
+        assert.notStrictEqual(batchRes.results[0].skillDir, batchRes.results[1].skillDir);
 
         // 复合导出同样保证子包目录互不覆盖
         const compositeRes = await exportCompositeSkill({
@@ -2590,10 +2592,10 @@ export default defineAction({
           outDir: join(clashBase, "dist", "composite"),
         });
         const subDirs = readdirSync(join(compositeRes.skillDir, "packages")).sort();
-        expect(subDirs.length).toBe(2);
-        expect(new Set(subDirs).size).toBe(2);
+        assert.strictEqual(subDirs.length, 2);
+        assert.strictEqual(new Set(subDirs).size, 2);
         for (const sub of subDirs) {
-          expect(existsSync(join(compositeRes.skillDir, "packages", sub, "actiondock.json"))).toBe(true);
+          assert.strictEqual(existsSync(join(compositeRes.skillDir, "packages", sub, "actiondock.json")), true);
         }
       } finally {
         safeCleanDir(clashBase);
@@ -2608,9 +2610,9 @@ export default defineAction({
       } catch (e) {
         err = e;
       }
-      expect(err).toBeInstanceOf(PlannerError);
-      expect(err.code).toBe("EXTRACT_DEPS_ERROR");
-      expect(err.message).toContain("package.json");
+      assert.ok(err instanceof PlannerError);
+      assert.strictEqual(err.code, "EXTRACT_DEPS_ERROR");
+      assert.ok((err.message).includes("package.json"));
     });
 
     it("tsconfig.json 解析失败时回退默认编译选项但输出显著告警", async () => {
@@ -2625,8 +2627,8 @@ export default defineAction({
         });
         return res;
       });
-      expect(captured.output).toContain("Failed to parse tsconfig.json");
-      expect(captured.result.files.length).toBeGreaterThan(0);
+      assert.ok((captured.output).includes("Failed to parse tsconfig.json"));
+      assert.ok((captured.result.files.length) > 0);
     });
   });
 
@@ -2645,13 +2647,13 @@ export default defineAction({
 
         await replaceDirAtomic(staging, target);
 
-        expect(existsSync(join(target, "new.txt"))).toBe(true);
-        expect(readFileSync(join(target, "new.txt"), "utf-8")).toBe("new content");
-        expect(existsSync(join(target, "old.txt"))).toBe(false);
+        assert.strictEqual(existsSync(join(target, "new.txt")), true);
+        assert.strictEqual(readFileSync(join(target, "new.txt"), "utf-8"), "new content");
+        assert.strictEqual(existsSync(join(target, "old.txt")), false);
 
         // Check no backup directories remain
         const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
-        expect(leftoverOld.length).toBe(0);
+        assert.strictEqual(leftoverOld.length, 0);
       } finally {
         safeCleanDir(testRoot);
       }
@@ -2675,14 +2677,14 @@ export default defineAction({
           failed = true;
         }
 
-        expect(failed).toBe(true);
-        expect(existsSync(target)).toBe(true);
-        expect(existsSync(join(target, "preserve.txt"))).toBe(true);
-        expect(readFileSync(join(target, "preserve.txt"), "utf-8")).toBe("must survive rollback");
+        assert.strictEqual(failed, true);
+        assert.strictEqual(existsSync(target), true);
+        assert.strictEqual(existsSync(join(target, "preserve.txt")), true);
+        assert.strictEqual(readFileSync(join(target, "preserve.txt"), "utf-8"), "must survive rollback");
 
         // Ensure backup directory was moved back and cleaned up
         const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
-        expect(leftoverOld.length).toBe(0);
+        assert.strictEqual(leftoverOld.length, 0);
       } finally {
         safeCleanDir(testRoot);
       }
@@ -2699,8 +2701,8 @@ export default defineAction({
 
         await replaceDirAtomic(staging, target);
 
-        expect(existsSync(target)).toBe(true);
-        expect(existsSync(join(target, "data.json"))).toBe(true);
+        assert.strictEqual(existsSync(target), true);
+        assert.strictEqual(existsSync(join(target, "data.json")), true);
       } finally {
         safeCleanDir(testRoot);
       }

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
 import { decodeText, defineAction, encodeText } from "../src";
 import type { ProcessAPI, ProcessInfo } from "../src";
 import {
@@ -18,15 +19,15 @@ describe("@actiondock/sdk", () => {
       run: (input: { name: string }) => `Hello, ${input.name}!`,
     });
 
-    expect(typeof action.run).toBe("function");
+    assert.strictEqual(typeof action.run, "function");
 
     const directAction = defineAction((input: { name: string }) => `Hello, ${input.name}!`);
-    expect(typeof directAction.run).toBe("function");
+    assert.strictEqual(typeof directAction.run, "function");
   });
 
   it("throws error for invalid action definition", () => {
-    expect(() => defineAction({} as any)).toThrow();
-    expect(() => defineAction(null as any)).toThrow();
+    assert.throws(() => defineAction({} as any));
+    assert.throws(() => defineAction(null as any));
   });
 
   it("executes an action in test runtime with config and state", async () => {
@@ -45,15 +46,15 @@ describe("@actiondock/sdk", () => {
     });
 
     const res1 = await runtime.run(counterAction, {});
-    expect(res1).toBe("Total: 6");
-    expect(await runtime.state.get<number>("count")).toBe(6);
+    assert.strictEqual(res1, "Total: 6");
+    assert.strictEqual(await runtime.state.get<number>("count"), 6);
 
     const res2 = await runtime.run(counterAction, {});
-    expect(res2).toBe("Total: 7");
-    expect(await runtime.state.get<number>("count")).toBe(7);
+    assert.strictEqual(res2, "Total: 7");
+    assert.strictEqual(await runtime.state.get<number>("count"), 7);
 
-    expect(runtime.logger.logs.length).toBe(2);
-    expect(runtime.logger.logs[0].message).toContain("Updated count to 6");
+    assert.strictEqual(runtime.logger.logs.length, 2);
+    assert.ok((runtime.logger.logs[0].message).includes("Updated count to 6"));
   });
 
   it("supports MemoryStateStore scoping, prefix listing, and deletion", async () => {
@@ -66,42 +67,42 @@ describe("@actiondock/sdk", () => {
     await userScope.set("bob", { age: 25 });
 
     // 隔离性检查
-    expect(await store.get<string>("global_k1")).toBe("v1");
-    expect(await userScope.get<{ age: number }>("alice")).toEqual({ age: 30 });
+    assert.strictEqual(await store.get<string>("global_k1"), "v1");
+    assert.deepStrictEqual(await userScope.get<{ age: number }>("alice"), { age: 30 });
     // 根命名空间读取严格限定空命名空间，与生产 RuntimeStateStore 语义一致，
     // 不做跨命名空间隐式回扫
-    expect(await store.get("alice")).toBeUndefined();
+    assert.strictEqual(await store.get("alice"), undefined);
 
     // 深拷贝验证 (structuredClone)
     const obj = { nested: { val: 100 } };
     await store.set("nested_obj", obj);
     obj.nested.val = 200;
     const fetched = await store.get<{ nested: { val: number } }>("nested_obj");
-    expect(fetched?.nested.val).toBe(100);
+    assert.strictEqual(fetched?.nested.val, 100);
 
     // 带前缀的键列表检索
     const rootKeys = await store.keys();
-    expect(rootKeys.sort()).toEqual(["global_k1", "global_k2", "nested_obj"]);
+    assert.deepStrictEqual(rootKeys.sort(), ["global_k1", "global_k2", "nested_obj"]);
 
     const userKeys = await userScope.keys();
-    expect(userKeys.sort()).toEqual(["alice", "bob"]);
+    assert.deepStrictEqual(userKeys.sort(), ["alice", "bob"]);
 
     const userKeysFiltered = await userScope.keys("al");
-    expect(userKeysFiltered).toEqual(["alice"]);
+    assert.deepStrictEqual(userKeysFiltered, ["alice"]);
 
     // 删除状态项
     const deleted = await userScope.delete("alice");
-    expect(deleted).toBe(true);
-    expect(await userScope.get("alice")).toBeUndefined();
-    expect(await userScope.keys()).toEqual(["bob"]);
+    assert.strictEqual(deleted, true);
+    assert.strictEqual(await userScope.get("alice"), undefined);
+    assert.deepStrictEqual(await userScope.keys(), ["bob"]);
 
     const deleteNonExistent = await userScope.delete("alice");
-    expect(deleteNonExistent).toBe(false);
+    assert.strictEqual(deleteNonExistent, false);
 
     // 清空状态项
     const cleared = await userScope.clear();
-    expect(cleared).toBe(1);
-    expect(await userScope.keys()).toEqual([]);
+    assert.strictEqual(cleared, 1);
+    assert.deepStrictEqual(await userScope.keys(), []);
   });
 
   it("supports MemoryStateStore with colon-containing keys and nested scopes", async () => {
@@ -109,25 +110,25 @@ describe("@actiondock/sdk", () => {
 
     // 包含冒号的根键
     await store.set("key:with:colon", "value-colon");
-    expect(await store.get<string>("key:with:colon")).toBe("value-colon");
-    expect(await store.keys()).toContain("key:with:colon");
+    assert.strictEqual(await store.get<string>("key:with:colon"), "value-colon");
+    assert.ok((await store.keys()).includes("key:with:colon"));
 
     // 包含冒号的作用域键
     const scoped = store.scope("sub:ns");
     await scoped.set("another:colon:key", "value-nested");
-    expect(await scoped.get<string>("another:colon:key")).toBe("value-nested");
-    expect(await scoped.keys()).toEqual(["another:colon:key"]);
+    assert.strictEqual(await scoped.get<string>("another:colon:key"), "value-nested");
+    assert.deepStrictEqual(await scoped.keys(), ["another:colon:key"]);
 
     // 根存储读取严格限定空命名空间，不隐式回扫作用域键；
     // keys 列表不暴露作用域键，写入也不落到根命名空间
-    expect(await store.get("another:colon:key")).toBeUndefined();
-    expect(await store.keys()).not.toContain("another:colon:key");
+    assert.strictEqual(await store.get("another:colon:key"), undefined);
+    assert.ok(!(await store.keys()).includes("another:colon:key"));
 
     // 删除包含冒号的键
     const deleted = await scoped.delete("another:colon:key");
-    expect(deleted).toBe(true);
-    expect(await scoped.get("another:colon:key")).toBeUndefined();
-    expect(await scoped.keys()).toEqual([]);
+    assert.strictEqual(deleted, true);
+    assert.strictEqual(await scoped.get("another:colon:key"), undefined);
+    assert.deepStrictEqual(await scoped.keys(), []);
 
     // 命名空间碰撞测试：命名空间 a:b + 键 c 与命名空间 a + 键 b:c 隔离
     const storeAB = store.scope("a:b");
@@ -135,10 +136,10 @@ describe("@actiondock/sdk", () => {
     await storeAB.set("c", "val-ab-c");
     await storeA.set("b:c", "val-a-bc");
 
-    expect(await storeAB.get<string>("c")).toBe("val-ab-c");
-    expect(await storeA.get<string>("b:c")).toBe("val-a-bc");
-    expect(await storeAB.get("b:c")).toBeUndefined();
-    expect(await storeA.get("c")).toBeUndefined();
+    assert.strictEqual(await storeAB.get<string>("c"), "val-ab-c");
+    assert.strictEqual(await storeA.get<string>("b:c"), "val-a-bc");
+    assert.strictEqual(await storeAB.get("b:c"), undefined);
+    assert.strictEqual(await storeA.get("c"), undefined);
   });
 
   it("supports MemoryLogger debug, info, warn, and error levels with data", () => {
@@ -148,11 +149,11 @@ describe("@actiondock/sdk", () => {
     logger.warn("warn message", { w: 3 });
     logger.error("error message", { e: 4 });
 
-    expect(logger.logs.length).toBe(4);
-    expect(logger.logs[0]).toEqual({ level: "debug", message: "debug message", data: { d: 1 } });
-    expect(logger.logs[1]).toEqual({ level: "info", message: "info message", data: { i: 2 } });
-    expect(logger.logs[2]).toEqual({ level: "warn", message: "warn message", data: { w: 3 } });
-    expect(logger.logs[3]).toEqual({ level: "error", message: "error message", data: { e: 4 } });
+    assert.strictEqual(logger.logs.length, 4);
+    assert.deepStrictEqual(logger.logs[0], { level: "debug", message: "debug message", data: { d: 1 } });
+    assert.deepStrictEqual(logger.logs[1], { level: "info", message: "info message", data: { i: 2 } });
+    assert.deepStrictEqual(logger.logs[2], { level: "warn", message: "warn message", data: { w: 3 } });
+    assert.deepStrictEqual(logger.logs[3], { level: "error", message: "error message", data: { e: 4 } });
   });
 
   it("supports action-to-action invocation by identifier or ActionRef", async () => {
@@ -173,7 +174,7 @@ describe("@actiondock/sdk", () => {
       },
     });
     const res = await runtime.run(parentAction, { val: 10 });
-    expect(res).toEqual({ result: 21 });
+    assert.deepStrictEqual(res, { result: 21 });
   });
 
   it("strictly prohibits passing ActionDefinition to ctx.actions.invoke", async () => {
@@ -195,9 +196,9 @@ describe("@actiondock/sdk", () => {
 
     try {
       await runtime.run(invalidCaller, {});
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe("INVALID_ACTION_REF");
+      assert.strictEqual(err.code, "INVALID_ACTION_REF");
     }
   });
 
@@ -227,7 +228,7 @@ describe("@actiondock/sdk", () => {
       },
     });
     const res = await runtime.run(parentAction, { val: 5 });
-    expect(res).toEqual({ total: 15 + 15 + 15 + 15 });
+    assert.deepStrictEqual(res, { total: 15 + 15 + 15 + 15 });
 
     // 验证以结构化 ActionRef 指定 packageId 调用以完全限定键名注册的 Action
     const scopedCaller = defineAction({
@@ -236,7 +237,7 @@ describe("@actiondock/sdk", () => {
       },
     });
     const scopedRes = await runtime.run(scopedCaller, {});
-    expect(scopedRes).toBe("processed: hello");
+    assert.strictEqual(scopedRes, "processed: hello");
   });
 
   it("detects recursion/cycle in action invocation", async () => {
@@ -251,7 +252,7 @@ describe("@actiondock/sdk", () => {
         "test.cycle": cycleAction,
       },
     });
-    await expect(runtime.run("test.cycle", {})).rejects.toThrow("Cycle detected");
+    await assert.rejects(runtime.run("test.cycle", {}), /Cycle detected/);
   });
 
   it("supports full-trace run context (rootId, parentId) in nested action invocation", async () => {
@@ -279,17 +280,17 @@ describe("@actiondock/sdk", () => {
 
     await runtime.run(parentAction, {});
 
-    expect(capturedParentRun).toBeDefined();
-    expect(capturedChildRun).toBeDefined();
+    assert.notStrictEqual(capturedParentRun, undefined);
+    assert.notStrictEqual(capturedChildRun, undefined);
 
-    expect(capturedParentRun.id).toBeTruthy();
-    expect(capturedParentRun.rootId).toBe(capturedParentRun.id);
-    expect(capturedParentRun.parentId).toBeUndefined();
+    assert.ok(capturedParentRun.id);
+    assert.strictEqual(capturedParentRun.rootId, capturedParentRun.id);
+    assert.strictEqual(capturedParentRun.parentId, undefined);
 
-    expect(capturedChildRun.id).toBeTruthy();
-    expect(capturedChildRun.id).not.toBe(capturedParentRun.id);
-    expect(capturedChildRun.rootId).toBe(capturedParentRun.rootId);
-    expect(capturedChildRun.parentId).toBe(capturedParentRun.id);
+    assert.ok(capturedChildRun.id);
+    assert.notStrictEqual(capturedChildRun.id, capturedParentRun.id);
+    assert.strictEqual(capturedChildRun.rootId, capturedParentRun.rootId);
+    assert.strictEqual(capturedChildRun.parentId, capturedParentRun.id);
   });
 
   it("handles cross-package same-name action invocation in test runtime without cycle false positive", async () => {
@@ -317,7 +318,7 @@ describe("@actiondock/sdk", () => {
     });
 
     const res = await runtime.run(caller, { x: 5 });
-    expect(res).toEqual({ local: 6, ext: 50 });
+    assert.deepStrictEqual(res, { local: 6, ext: 50 });
   });
 
   it("supports concurrent sub-action invocations without call stack race conditions", async () => {
@@ -344,25 +345,25 @@ describe("@actiondock/sdk", () => {
     });
 
     const results = await runtime.run(concurrentCaller, {});
-    expect(results).toEqual([2, 4, 6]);
+    assert.deepStrictEqual(results, [2, 4, 6]);
   });
 
   it("handles state expiration with TTL in MemoryStateStore", async () => {
     const runtime = createTestRuntime();
 
     await runtime.state.set("temp-key", "hello", 0.05);
-    expect(await runtime.state.get<string>("temp-key")).toBe("hello");
-    expect(await runtime.state.keys()).toContain("temp-key");
+    assert.strictEqual(await runtime.state.get<string>("temp-key"), "hello");
+    assert.ok((await runtime.state.keys()).includes("temp-key"));
 
     await runtime.state.set("permanent", "keep-me");
 
     await runtime.clock.advance(100);
 
-    expect(await runtime.state.get("temp-key")).toBeUndefined();
-    expect(await runtime.state.get<string>("permanent")).toBe("keep-me");
+    assert.strictEqual(await runtime.state.get("temp-key"), undefined);
+    assert.strictEqual(await runtime.state.get<string>("permanent"), "keep-me");
 
     const remainingKeys = await runtime.state.keys();
-    expect(remainingKeys).toEqual(["permanent"]);
+    assert.deepStrictEqual(remainingKeys, ["permanent"]);
   });
 
   it("executes CLI command using ctx.process.run", async () => {
@@ -400,10 +401,10 @@ describe("@actiondock/sdk", () => {
     });
 
     const res = await runtime.run(runAction, { executable: "node", args: ["--version"] });
-    expect(res.exit.code).toBe(0);
-    expect(decodeText(res.chunks)).toBe("v24.12.0");
-    expect(calledSpec.executable).toBe("node");
-    expect(calledSpec.args).toEqual(["--version"]);
+    assert.strictEqual(res.exit.code, 0);
+    assert.strictEqual(decodeText(res.chunks), "v24.12.0");
+    assert.strictEqual(calledSpec.executable, "node");
+    assert.deepStrictEqual(calledSpec.args, ["--version"]);
   });
 
   it("manages process lifecycle via ctx.process.start and inspect", async () => {
@@ -465,9 +466,9 @@ describe("@actiondock/sdk", () => {
     });
 
     const res = await runtime.run(startAction, { requestId: "req-abc", executable: "node" });
-    expect(res.startedId).toBe("proc-req-abc");
-    expect(res.inspectedId).toBe("proc-req-abc");
-    expect(res.state).toBe("running");
+    assert.strictEqual(res.startedId, "proc-req-abc");
+    assert.strictEqual(res.inspectedId, "proc-req-abc");
+    assert.strictEqual(res.state, "running");
   });
 
   it("enforces input and output schema validation throwing ActionRuntimeError", async () => {
@@ -498,24 +499,24 @@ describe("@actiondock/sdk", () => {
     // 输入参数校验失败
     try {
       await runtime.run(strictAction, { count: "not-a-number" } as any);
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ActionRuntimeError);
-      expect(err.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.ok(err instanceof ActionRuntimeError);
+      assert.strictEqual(err.code, "INPUT_VALIDATION_FAILED");
     }
 
     // 输出参数校验失败
     try {
       await runtime.run(strictAction, { count: -1 });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ActionRuntimeError);
-      expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
+      assert.ok(err instanceof ActionRuntimeError);
+      assert.strictEqual(err.code, "OUTPUT_VALIDATION_FAILED");
     }
 
     // 校验成功通过
     const res = await runtime.run(strictAction, { count: 10 });
-    expect(res).toEqual({ valid: true });
+    assert.deepStrictEqual(res, { valid: true });
   });
 
   it("detects cyclic action invocations and throws ACTION_CALL_CYCLE", async () => {
@@ -540,9 +541,9 @@ describe("@actiondock/sdk", () => {
 
     try {
       await runtime.run(loopA, {});
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe("ACTION_CALL_CYCLE");
+      assert.strictEqual(err.code, "ACTION_CALL_CYCLE");
     }
   });
 
@@ -556,15 +557,15 @@ describe("@actiondock/sdk", () => {
       state: { item: "state2" },
     });
 
-    expect(runtime1.config.get<string>("KEY")).toBe("value1");
-    expect(runtime2.config.get<string>("KEY")).toBe("value2");
+    assert.strictEqual(runtime1.config.get<string>("KEY"), "value1");
+    assert.strictEqual(runtime2.config.get<string>("KEY"), "value2");
 
     await runtime1.state.set("item", "updated1");
-    expect(await runtime1.state.get<string>("item")).toBe("updated1");
-    expect(await runtime2.state.get<string>("item")).toBe("state2");
+    assert.strictEqual(await runtime1.state.get<string>("item"), "updated1");
+    assert.strictEqual(await runtime2.state.get<string>("item"), "state2");
 
     await runtime1.state.set("temp", "expiring", 0.001);
     await runtime1.clock.advance(10);
-    expect(await runtime1.state.get("temp")).toBeUndefined();
+    assert.strictEqual(await runtime1.state.get("temp"), undefined);
   });
 });

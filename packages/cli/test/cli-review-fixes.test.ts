@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -101,22 +102,22 @@ describe("CLI Review Fixes", () => {
       setupPackage(pkgBDir, "review.pkg-b", "shared.echo");
 
       const linkA = await runCliAsync(["link", pkgADir], tmpdir());
-      expect(linkA.exitCode).toBe(0);
+      assert.strictEqual(linkA.exitCode, 0);
       const linkB = await runCliAsync(["link", pkgBDir], tmpdir());
-      expect(linkB.exitCode).toBe(0);
+      assert.strictEqual(linkB.exitCode, 0);
 
       // 指定 -P review.pkg-a：不得混入 pkg-b 的短 id 条目
       const proc = await runCliAsync(["list", "-P", "review.pkg-a", "--json"], tmpdir());
-      expect(proc.exitCode).toBe(0);
+      assert.strictEqual(proc.exitCode, 0);
       const actions = JSON.parse(proc.stdout.toString());
-      expect(actions.items.length).toBe(1);
-      expect((actions.items[0] as any).id).toBe("shared.echo");
+      assert.strictEqual(actions.items.length, 1);
+      assert.strictEqual((actions.items[0] as any).id, "shared.echo");
 
       // 不指定 -P（链接包聚合视图）：两个包的条目均可列出
       const all = await runCliAsync(["list", "--json"], tmpdir());
-      expect(all.exitCode).toBe(0);
+      assert.strictEqual(all.exitCode, 0);
       const allActions = JSON.parse(all.stdout.toString());
-      expect(allActions.items.length).toBe(2);
+      assert.strictEqual(allActions.items.length, 2);
     } finally {
       await runCliAsync(["unlink", "review.pkg-a"], tmpdir()).catch(() => {});
       await runCliAsync(["unlink", "review.pkg-b"], tmpdir()).catch(() => {});
@@ -149,15 +150,15 @@ describe("CLI Review Fixes", () => {
     }
 
     const proc = await runCliAsync(["runs", "list", "-n", "600", "--json"], tempDir);
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const runs = JSON.parse(proc.stdout.toString());
     // 修复前查询层硬编码 500 上限：600 条历史下 -n 600 只能看到 500 条
-    expect(runs.length).toBe(600);
+    assert.strictEqual(runs.length, 600);
 
     // 默认 -n 20 仍按用户值截断
     const small = await runCliAsync(["runs", "list", "--json"], tempDir);
-    expect(small.exitCode).toBe(0);
-    expect(JSON.parse(small.stdout.toString()).length).toBe(20);
+    assert.strictEqual(small.exitCode, 0);
+    assert.strictEqual(JSON.parse(small.stdout.toString()).length, 20);
   });
 
   it("keeps config schema statuses consistent with the merged config list view", async () => {
@@ -165,32 +166,32 @@ describe("CLI Review Fixes", () => {
     await runCliAsync(["config", "set", "SAMPLE_GREETING", "Howdy"], tempDir);
 
     const schemaProc = await runCliAsync(["config", "schema", "--json"], tempDir);
-    expect(schemaProc.exitCode).toBe(0);
+    assert.strictEqual(schemaProc.exitCode, 0);
     const schema = JSON.parse(schemaProc.stdout.toString());
 
     const listProc = await runCliAsync(["config", "list", "--json"], tempDir);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const entries = JSON.parse(listProc.stdout.toString());
 
     const listByKey = new Map<string, any>(entries.map((e: any) => [e.key, e] as [string, any]));
 
     for (const item of schema.configs) {
       const merged = listByKey.get(item.key) as any;
-      expect(merged).toBeDefined();
+      assert.notStrictEqual(merged, undefined);
       // schema 的 source 与合并视图的 source 一致；
       // 状态推导：非 default 来源即 SET，default 来源且确有声明默认值即 DEFAULT
-      expect(item.source).toBe(merged.source);
+      assert.strictEqual(item.source, merged.source);
       if (item.source === "default") {
-        expect(item.status).toBe("DEFAULT");
+        assert.strictEqual(item.status, "DEFAULT");
       } else {
-        expect(item.status).toBe("SET");
+        assert.strictEqual(item.status, "SET");
       }
     }
 
     // project 来源（包级持久化）命中：SAMPLE_GREETING 经 config set 写入包级作用域
     const greeting = schema.configs.find((c: any) => c.key === "SAMPLE_GREETING");
-    expect(greeting.source).toBe("project");
-    expect(greeting.status).toBe("SET");
+    assert.strictEqual(greeting.source, "project");
+    assert.strictEqual(greeting.status, "SET");
   });
 
   it("preserves core error codes in --json envelopes instead of degrading to EXECUTION_FAILURE", async () => {
@@ -198,14 +199,14 @@ describe("CLI Review Fixes", () => {
     writeFileSync(join(tempDir, "actiondock.json"), "{ invalid json !!!");
 
     const proc = await runCliAsync(["config", "schema", "--json"], tempDir);
-    expect(proc.exitCode).not.toBe(0);
+    assert.notStrictEqual(proc.exitCode, 0);
     const envelope = JSON.parse(proc.stdout.toString());
-    expect(envelope.ok).toBe(false);
-    expect(typeof envelope.error.code).toBe("string");
-    expect(envelope.error.code).not.toBe("EXECUTION_FAILURE");
+    assert.strictEqual(envelope.ok, false);
+    assert.strictEqual(typeof envelope.error.code, "string");
+    assert.notStrictEqual(envelope.error.code, "EXECUTION_FAILURE");
 
     // link 命令同样保留原始错误码
     const linkProc = await runCliAsync(["link", join(tempDir, "no-such-dir")], tempDir);
-    expect(linkProc.exitCode).not.toBe(0);
+    assert.notStrictEqual(linkProc.exitCode, 0);
   });
 });

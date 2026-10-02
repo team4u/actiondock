@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -38,33 +39,33 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
       const dictPath = join(tempDir, "dict.json");
       writeFileSync(dictPath, JSON.stringify({ admin: { token: "token-a" } }));
       const dictViews = loadViewsFromFile(dictPath);
-      expect(dictViews).toEqual({ admin: { token: "token-a" } });
+      assert.deepStrictEqual(dictViews, { admin: { token: "token-a" } });
 
       // 2. 数组形式
       const arrayPath = join(tempDir, "array.json");
       writeFileSync(arrayPath, JSON.stringify([{ name: "worker", token: "token-w" }]));
       const arrayViews = loadViewsFromFile(arrayPath);
-      expect(arrayViews).toEqual([{ name: "worker", token: "token-w" }]);
+      assert.deepStrictEqual(arrayViews, [{ name: "worker", token: "token-w" }]);
 
       // 3. { views: ... } 嵌套形态
       const nestedPath = join(tempDir, "nested.json");
       writeFileSync(nestedPath, JSON.stringify({ views: { guest: { token: "token-g" } } }));
       const nestedViews = loadViewsFromFile(nestedPath);
-      expect(nestedViews).toEqual({ guest: { token: "token-g" } });
+      assert.deepStrictEqual(nestedViews, { guest: { token: "token-g" } });
 
       // 4. { server: { views: ... } } 嵌套形态
       const serverPath = join(tempDir, "server.json");
       writeFileSync(serverPath, JSON.stringify({ server: { views: { svc: { token: "token-s" } } } }));
       const serverViews = loadViewsFromFile(serverPath);
-      expect(serverViews).toEqual({ svc: { token: "token-s" } });
+      assert.deepStrictEqual(serverViews, { svc: { token: "token-s" } });
 
       // 5. 文件不存在时抛出 ArgumentError
-      expect(() => loadViewsFromFile(join(tempDir, "missing.json"))).toThrow("Views file not found");
+      assert.throws(() => loadViewsFromFile(join(tempDir, "missing.json")), /Views file not found/);
 
       // 6. JSON 非法时抛出 ArgumentError
       const invalidPath = join(tempDir, "invalid.json");
       writeFileSync(invalidPath, "not-valid-json");
-      expect(() => loadViewsFromFile(invalidPath)).toThrow("Failed to read views file");
+      assert.throws(() => loadViewsFromFile(invalidPath), /Failed to read views file/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -82,15 +83,15 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
     };
 
     const merged = mergeServerViews(baseDict, overrideDict) as Record<string, any>;
-    expect(merged.shared.token).toBe("override-token");
-    expect(merged.shared.packageAllowlist).toEqual(["pkg-2"]);
-    expect(merged.baseOnly.token).toBe("base-only-token");
-    expect(merged.overrideOnly.token).toBe("override-only-token");
+    assert.strictEqual(merged.shared.token, "override-token");
+    assert.deepStrictEqual(merged.shared.packageAllowlist, ["pkg-2"]);
+    assert.strictEqual(merged.baseOnly.token, "base-only-token");
+    assert.strictEqual(merged.overrideOnly.token, "override-only-token");
 
     // 仅有其一时回退对应配置
-    expect(mergeServerViews(undefined, overrideDict)).toEqual(overrideDict);
-    expect(mergeServerViews(baseDict, undefined)).toEqual(baseDict);
-    expect(mergeServerViews(undefined, undefined)).toBeUndefined();
+    assert.deepStrictEqual(mergeServerViews(undefined, overrideDict), overrideDict);
+    assert.deepStrictEqual(mergeServerViews(baseDict, undefined), baseDict);
+    assert.strictEqual(mergeServerViews(undefined, undefined), undefined);
   });
 
   it("extractNamespacedViews: 提取命名空间视图并过滤 default 默认视图", () => {
@@ -100,10 +101,10 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
       readonly: { token: "ro-token", enableMcp: false },
     };
     const extracted = extractNamespacedViews(views);
-    expect(extracted.length).toBe(2);
-    expect(extracted.map((v) => v.name)).toEqual(["admin", "readonly"]);
-    expect(extracted.find((v) => v.name === "admin")?.enableMcp).toBe(true);
-    expect(extracted.find((v) => v.name === "readonly")?.enableMcp).toBe(false);
+    assert.strictEqual(extracted.length, 2);
+    assert.deepStrictEqual(extracted.map((v) => v.name), ["admin", "readonly"]);
+    assert.strictEqual(extracted.find((v) => v.name === "admin")?.enableMcp, true);
+    assert.strictEqual(extracted.find((v) => v.name === "readonly")?.enableMcp, false);
   });
 
   it("printServerBanner: 包含命名空间视图时正确渲染名称、专属 MCP 端点与 HTTP 根路径", () => {
@@ -123,14 +124,14 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
       enableMcp: true,
     });
 
-    expect(output).toContain("* Listening on:    http://127.0.0.1:5177");
-    expect(output).toContain("* Views:");
-    expect(output).toContain("- admin:");
-    expect(output).toContain("- HTTP Root:    http://127.0.0.1:5177/views/admin");
-    expect(output).toContain("- MCP Endpoint: http://127.0.0.1:5177/views/admin/mcp");
-    expect(output).toContain("- worker:");
-    expect(output).toContain("- HTTP Root:    http://127.0.0.1:5177/views/worker");
-    expect(output).toContain("- MCP Endpoint: Disabled");
+    assert.ok((output).includes("* Listening on:    http://127.0.0.1:5177"));
+    assert.ok((output).includes("* Views:"));
+    assert.ok((output).includes("- admin:"));
+    assert.ok((output).includes("- HTTP Root:    http://127.0.0.1:5177/views/admin"));
+    assert.ok((output).includes("- MCP Endpoint: http://127.0.0.1:5177/views/admin/mcp"));
+    assert.ok((output).includes("- worker:"));
+    assert.ok((output).includes("- HTTP Root:    http://127.0.0.1:5177/views/worker"));
+    assert.ok((output).includes("- MCP Endpoint: Disabled"));
   });
 
   it("printServerBanner: 无视图配置时保持向后兼容，不输出 Views 段落", () => {
@@ -143,8 +144,8 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
 
     printServerBanner("Legacy Server", "http", "127.0.0.1", 5177, fakeContext);
 
-    expect(output).toContain("* Listening on:    http://127.0.0.1:5177");
-    expect(output).not.toContain("* Views:");
+    assert.ok((output).includes("* Listening on:    http://127.0.0.1:5177"));
+    assert.ok(!(output).includes("* Views:"));
   });
 });
 
@@ -364,29 +365,29 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 1. 验证启动横幅（banner）中清晰输出了命名空间视图列表
-    expect(bannerOutput).toContain("* Views:");
-    expect(bannerOutput).toContain("- admin:");
-    expect(bannerOutput).toContain(`- HTTP Root:    http://127.0.0.1:${port}/views/admin`);
-    expect(bannerOutput).toContain(`- MCP Endpoint: http://127.0.0.1:${port}/views/admin/mcp`);
-    expect(bannerOutput).toContain("- math-only:");
-    expect(bannerOutput).toContain(`- HTTP Root:    http://127.0.0.1:${port}/views/math-only`);
-    expect(bannerOutput).toContain(`- MCP Endpoint: http://127.0.0.1:${port}/views/math-only/mcp`);
-    expect(bannerOutput).toContain("- no-mcp:");
-    expect(bannerOutput).toContain(`- HTTP Root:    http://127.0.0.1:${port}/views/no-mcp`);
-    expect(bannerOutput).toContain("- MCP Endpoint: Disabled");
+    assert.ok((bannerOutput).includes("* Views:"));
+    assert.ok((bannerOutput).includes("- admin:"));
+    assert.ok((bannerOutput).includes(`- HTTP Root:    http://127.0.0.1:${port}/views/admin`));
+    assert.ok((bannerOutput).includes(`- MCP Endpoint: http://127.0.0.1:${port}/views/admin/mcp`));
+    assert.ok((bannerOutput).includes("- math-only:"));
+    assert.ok((bannerOutput).includes(`- HTTP Root:    http://127.0.0.1:${port}/views/math-only`));
+    assert.ok((bannerOutput).includes(`- MCP Endpoint: http://127.0.0.1:${port}/views/math-only/mcp`));
+    assert.ok((bannerOutput).includes("- no-mcp:"));
+    assert.ok((bannerOutput).includes(`- HTTP Root:    http://127.0.0.1:${port}/views/no-mcp`));
+    assert.ok((bannerOutput).includes("- MCP Endpoint: Disabled"));
 
     // 2. 验证命名空间 HTTP API 隔离：math-only 视图仅返回 pkg.math 动作
     const mathActionsRes = await fetch(`${serverUrl}/views/math-only/api/v2/actions`, {
       headers: { Authorization: `Bearer ${MATH_TOKEN}` },
     });
-    expect(mathActionsRes.status).toBe(200);
+    assert.strictEqual(mathActionsRes.status, 200);
     const mathActions = (await mathActionsRes.json()) as any[];
     const mathActionIds = mathActions.map((a: any) => a.id);
-    expect(mathActionIds.some((id: string) => id.includes("calc"))).toBe(true);
-    expect(mathActionIds.some((id: string) => id.includes("manage"))).toBe(false);
+    assert.strictEqual(mathActionIds.some((id: string) => id.includes("calc")), true);
+    assert.strictEqual(mathActionIds.some((id: string) => id.includes("manage")), false);
 
     // 3. 验证命名空间 HTTP API 执行：math-only 视图执行 calc 成功，执行 manage 返回 403
     const calcRunRes = await fetch(`${serverUrl}/views/math-only/api/v2/actions/calc/run`, {
@@ -397,9 +398,9 @@ export default defineAction({
       },
       body: JSON.stringify({ input: { num: 21 } }),
     });
-    expect(calcRunRes.status).toBe(200);
+    assert.strictEqual(calcRunRes.status, 200);
     const calcData = (await calcRunRes.json()) as any;
-    expect(calcData.data.result).toBe(42);
+    assert.strictEqual(calcData.data.result, 42);
 
     const manageRunRes = await fetch(`${serverUrl}/views/math-only/api/v2/actions/manage/run`, {
       method: "POST",
@@ -409,7 +410,7 @@ export default defineAction({
       },
       body: JSON.stringify({ input: {} }),
     });
-    expect(manageRunRes.status).toBe(403);
+    assert.strictEqual(manageRunRes.status, 403);
 
     // 4. 验证 admin 视图可执行 manage
     const adminManageRes = await fetch(`${serverUrl}/views/admin/api/v2/actions/manage/run`, {
@@ -420,9 +421,9 @@ export default defineAction({
       },
       body: JSON.stringify({ input: {} }),
     });
-    expect(adminManageRes.status).toBe(200);
+    assert.strictEqual(adminManageRes.status, 200);
     const adminData = (await adminManageRes.json()) as any;
-    expect(adminData.data.status).toBe("admin-ok");
+    assert.strictEqual(adminData.data.status, "admin-ok");
 
     // 5. 验证 MCP 端点工具隔离：math-only MCP 服务 tools/list 仅包含 calc
     const mathInitRes = await fetch(`${serverUrl}/views/math-only/mcp`, {
@@ -443,7 +444,7 @@ export default defineAction({
         },
       }),
     });
-    expect(mathInitRes.status).toBe(200);
+    assert.strictEqual(mathInitRes.status, 200);
     const mathSessionId = mathInitRes.headers.get("mcp-session-id");
     const mathMcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${MATH_TOKEN}`,
@@ -464,7 +465,7 @@ export default defineAction({
         params: {},
       }),
     });
-    expect(mathListRes.status).toBe(200);
+    assert.strictEqual(mathListRes.status, 200);
     const mathListText = await mathListRes.text();
     let mathListData: any;
     if (mathListText.startsWith("event:")) {
@@ -474,8 +475,8 @@ export default defineAction({
       mathListData = JSON.parse(mathListText);
     }
     const mathToolNames = mathListData.result.tools.map((t: any) => t.name);
-    expect(mathToolNames.some((n: string) => n.includes("calc"))).toBe(true);
-    expect(mathToolNames.some((n: string) => n.includes("manage"))).toBe(false);
+    assert.strictEqual(mathToolNames.some((n: string) => n.includes("calc")), true);
+    assert.strictEqual(mathToolNames.some((n: string) => n.includes("manage")), false);
 
     // 6. 验证 admin 视图 MCP 包含所有工具
     const adminInitRes = await fetch(`${serverUrl}/views/admin/mcp`, {
@@ -496,7 +497,7 @@ export default defineAction({
         },
       }),
     });
-    expect(adminInitRes.status).toBe(200);
+    assert.strictEqual(adminInitRes.status, 200);
     const adminSessionId = adminInitRes.headers.get("mcp-session-id");
     const adminMcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${ADMIN_TOKEN}`,
@@ -517,7 +518,7 @@ export default defineAction({
         params: {},
       }),
     });
-    expect(adminListRes.status).toBe(200);
+    assert.strictEqual(adminListRes.status, 200);
     const adminListText = await adminListRes.text();
     let adminListData: any;
     if (adminListText.startsWith("event:")) {
@@ -527,8 +528,8 @@ export default defineAction({
       adminListData = JSON.parse(adminListText);
     }
     const adminToolNames = adminListData.result.tools.map((t: any) => t.name);
-    expect(adminToolNames.some((n: string) => n.includes("calc"))).toBe(true);
-    expect(adminToolNames.some((n: string) => n.includes("manage"))).toBe(true);
+    assert.strictEqual(adminToolNames.some((n: string) => n.includes("calc")), true);
+    assert.strictEqual(adminToolNames.some((n: string) => n.includes("manage")), true);
 
     // 7. 验证禁用 MCP 的视图返回 404
     const noMcpRes = await fetch(`${serverUrl}/views/no-mcp/mcp`, {
@@ -544,7 +545,7 @@ export default defineAction({
         params: {},
       }),
     });
-    expect(noMcpRes.status).toBe(404);
+    assert.strictEqual(noMcpRes.status, 404);
   });
 
   it("通过 --views-file 选项加载外部视图文件，且外部视图优先覆盖 actiondock.json 中的同名视图", async () => {
@@ -649,12 +650,12 @@ export default defineAction({
       } catch {}
       await new Promise((r) => setTimeout(r, 100));
     }
-    expect(ready).toBe(true);
+    assert.strictEqual(ready, true);
 
     // 启动横幅中包含合并后的全部视图
-    expect(bannerOutput).toContain("- shared:");
-    expect(bannerOutput).toContain("- baseOnly:");
-    expect(bannerOutput).toContain("- fileOnly:");
+    assert.ok((bannerOutput).includes("- shared:"));
+    assert.ok((bannerOutput).includes("- baseOnly:"));
+    assert.ok((bannerOutput).includes("- fileOnly:"));
 
     // shared 视图已被覆盖：使用 file-override-token 鉴权成功，且仅能执行 pkg.math/calc
     const runRes = await fetch(`${serverUrl}/views/shared/api/v2/actions/calc/run`, {
@@ -665,7 +666,7 @@ export default defineAction({
       },
       body: JSON.stringify({ input: { num: 10 } }),
     });
-    expect(runRes.status).toBe(200);
+    assert.strictEqual(runRes.status, 200);
 
     // 旧 base-token 鉴权失败
     const unauthorizedRes = await fetch(`${serverUrl}/views/shared/api/v2/actions/calc/run`, {
@@ -676,6 +677,6 @@ export default defineAction({
       },
       body: JSON.stringify({ input: { num: 10 } }),
     });
-    expect(unauthorizedRes.status).toBe(401);
+    assert.strictEqual(unauthorizedRes.status, 401);
   });
 });

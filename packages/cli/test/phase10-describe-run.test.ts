@@ -1,7 +1,8 @@
+import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import {
   StandaloneDispatcher,
@@ -49,24 +50,24 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         stdout: (msg) => (out += msg),
       });
 
-      expect(code).toBe(ExitCode.SUCCESS);
+      assert.strictEqual(code, ExitCode.SUCCESS);
       const parsed = JSON.parse(out);
 
-      expect(parsed.id).toBe("greet");
-      expect(parsed.packageId).toBe("test.phase10");
-      expect(parsed.inputSchema).toEqual(sampleAction.inputSchema);
-      expect(parsed.outputSchema).toBeUndefined();
+      assert.strictEqual(parsed.id, "greet");
+      assert.strictEqual(parsed.packageId, "test.phase10");
+      assert.deepStrictEqual(parsed.inputSchema, sampleAction.inputSchema);
+      assert.strictEqual(parsed.outputSchema, undefined);
 
       // 验证重复元数据已被移除
-      expect(parsed.inputTransport).toBeUndefined();
-      expect(parsed.inputEncoding).toBeUndefined();
-      expect(parsed.inputPolicy).toBeUndefined();
+      assert.strictEqual(parsed.inputTransport, undefined);
+      assert.strictEqual(parsed.inputEncoding, undefined);
+      assert.strictEqual(parsed.inputPolicy, undefined);
 
       // 验证 inputAdvice 精简结构
-      expect(parsed.inputAdvice).toBeDefined();
-      expect(parsed.inputAdvice.version).toBe(1);
-      expect(parsed.inputAdvice.recommendedMode).toBe("flat");
-      expect(parsed.inputAdvice.assignments).toEqual({
+      assert.notStrictEqual(parsed.inputAdvice, undefined);
+      assert.strictEqual(parsed.inputAdvice.version, 1);
+      assert.strictEqual(parsed.inputAdvice.recommendedMode, "flat");
+      assert.deepStrictEqual(parsed.inputAdvice.assignments, {
         name: "=",
         age: ":=",
       });
@@ -76,7 +77,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         packageId: "test.phase10",
         inputSchema: sampleAction.inputSchema,
       });
-      expect(parsed).toEqual(expectedPayload);
+      assert.deepStrictEqual(parsed, expectedPayload);
     });
 
     it("普通 CLI describe --json 与 Standalone describe --json 机器契约完全一致", async () => {
@@ -125,7 +126,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
             tempPkgDir,
             "--json",
           ]);
-          expect(exitCode).toBe(0);
+          assert.strictEqual(exitCode, 0);
         } finally {
           console.log = origConsoleLog;
         }
@@ -133,7 +134,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         const cliData = JSON.parse(cliOut);
 
         // 3. 直接完整比较普通 CLI 与 Standalone 输出 JSON
-        expect(cliData).toEqual(standaloneData);
+        assert.deepStrictEqual(cliData, standaloneData);
       } finally {
         rmSync(tempPkgDir, { recursive: true, force: true });
       }
@@ -146,15 +147,15 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         ...baseStandaloneOpts,
         stdout: (msg) => (standaloneOut += msg),
       });
-      expect(standaloneCode).toBe(ExitCode.SUCCESS);
-      expect(standaloneOut).toContain("Action: greet");
-      expect(standaloneOut).toContain("Recommended Input: flat");
-      expect(standaloneOut).toContain("Assignments:");
-      expect(standaloneOut).toContain("Syntax Reference:");
-      expect(standaloneOut).toContain('key="value"');
-      expect(standaloneOut).toContain("count:=10  enabled:=true");
-      expect(standaloneOut).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
-      expect(standaloneOut).toContain("--input-file input.json");
+      assert.strictEqual(standaloneCode, ExitCode.SUCCESS);
+      assert.ok((standaloneOut).includes("Action: greet"));
+      assert.ok((standaloneOut).includes("Recommended Input: flat"));
+      assert.ok((standaloneOut).includes("Assignments:"));
+      assert.ok((standaloneOut).includes("Syntax Reference:"));
+      assert.ok((standaloneOut).includes('key="value"'));
+      assert.ok((standaloneOut).includes("count:=10  enabled:=true"));
+      assert.ok((standaloneOut).includes('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")'));
+      assert.ok((standaloneOut).includes("--input-file input.json"));
 
       // 2. 真实调用普通 CLI describe (human-readable)
       const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-phase10-cli-human-"));
@@ -192,19 +193,19 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
             "-P",
             tempPkgDir,
           ]);
-          expect(exitCode).toBe(0);
+          assert.strictEqual(exitCode, 0);
         } finally {
           console.log = origConsoleLog;
         }
 
-        expect(cliOut).toContain("Action: greet");
-        expect(cliOut).toContain("Recommended Input: flat");
-        expect(cliOut).toContain("Assignments:");
-        expect(cliOut).toContain("Syntax Reference:");
-        expect(cliOut).toContain('key="value"');
-        expect(cliOut).toContain("count:=10  enabled:=true");
-        expect(cliOut).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
-        expect(cliOut).toContain("--input-file input.json");
+        assert.ok((cliOut).includes("Action: greet"));
+        assert.ok((cliOut).includes("Recommended Input: flat"));
+        assert.ok((cliOut).includes("Assignments:"));
+        assert.ok((cliOut).includes("Syntax Reference:"));
+        assert.ok((cliOut).includes('key="value"'));
+        assert.ok((cliOut).includes("count:=10  enabled:=true"));
+        assert.ok((cliOut).includes('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")'));
+        assert.ok((cliOut).includes("--input-file input.json"));
       } finally {
         rmSync(tempPkgDir, { recursive: true, force: true });
       }
@@ -223,14 +224,14 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         }
       );
 
-      expect(code).toBe(ExitCode.INVALID_ARGUMENT);
-      expect(localExecuted).toBe(false);
+      assert.strictEqual(code, ExitCode.INVALID_ARGUMENT);
+      assert.strictEqual(localExecuted, false);
 
       const parsed = JSON.parse(out);
-      expect(parsed.ok).toBe(false);
-      expect(parsed.error.code).toBe("INPUT_POLICY_VIOLATION");
-      expect(parsed.error.details?.reason).toBe("FORBIDDEN_PROPERTY");
-      expect(parsed.error.details?.property).toBe("__proto__");
+      assert.strictEqual(parsed.ok, false);
+      assert.strictEqual(parsed.error.code, "INPUT_POLICY_VIOLATION");
+      assert.strictEqual(parsed.error.details?.reason, "FORBIDDEN_PROPERTY");
+      assert.strictEqual(parsed.error.details?.property, "__proto__");
     });
 
     it("Standalone handleRun 拦截包含 constructor / prototype 的输入", async () => {
@@ -245,14 +246,14 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           }
         );
 
-        expect(code).toBe(ExitCode.INVALID_ARGUMENT);
-        expect(localExecuted).toBe(false);
+        assert.strictEqual(code, ExitCode.INVALID_ARGUMENT);
+        assert.strictEqual(localExecuted, false);
 
         const parsed = JSON.parse(out);
-        expect(parsed.ok).toBe(false);
-        expect(parsed.error.code).toBe("INPUT_POLICY_VIOLATION");
-        expect(parsed.error.details?.reason).toBe("FORBIDDEN_PROPERTY");
-        expect(parsed.error.details?.property).toBe(forbiddenKey);
+        assert.strictEqual(parsed.ok, false);
+        assert.strictEqual(parsed.error.code, "INPUT_POLICY_VIOLATION");
+        assert.strictEqual(parsed.error.details?.reason, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(parsed.error.details?.property, forbiddenKey);
       }
     });
 
@@ -271,16 +272,16 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           },
           context
         );
-        expect(true).toBe(false);
+        assert.strictEqual(true, false);
       } catch (err) {
         caughtErr = err;
       }
 
-      expect(caughtErr).toBeDefined();
-      expect(caughtErr?.code).toBe("INPUT_POLICY_VIOLATION");
-      expect(caughtErr?.details?.reason).toBe("FORBIDDEN_PROPERTY");
-      expect(caughtErr?.details?.property).toBe("__proto__");
-      expect(targetCalled).toBe(false);
+      assert.notStrictEqual(caughtErr, undefined);
+      assert.strictEqual(caughtErr?.code, "INPUT_POLICY_VIOLATION");
+      assert.strictEqual(caughtErr?.details?.reason, "FORBIDDEN_PROPERTY");
+      assert.strictEqual(caughtErr?.details?.property, "__proto__");
+      assert.strictEqual(targetCalled, false);
     });
 
     it("executeAction 拦截包含 constructor / prototype 的输入并在派发至 target 前抛出 INPUT_POLICY_VIOLATION", async () => {
@@ -295,15 +296,15 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
             },
             { exitCode: 0 }
           );
-          expect(true).toBe(false);
+          assert.strictEqual(true, false);
         } catch (err) {
           caughtErr = err;
         }
 
-        expect(caughtErr).toBeDefined();
-        expect(caughtErr?.code).toBe("INPUT_POLICY_VIOLATION");
-        expect(caughtErr?.details?.reason).toBe("FORBIDDEN_PROPERTY");
-        expect(caughtErr?.details?.property).toBe(forbiddenKey);
+        assert.notStrictEqual(caughtErr, undefined);
+        assert.strictEqual(caughtErr?.code, "INPUT_POLICY_VIOLATION");
+        assert.strictEqual(caughtErr?.details?.reason, "FORBIDDEN_PROPERTY");
+        assert.strictEqual(caughtErr?.details?.property, forbiddenKey);
       }
     });
 
@@ -325,11 +326,11 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           "--json",
         ]);
 
-        expect(exitCode).toBe(ExitCode.INVALID_ARGUMENT);
+        assert.strictEqual(exitCode, ExitCode.INVALID_ARGUMENT);
         const parsed = JSON.parse(stdoutContent);
-        expect(parsed.ok).toBe(false);
-        expect(parsed.error.code).toBe("INPUT_POLICY_VIOLATION");
-        expect(parsed.error.details?.reason).toBe("FORBIDDEN_PROPERTY");
+        assert.strictEqual(parsed.ok, false);
+        assert.strictEqual(parsed.error.code, "INPUT_POLICY_VIOLATION");
+        assert.strictEqual(parsed.error.details?.reason, "FORBIDDEN_PROPERTY");
       } finally {
         console.log = origConsoleLog;
       }
@@ -346,10 +347,10 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         stderr: (msg) => (stderrOut += msg),
       });
 
-      expect(code).toBe(ExitCode.FAILURE);
-      expect(stdoutOut.trim()).toBe("");
-      expect(stderrOut).toContain("Error [INPUT_VALIDATION_FAILED]");
-      expect(stderrOut).toContain("Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
+      assert.strictEqual(code, ExitCode.FAILURE);
+      assert.strictEqual(stdoutOut.trim(), "");
+      assert.ok((stderrOut).includes("Error [INPUT_VALIDATION_FAILED]"));
+      assert.ok((stderrOut).includes("Tip: Run 'ad describe greet' to inspect schema and syntax examples."));
     });
 
     it("Standalone handleRun 在 --json 模式下 INPUT_VALIDATION_FAILED 严禁输出 Tip 且保持机器输出", async () => {
@@ -361,11 +362,11 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         stderr: (msg) => (stderrOut += msg),
       });
 
-      expect(code).toBe(ExitCode.FAILURE);
-      expect(stderrOut.trim()).toBe("");
+      assert.strictEqual(code, ExitCode.FAILURE);
+      assert.strictEqual(stderrOut.trim(), "");
       const parsed = JSON.parse(stdoutOut);
-      expect(parsed.ok).toBe(false);
-      expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(parsed.ok, false);
+      assert.strictEqual(parsed.error.code, "INPUT_VALIDATION_FAILED");
     });
 
     it("Standalone handleRun 在非 INPUT_VALIDATION_FAILED 错误（如 ACTION_FAILED）时严禁输出 Tip", async () => {
@@ -385,9 +386,9 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         stderr: (msg) => (stderrOut += msg),
       });
 
-      expect(code).toBe(ExitCode.FAILURE);
-      expect(stderrOut).toContain("Error [ACTION_FAILED]");
-      expect(stderrOut).not.toContain("Tip: Run 'ad describe");
+      assert.strictEqual(code, ExitCode.FAILURE);
+      assert.ok((stderrOut).includes("Error [ACTION_FAILED]"));
+      assert.ok(!(stderrOut).includes("Tip: Run 'ad describe"));
     });
 
     it("普通 CLI 与 Standalone 在入参校验失败时均输出 Tip 引导并保持一致", async () => {
@@ -418,11 +419,11 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           tempPkgDir
         );
 
-        expect(proc.exitCode).toBe(1);
-        expect(proc.stdout.toString().trim()).toBe("");
+        assert.strictEqual(proc.exitCode, 1);
+        assert.strictEqual(proc.stdout.toString().trim(), "");
         const stderr = proc.stderr.toString();
-        expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]");
-        expect(stderr).toContain("Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
+        assert.ok((stderr).includes("Error [INPUT_VALIDATION_FAILED]"));
+        assert.ok((stderr).includes("Tip: Run 'ad describe greet' to inspect schema and syntax examples."));
       } finally {
         rmSync(tempPkgDir, { recursive: true, force: true });
       }
@@ -456,11 +457,11 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           tempPkgDir
         );
 
-        expect(proc.exitCode).toBe(1);
-        expect(proc.stderr.toString().trim()).toBe("");
+        assert.strictEqual(proc.exitCode, 1);
+        assert.strictEqual(proc.stderr.toString().trim(), "");
         const parsed = JSON.parse(proc.stdout.toString());
-        expect(parsed.ok).toBe(false);
-        expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+        assert.strictEqual(parsed.ok, false);
+        assert.strictEqual(parsed.error.code, "INPUT_VALIDATION_FAILED");
       } finally {
         rmSync(tempPkgDir, { recursive: true, force: true });
       }

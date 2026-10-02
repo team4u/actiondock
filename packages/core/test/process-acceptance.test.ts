@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   createIncrementalTextDecoder,
   decodeBytes,
@@ -72,9 +73,9 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       spec: defaultSpec,
     });
 
-    expect(result2.process.id).toBe(result1.process.id);
-    expect(result2.initialCursor).toBe(result1.initialCursor);
-    expect(driver.handles.size).toBe(1);
+    assert.strictEqual(result2.process.id, result1.process.id);
+    assert.strictEqual(result2.initialCursor, result1.initialCursor);
+    assert.strictEqual(driver.handles.size, 1);
   });
 
   it("start 取消与 spawn 成功交错：不泄漏未交付进程，取消胜出时执行 stop", async () => {
@@ -108,28 +109,28 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       controller.abort();
     }, 15);
 
-    await expect(startPromise).rejects.toThrow(ProcessError);
+    await assert.rejects(startPromise, ProcessError);
 
     try {
       await startPromise;
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe(PROCESS_CANCELLED);
+      assert.strictEqual(err.code, PROCESS_CANCELLED);
     }
 
     // 等待异步 spawn 完成后的取消清理工作流转
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     // 驱动句柄已被执行终止，未发生进程泄漏
-    expect(createdHandle).toBeDefined();
-    expect(createdHandle!.terminated).toBe(true);
+    assert.notStrictEqual(createdHandle, undefined);
+    assert.strictEqual(createdHandle!.terminated, true);
 
     const listRes = await manager.list(ownerA, {});
     const proc = listRes.processes.find((p) => p.id === createdHandle!.processId);
-    expect(proc).toBeDefined();
-    expect(proc!.state).toBe("exited");
-    expect(proc!.endReason).toBe("requested");
-    expect(proc!.control).toBe("closed");
+    assert.notStrictEqual(proc, undefined);
+    assert.strictEqual(proc!.state, "exited");
+    assert.strictEqual(proc!.endReason, "requested");
+    assert.strictEqual(proc!.control, "closed");
   });
 
   it("大于 maxBytes 的单个输出 chunk：多次分页拼接得到完整原始字节", async () => {
@@ -158,10 +159,10 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       onGap: "error",
     });
     const bytes1 = decodeBytes(read1.chunks[0].data);
-    expect(read1.chunks.length).toBe(1);
-    expect(bytes1.byteLength).toBe(30);
-    expect(bytes1[0]).toBe(0);
-    expect(bytes1[29]).toBe(29);
+    assert.strictEqual(read1.chunks.length, 1);
+    assert.strictEqual(bytes1.byteLength, 30);
+    assert.strictEqual(bytes1[0], 0);
+    assert.strictEqual(bytes1[29], 29);
 
     // 第二次读取 40 字节
     const read2 = await manager.read(ownerA, processId, {
@@ -171,10 +172,10 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       onGap: "error",
     });
     const bytes2 = decodeBytes(read2.chunks[0].data);
-    expect(read2.chunks.length).toBe(1);
-    expect(bytes2.byteLength).toBe(40);
-    expect(bytes2[0]).toBe(30);
-    expect(bytes2[39]).toBe(69);
+    assert.strictEqual(read2.chunks.length, 1);
+    assert.strictEqual(bytes2.byteLength, 40);
+    assert.strictEqual(bytes2[0], 30);
+    assert.strictEqual(bytes2[39], 69);
 
     // 第三次读取剩余 30 字节（请求上限 50 字节）
     const read3 = await manager.read(ownerA, processId, {
@@ -184,17 +185,17 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       onGap: "error",
     });
     const bytes3 = decodeBytes(read3.chunks[0].data);
-    expect(read3.chunks.length).toBe(1);
-    expect(bytes3.byteLength).toBe(30);
-    expect(bytes3[0]).toBe(70);
-    expect(bytes3[29]).toBe(99);
+    assert.strictEqual(read3.chunks.length, 1);
+    assert.strictEqual(bytes3.byteLength, 30);
+    assert.strictEqual(bytes3[0], 70);
+    assert.strictEqual(bytes3[29], 99);
 
     // 拼接全部三次分页返回的字节，与原始字节完全对齐
     const combined = new Uint8Array(100);
     combined.set(bytes1, 0);
     combined.set(bytes2, 30);
     combined.set(bytes3, 70);
-    expect(combined).toEqual(originalBytes);
+    assert.deepStrictEqual(combined, originalBytes);
   });
 
   it("UTF-8 每个字节分块、stdout/stderr 交错：逐流解码正确，不声称真实跨流全序", async () => {
@@ -233,7 +234,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       onGap: "error",
     });
 
-    expect(readRes.chunks.length).toBe(stdoutBytes.length + stderrBytes.length);
+    assert.strictEqual(readRes.chunks.length, stdoutBytes.length + stderrBytes.length);
 
     // 使用 SDK 规范的逐流增量 UTF-8 解码器分别重组
     const decoder = createIncrementalTextDecoder();
@@ -251,8 +252,8 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     decodedStdout += decoder.flush("stdout");
     decodedStderr += decoder.flush("stderr");
 
-    expect(decodedStdout).toBe(stdoutText);
-    expect(decodedStderr).toBe(stderrText);
+    assert.strictEqual(decodedStdout, stdoutText);
+    assert.strictEqual(decodedStderr, stderrText);
   });
 
   it("ring buffer 淘汰当前 cursor：明确 gap；error 模式不自动推进", async () => {
@@ -275,14 +276,14 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     handle.emitOutput("stderr", new Uint8Array(60).fill(2));
 
     // 使用淘汰后的 initialCursor 且 onGap="error" 读取
-    await expect(
+    await assert.rejects(
       manager.read(ownerA, processId, {
         cursor: initialCursor,
         maxBytes: 100,
         waitMs: 0,
         onGap: "error",
       })
-    ).rejects.toThrow(ProcessError);
+    , ProcessError);
 
     try {
       await manager.read(ownerA, processId, {
@@ -291,10 +292,10 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         waitMs: 0,
         onGap: "error",
       });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe(OUTPUT_GAP);
-      expect(err.details?.earliestCursor).toBeDefined();
+      assert.strictEqual(err.code, OUTPUT_GAP);
+      assert.notStrictEqual(err.details?.earliestCursor, undefined);
     }
 
     // 使用 onGap="skip" 读取，报告 gap 并跳至当前最早可用游标
@@ -305,10 +306,10 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       onGap: "skip",
     });
 
-    expect(skipRead.truncated).toBe(true);
-    expect(skipRead.gap).toBeDefined();
-    expect(skipRead.gap?.fromCursor).toBe(initialCursor);
-    expect(skipRead.chunks.length).toBeGreaterThan(0);
+    assert.strictEqual(skipRead.truncated, true);
+    assert.notStrictEqual(skipRead.gap, undefined);
+    assert.strictEqual(skipRead.gap?.fromCursor, initialCursor);
+    assert.ok((skipRead.chunks.length) > 0);
   });
 
   it("输出到达发生在 waiter 注册附近：无漏唤醒、无无限等待", async () => {
@@ -334,8 +335,8 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     handle.emitOutput("stdout", "timely output notification");
 
     const result = await waitPromise;
-    expect(result.chunks.length).toBe(1);
-    expect(decodeText(result.chunks[0].data)).toBe("timely output notification");
+    assert.strictEqual(result.chunks.length, 1);
+    assert.strictEqual(decodeText(result.chunks[0].data), "timely output notification");
   });
 
   it("进程 exit 后仍有尾部输出：先退出后读完，未提前 EOF", async () => {
@@ -355,7 +356,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
 
     // 此时进程已 exit
     const infoExited = await manager.inspect(ownerA, processId);
-    expect(infoExited.state).toBe("exited");
+    assert.strictEqual(infoExited.state, "exited");
 
     // 第一次读取仍能读取到未消费的尾部输出，此时 eof 为 false
     const read1 = await manager.read(ownerA, processId, {
@@ -364,9 +365,9 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       waitMs: 0,
       onGap: "error",
     });
-    expect(read1.chunks.length).toBe(1);
-    expect(decodeText(read1.chunks[0].data)).toBe("trailing output before process death\n");
-    expect(read1.eof).toBe(false);
+    assert.strictEqual(read1.chunks.length, 1);
+    assert.strictEqual(decodeText(read1.chunks[0].data), "trailing output before process death\n");
+    assert.strictEqual(read1.eof, false);
 
     // 等待 drain deadline 超时关闭输出
     await new Promise((resolve) => setTimeout(resolve, 60));
@@ -378,8 +379,8 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       waitMs: 0,
       onGap: "error",
     });
-    expect(read2.chunks.length).toBe(0);
-    expect(read2.eof).toBe(true);
+    assert.strictEqual(read2.chunks.length, 0);
+    assert.strictEqual(read2.eof, true);
   });
 
   it("后代持续持有输出句柄：drain deadline 生效，输出关闭原因可见", async () => {
@@ -397,15 +398,15 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     handle.emitExit(0, null);
 
     const infoImmediate = await manager.inspect(ownerA, processId);
-    expect(infoImmediate.state).toBe("exited");
-    expect(infoImmediate.outputClosed).toBe(false);
+    assert.strictEqual(infoImmediate.state, "exited");
+    assert.strictEqual(infoImmediate.outputClosed, false);
 
     // 等待 drain deadline 宽限期生效（40ms）
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     const infoDrained = await manager.inspect(ownerA, processId);
-    expect(infoDrained.outputClosed).toBe(true);
-    expect(infoDrained.outputEndReason).toBe("drain-timeout");
+    assert.strictEqual(infoDrained.outputClosed, true);
+    assert.strictEqual(infoDrained.outputEndReason, "drain-timeout");
 
     const readRes = await manager.read(ownerA, processId, {
       cursor: startRes.initialCursor,
@@ -413,7 +414,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       waitMs: 0,
       onGap: "error",
     });
-    expect(readRes.eof).toBe(true);
+    assert.strictEqual(readRes.eof, true);
   });
 
   it("host crash 后 PID 被其他进程复用：旧记录 lost，不盲杀新进程", async () => {
@@ -441,15 +442,15 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
 
     // 新宿主启动执行恢复初始化
     const recovered = await manager.initialize();
-    expect(recovered).toBe(1);
+    assert.strictEqual(recovered, 1);
 
     const procRecord = await metadataStore.getProcess("proc-host-crashed");
-    expect(procRecord?.state).toBe("lost");
-    expect(procRecord?.control).toBe("closed");
-    expect(procRecord?.endReason).toBe("host-lost");
+    assert.strictEqual(procRecord?.state, "lost");
+    assert.strictEqual(procRecord?.control, "closed");
+    assert.strictEqual(procRecord?.endReason, "host-lost");
 
     // 驱动中未执行盲目 kill 操作，保护了系统可能复用的 PID
-    expect(driver.handles.size).toBe(0);
+    assert.strictEqual(driver.handles.size, 0);
   });
 
   it("元数据、去重或资源配额耗尽：明确拒绝新请求，保留终止通道", async () => {
@@ -470,21 +471,21 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     });
 
     // 尝试启动第 3 个进程触发配额拒绝
-    await expect(
+    await assert.rejects(
       manager.start(ownerA, {
         requestId: "req-quota-p3",
         spec: defaultSpec,
       })
-    ).rejects.toThrow(ProcessError);
+    , ProcessError);
 
     try {
       await manager.start(ownerA, {
         requestId: "req-quota-p3",
         spec: defaultSpec,
       });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
-      expect(err.code).toBe(QUOTA_EXCEEDED);
+      assert.strictEqual(err.code, QUOTA_EXCEEDED);
     }
 
     // 终止通道始终可用不受配额阻断
@@ -492,15 +493,15 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
       requestId: "req-quota-free-p1",
       graceMs: 10,
     });
-    expect(stopResult.state).toBe("exited");
-    expect(stopResult.control).toBe("closed");
+    assert.strictEqual(stopResult.state, "exited");
+    assert.strictEqual(stopResult.control, "closed");
 
     // 释放配额后可以成功启动新进程
     const p3 = await manager.start(ownerA, {
       requestId: "req-quota-p3-retry",
       spec: defaultSpec,
     });
-    expect(p3.process.id).toBeDefined();
+    assert.notStrictEqual(p3.process.id, undefined);
 
     await manager.stop(ownerA, p2.process.id, { requestId: "req-stop-p2", graceMs: 10 });
     await manager.stop(ownerA, p3.process.id, { requestId: "req-stop-p3", graceMs: 10 });
@@ -519,13 +520,13 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     handle.emitExit(0, null);
 
     const exitedInfo = await manager.inspect(ownerA, processId);
-    expect(exitedInfo.state).toBe("exited");
-    expect(exitedInfo.outputClosed).toBe(false);
+    assert.strictEqual(exitedInfo.state, "exited");
+    assert.strictEqual(exitedInfo.outputClosed, false);
 
     handle.emitOutputClosed("natural");
 
     const closedInfo = await manager.inspect(ownerA, processId);
-    expect(closedInfo.outputClosed).toBe(true);
-    expect(closedInfo.outputEndReason).toBe("natural");
+    assert.strictEqual(closedInfo.outputClosed, true);
+    assert.strictEqual(closedInfo.outputEndReason, "natural");
   });
 });

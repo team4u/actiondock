@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -28,7 +29,7 @@ async function runCli(
 describe("CLI Action Input Resolution - JSON and File Inputs", () => {
   let tempDir: string;
 
-  beforeAll(async () => {
+  before(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-input-json-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-input-json-home-"));
 
@@ -41,7 +42,7 @@ describe("CLI Action Input Resolution - JSON and File Inputs", () => {
 
     // Initialize project
     const initProc = await runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
-    expect(initProc.exitCode).toBe(0);
+    assert.strictEqual(initProc.exitCode, 0);
 
     // Create an echo action that returns the exact received input
     const echoActionSource = `import { defineAction } from "@actiondock/sdk";
@@ -64,7 +65,7 @@ export default defineAction(async (input: any) => {
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
 
-  afterAll(async () => {
+  after(async () => {
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -86,10 +87,10 @@ export default defineAction(async (input: any) => {
   // 1. --input 正常 JSON
   it("executes action with valid inline JSON via --input", async () => {
     const proc = await runCli(["run", "test.echo", "--input", "{\"name\":\"Alice\",\"age\":30}", "--json"], tempDir);
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.received).toEqual({ name: "Alice", age: 30 });
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(res.data.received, { name: "Alice", age: 30 });
   });
 
   // 2. --input-file 正常文件
@@ -98,29 +99,29 @@ export default defineAction(async (input: any) => {
     writeFileSync(filePath, JSON.stringify({ project: "ActionDock", stars: 100 }), "utf-8");
 
     const proc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.received).toEqual({ project: "ActionDock", stars: 100 });
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(res.data.received, { project: "ActionDock", stars: 100 });
   });
 
   // 3. --input-file - stdin
   it("executes action reading JSON from stdin via --input-file -", async () => {
     const stdinPayload = JSON.stringify({ mode: "streamed", count: 99 });
     const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, stdinPayload);
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.received).toEqual({ mode: "streamed", count: 99 });
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(res.data.received, { mode: "streamed", count: 99 });
   });
 
   // 4. 无输入默认 {}
   it("executes action with default empty object {} when no input is provided", async () => {
     const proc = await runCli(["run", "test.echo", "--json"], tempDir);
-    expect(proc.exitCode).toBe(0);
+    assert.strictEqual(proc.exitCode, 0);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.received).toEqual({});
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(res.data.received, {});
   });
 
   // 5. --input 与 --input-file 冲突
@@ -130,26 +131,26 @@ export default defineAction(async (input: any) => {
 
     // Human mode
     const proc = await runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath], tempDir);
-    expect(proc.exitCode).toBe(2);
-    expect(proc.stderr.toString()).toContain("mutually exclusive");
+    assert.strictEqual(proc.exitCode, 2);
+    assert.ok((proc.stderr.toString()).includes("mutually exclusive"));
 
     // Machine mode (--json)
     const procJson = await runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath, "--json"], tempDir);
-    expect(procJson.exitCode).toBe(2);
+    assert.strictEqual(procJson.exitCode, 2);
     const res = JSON.parse(procJson.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INPUT_CONFLICT");
-    expect(res.error.message).toContain("mutually exclusive");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INPUT_CONFLICT");
+    assert.ok((res.error.message).includes("mutually exclusive"));
   });
 
   // 6. 非法 inline JSON
   it("rejects invalid inline JSON with exit code 2 and INVALID_JSON code", async () => {
     const proc = await runCli(["run", "test.echo", "--input", "{\"invalid\":", "--json"], tempDir);
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain("Invalid JSON input from --input");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes("Invalid JSON input from --input"));
   });
 
   // 7. 非法文件 JSON
@@ -158,32 +159,32 @@ export default defineAction(async (input: any) => {
     writeFileSync(filePath, "{\ninvalid json here\n", "utf-8");
 
     const proc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain(`Invalid JSON input from ${filePath}`);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes(`Invalid JSON input from ${filePath}`));
   });
 
   // 8. 非法 stdin JSON
   it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON code", async () => {
     const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "{not json}");
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain("Invalid JSON input from stdin");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes("Invalid JSON input from stdin"));
   });
 
   // 9. 文件不存在
   it("rejects nonexistent input file with exit code 2 and INPUT_FILE_NOT_FOUND code", async () => {
     const missingPath = join(tempDir, "does-not-exist.json");
     const proc = await runCli(["run", "test.echo", "--input-file", missingPath, "--json"], tempDir);
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INPUT_FILE_NOT_FOUND");
-    expect(res.error.message).toContain(`Input file not found: ${missingPath}`);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INPUT_FILE_NOT_FOUND");
+    assert.ok((res.error.message).includes(`Input file not found: ${missingPath}`));
   });
 
   // 10. UTF-8 BOM
@@ -192,18 +193,18 @@ export default defineAction(async (input: any) => {
     const bomFilePath = join(tempDir, "bom.json");
     writeFileSync(bomFilePath, "\uFEFF{\"source\":\"bom-file\",\"active\":true}", "utf-8");
     const fileProc = await runCli(["run", "test.echo", "--input-file", bomFilePath, "--json"], tempDir);
-    expect(fileProc.exitCode).toBe(0);
+    assert.strictEqual(fileProc.exitCode, 0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
-    expect(fileRes.ok).toBe(true);
-    expect(fileRes.data.received).toEqual({ source: "bom-file", active: true });
+    assert.strictEqual(fileRes.ok, true);
+    assert.deepStrictEqual(fileRes.data.received, { source: "bom-file", active: true });
 
     // BOM in stdin
     const bomStdin = "\uFEFF{\"source\":\"bom-stdin\",\"active\":false}";
     const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, bomStdin);
-    expect(stdinProc.exitCode).toBe(0);
+    assert.strictEqual(stdinProc.exitCode, 0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
-    expect(stdinRes.ok).toBe(true);
-    expect(stdinRes.data.received).toEqual({ source: "bom-stdin", active: false });
+    assert.strictEqual(stdinRes.ok, true);
+    assert.deepStrictEqual(stdinRes.data.received, { source: "bom-stdin", active: false });
   });
 
   // 11. 多行 JSON
@@ -213,16 +214,16 @@ export default defineAction(async (input: any) => {
     writeFileSync(filePath, multilineJson, "utf-8");
 
     const fileProc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
-    expect(fileProc.exitCode).toBe(0);
+    assert.strictEqual(fileProc.exitCode, 0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
-    expect(fileRes.ok).toBe(true);
-    expect(fileRes.data.received.nested.items).toEqual([1, 2, 3]);
+    assert.strictEqual(fileRes.ok, true);
+    assert.deepStrictEqual(fileRes.data.received.nested.items, [1, 2, 3]);
 
     const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, multilineJson);
-    expect(stdinProc.exitCode).toBe(0);
+    assert.strictEqual(stdinProc.exitCode, 0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
-    expect(stdinRes.ok).toBe(true);
-    expect(stdinRes.data.received.title).toBe("multi-line");
+    assert.strictEqual(stdinRes.ok, true);
+    assert.strictEqual(stdinRes.data.received.title, "multi-line");
   });
 
   // 12. JSON 中包含双引号、反斜杠、换行
@@ -239,15 +240,15 @@ export default defineAction(async (input: any) => {
     const filePath = join(tempDir, "complex.json");
     writeFileSync(filePath, jsonStr, "utf-8");
     const fileProc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
-    expect(fileProc.exitCode).toBe(0);
+    assert.strictEqual(fileProc.exitCode, 0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
-    expect(fileRes.data.received).toEqual(complexPayload);
+    assert.deepStrictEqual(fileRes.data.received, complexPayload);
 
     // Test stdin input
     const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, jsonStr);
-    expect(stdinProc.exitCode).toBe(0);
+    assert.strictEqual(stdinProc.exitCode, 0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
-    expect(stdinRes.data.received).toEqual(complexPayload);
+    assert.deepStrictEqual(stdinRes.data.received, complexPayload);
   });
 
   // 13. 空文件
@@ -256,20 +257,20 @@ export default defineAction(async (input: any) => {
     writeFileSync(emptyFile, "", "utf-8");
 
     const proc = await runCli(["run", "test.echo", "--input-file", emptyFile, "--json"], tempDir);
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain(`Invalid JSON input from ${emptyFile}`);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes(`Invalid JSON input from ${emptyFile}`));
   });
 
   // 14. 空 stdin
   it("rejects empty stdin with exit code 2 and INVALID_JSON error", async () => {
     const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "");
-    expect(proc.exitCode).toBe(2);
+    assert.strictEqual(proc.exitCode, 2);
     const res = JSON.parse(proc.stdout.toString());
-    expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
-    expect(res.error.message).toContain("Invalid JSON input from stdin");
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.error.code, "INVALID_JSON");
+    assert.ok((res.error.message).includes("Invalid JSON input from stdin"));
   });
 });

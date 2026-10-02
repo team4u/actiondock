@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,9 +47,9 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     const lockDir = seedStaleLock(registryPath, { pid: 999999999 });
 
     const result = await withRegistryLock(registryPath, () => "reclaimed");
-    expect(result).toBe("reclaimed");
+    assert.strictEqual(result, "reclaimed");
     // 接管执行完成后锁目录被正常释放
-    expect(existsSync(lockDir)).toBe(false);
+    assert.strictEqual(existsSync(lockDir), false);
   });
 
   it("陈旧锁含存活 pid 时不被接管并超时报错", async () => {
@@ -59,19 +60,19 @@ describe("Registry Lock 残留判定与心跳续期", () => {
       seedStaleLock(registryPath, { pid: dummy.pid });
 
       const startedAt = Date.now();
-      await expect(
+      await assert.rejects(
         withRegistryLock(registryPath, () => "should-not-run", {
           acquireTimeoutMs: 120,
           retryDelayMs: 15,
         })
-      ).rejects.toThrow("Failed to acquire registry lock");
+      , /Failed to acquire registry lock/);
       const elapsed = Date.now() - startedAt;
 
       // 必须等待到超时才失败，而非立即抢占
-      expect(elapsed).toBeGreaterThanOrEqual(80);
+      assert.ok((elapsed) >= 80);
       // 原锁目录（含存活 pid 元数据）保持不被破坏
-      expect(existsSync(`${registryPath}.lock`)).toBe(true);
-      expect(existsSync(join(`${registryPath}.lock`, "metadata.json"))).toBe(true);
+      assert.strictEqual(existsSync(`${registryPath}.lock`), true);
+      assert.strictEqual(existsSync(join(`${registryPath}.lock`, "metadata.json")), true);
     } finally {
       dummy.kill();
     }
@@ -82,8 +83,8 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     seedStaleLock(registryPath, { withMetadata: false });
 
     const result = await withRegistryLock(registryPath, () => "legacy-reclaimed");
-    expect(result).toBe("legacy-reclaimed");
-    expect(existsSync(`${registryPath}.lock`)).toBe(false);
+    assert.strictEqual(result, "legacy-reclaimed");
+    assert.strictEqual(existsSync(`${registryPath}.lock`), false);
   });
 
   it("mtime 未超龄时即使 pid 已死也不会被立即抢占（需等到超龄后）", async () => {
@@ -100,11 +101,11 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     );
     const elapsed = Date.now() - startedAt;
 
-    expect(result).toBe("delayed-reclaim");
+    assert.strictEqual(result, "delayed-reclaim");
     // 必须等到 mtime 超过 stale 阈值（120ms - 20ms 龄 = 至少再等 100ms）才接管，
     // 证明新鲜窗口内未被抢占
-    expect(elapsed).toBeGreaterThanOrEqual(80);
-    expect(existsSync(`${registryPath}.lock`)).toBe(false);
+    assert.ok((elapsed) >= 80);
+    assert.strictEqual(existsSync(`${registryPath}.lock`), false);
   });
 
   it("持锁期间写入含 pid 与 token 的元数据并在释放后清理", async () => {
@@ -115,11 +116,11 @@ describe("Registry Lock 残留判定与心跳续期", () => {
       observed = JSON.parse(readFileSync(metaPath, "utf-8"));
     });
 
-    expect(observed).toBeDefined();
-    expect(observed.pid).toBe(process.pid);
-    expect(typeof observed.token).toBe("string");
-    expect(observed.token.length).toBeGreaterThan(0);
-    expect(existsSync(`${registryPath}.lock`)).toBe(false);
+    assert.notStrictEqual(observed, undefined);
+    assert.strictEqual(observed.pid, process.pid);
+    assert.strictEqual(typeof observed.token, "string");
+    assert.ok((observed.token.length) > 0);
+    assert.strictEqual(existsSync(`${registryPath}.lock`), false);
   });
 
   it("持锁期间心跳续期刷新 mtime，超长持锁不被误判陈旧", async () => {
@@ -139,8 +140,8 @@ describe("Registry Lock 残留判定与心跳续期", () => {
 
     // fn 执行期间锁目录未被外部回收，且 mtime 已被心跳续期（晚于持锁开始时刻）
     const infoAfter = { existed: existsSync(lockDir) };
-    expect(infoAfter.existed).toBe(false); // 正常释放
-    expect(mtimeAtMiddle!).toBeGreaterThan(0);
+    assert.strictEqual(infoAfter.existed, false); // 正常释放
+    assert.ok((mtimeAtMiddle!) > 0);
   });
 
   it("并发场景：持锁方长耗时操作期间他方获取阻塞直至释放后成功", async () => {
@@ -163,10 +164,10 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     const waiter = withRegistryLock(registryPath, () => "waiter", lockOptions);
 
     const [holderResult, waiterResult] = await Promise.all([holder, waiter]);
-    expect(holderResult).toBe("holder");
-    expect(waiterResult).toBe("waiter");
-    expect(holderDone).toBe(true);
-    expect(existsSync(`${registryPath}.lock`)).toBe(false);
+    assert.strictEqual(holderResult, "holder");
+    assert.strictEqual(waiterResult, "waiter");
+    assert.strictEqual(holderDone, true);
+    assert.strictEqual(existsSync(`${registryPath}.lock`), false);
   });
 });
 
@@ -184,7 +185,7 @@ describe("Registry Lock 损坏元数据降级", () => {
     utimesSync(lockDir, past, past);
 
     const result = await withRegistryLock(registryPath, () => "degraded-reclaim");
-    expect(result).toBe("degraded-reclaim");
-    expect(existsSync(lockDir)).toBe(false);
+    assert.strictEqual(result, "degraded-reclaim");
+    assert.strictEqual(existsSync(lockDir), false);
   });
 });

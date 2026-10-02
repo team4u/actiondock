@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { spawn } from "node:child_process";
 import fs, { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -24,13 +25,13 @@ describe("原子事务快照与崩溃恢复", () => {
 
   it("获取排他锁并阻止并发加锁", () => {
     const release1 = acquireProjectLock(tempDir);
-    expect(existsSync(join(tempDir, ".actiondock", "project.lock"))).toBe(true);
+    assert.strictEqual(existsSync(join(tempDir, ".actiondock", "project.lock")), true);
 
     // 同一进程再次加锁检测活跃 PID 并抛出异常
-    expect(() => acquireProjectLock(tempDir)).toThrow(/Project modification lock is held/);
+    assert.throws(() => acquireProjectLock(tempDir), /Project modification lock is held/);
 
     release1();
-    expect(existsSync(join(tempDir, ".actiondock", "project.lock"))).toBe(false);
+    assert.strictEqual(existsSync(join(tempDir, ".actiondock", "project.lock")), false);
 
     // 释放后可再次加锁
     const release2 = acquireProjectLock(tempDir);
@@ -41,16 +42,16 @@ describe("原子事务快照与崩溃恢复", () => {
     writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify({ id: "test", version: "1.0.0" }));
 
     const tx = await beginTransaction(tempDir, "test commit");
-    expect(hasPendingTransactions(tempDir)).toBe(true);
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
 
     // 修改文件
     writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify({ id: "test", version: "1.1.0" }));
 
     await tx.commit();
-    expect(hasPendingTransactions(tempDir)).toBe(false);
+    assert.strictEqual(hasPendingTransactions(tempDir), false);
 
     const after = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(after.version).toBe("1.1.0");
+    assert.strictEqual(after.version, "1.1.0");
   });
 
   it("事务回滚恢复旧快照并清理新生成的文件", async () => {
@@ -66,10 +67,10 @@ describe("原子事务快照与崩溃恢复", () => {
     await tx.rollback({ frozenInstall: false });
 
     const content = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(content.version).toBe("1.0.0");
+    assert.strictEqual(content.version, "1.0.0");
     // 新生成的文件应被清理删除
-    expect(existsSync(join(tempDir, "actiondock.lock.json"))).toBe(false);
-    expect(hasPendingTransactions(tempDir)).toBe(false);
+    assert.strictEqual(existsSync(join(tempDir, "actiondock.lock.json")), false);
+    assert.strictEqual(hasPendingTransactions(tempDir), false);
   });
 
   it("模拟异常崩溃在下一次启动或修改前依据事务日志恢复快照", async () => {
@@ -82,15 +83,15 @@ describe("原子事务快照与崩溃恢复", () => {
 
     // 模拟进程直接退出（释放排他锁但未执行 commit 或 rollback，留下 pending 状态）
     tx.releaseLock();
-    expect(hasPendingTransactions(tempDir)).toBe(true);
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
 
     // 下次执行恢复
     const recovered = await recoverPendingTransactions(tempDir, { frozenInstall: false });
-    expect(recovered.length).toBe(1);
-    expect(hasPendingTransactions(tempDir)).toBe(false);
+    assert.strictEqual(recovered.length, 1);
+    assert.strictEqual(hasPendingTransactions(tempDir), false);
 
     const restored = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(restored.version).toBe("1.0.0");
+    assert.strictEqual(restored.version, "1.0.0");
   });
 
   it("真实多进程并发争抢陈旧工程主锁时，严格保证仅有一个子进程成功接管，其余子进程均被拦截", async () => {
@@ -209,8 +210,8 @@ rl.on("line", (cmd) => {
     });
 
     const successCount = results.filter((r) => r === "SUCCESS").length;
-    expect(successCount).toBe(1);
-    expect(results.length).toBe(concurrency);
+    assert.strictEqual(successCount, 1);
+    assert.strictEqual(results.length, concurrency);
 
     if (winnerProc) {
       (winnerProc as any).stdin?.write("RELEASE\n");
@@ -229,7 +230,7 @@ rl.on("line", (cmd) => {
       )
     );
 
-    expect(existsSync(lockDir)).toBe(false);
+    assert.strictEqual(existsSync(lockDir), false);
   });
 
   it("当 acquireProjectLock 遇到存活进程持锁抛出 PROJECT_BUSY 错误代码", () => {
@@ -251,9 +252,9 @@ rl.on("line", (cmd) => {
       caughtErr = err;
     }
 
-    expect(caughtErr).toBeDefined();
-    expect(caughtErr?.code).toBe("PROJECT_BUSY");
-    expect(caughtErr?.message).toContain("PROJECT_BUSY");
+    assert.notStrictEqual(caughtErr, undefined);
+    assert.strictEqual(caughtErr?.code, "PROJECT_BUSY");
+    assert.ok((caughtErr?.message).includes("PROJECT_BUSY"));
   });
 
   it("当工程锁被存活进程占用（PROJECT_BUSY）时 recoverPendingTransactions 安全返回空数组", async () => {
@@ -271,7 +272,7 @@ rl.on("line", (cmd) => {
     );
 
     const res = await recoverPendingTransactions(tempDir);
-    expect(res).toEqual([]);
+    assert.deepStrictEqual(res, []);
   });
 
   it("当 acquireProjectLock 遇到非 busy 文件系统异常时 recoverPendingTransactions 会正确向外抛出", async () => {
@@ -288,8 +289,8 @@ rl.on("line", (cmd) => {
       caughtErr = err;
     }
 
-    expect(caughtErr).toBeDefined();
-    expect(caughtErr?.code).toBe("ENOTDIR");
+    assert.notStrictEqual(caughtErr, undefined);
+    assert.strictEqual(caughtErr?.code, "ENOTDIR");
   });
 
 });

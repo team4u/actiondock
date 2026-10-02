@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,15 +29,15 @@ describe("PackageRuntime", () => {
       inMemory: true,
     });
 
-    expect(app).toBeInstanceOf(DefaultPackageRuntime);
+    assert.ok(app instanceof DefaultPackageRuntime);
     const info = await app.info();
-    expect(info.id).toBe("demo.service");
-    expect(info.name).toBe("Demo Service");
-    expect(info.version).toBe("2.1.0");
-    expect(info.description).toBe("A test demo service");
-    expect(info.actionsDir).toBe("actions");
-    expect(info.playbooksDir).toBe("playbooks");
-    expect(info.config?.API_URL.default).toBe("https://api.example.com");
+    assert.strictEqual(info.id, "demo.service");
+    assert.strictEqual(info.name, "Demo Service");
+    assert.strictEqual(info.version, "2.1.0");
+    assert.strictEqual(info.description, "A test demo service");
+    assert.strictEqual(info.actionsDir, "actions");
+    assert.strictEqual(info.playbooksDir, "playbooks");
+    assert.strictEqual(info.config?.API_URL.default, "https://api.example.com");
 
     await app.close();
   });
@@ -94,44 +95,43 @@ describe("PackageRuntime", () => {
 
       // 1. 全量静态列表
       const allActions = await app.listActions();
-      expect(allActions.length).toBe(3);
+      assert.strictEqual(allActions.length, 3);
       const actionIds = allActions.map((a) => a.id).sort();
-      expect(actionIds).toEqual(["calc.add", "calc.multiply", "util.echo"]);
+      assert.deepStrictEqual(actionIds, ["calc.add", "calc.multiply", "util.echo"]);
 
       // 2. 标签过滤
       const mathActions = await app.listActions({ tags: ["math"] });
-      expect(mathActions.length).toBe(2);
-      expect(mathActions.map((a) => a.id).sort()).toEqual(["calc.add", "calc.multiply"]);
+      assert.strictEqual(mathActions.length, 2);
+      assert.deepStrictEqual(mathActions.map((a) => a.id).sort(), ["calc.add", "calc.multiply"]);
 
       const multiTagActions = await app.listActions({ tags: ["math", "calculator"] });
-      expect(multiTagActions.length).toBe(1);
-      expect(multiTagActions[0].id).toBe("calc.add");
+      assert.strictEqual(multiTagActions.length, 1);
+      assert.strictEqual(multiTagActions[0].id, "calc.add");
 
       // 3. 关键词查询过滤
       const queryActions = await app.listActions({ query: "multiply" });
-      expect(queryActions.length).toBe(1);
-      expect(queryActions[0].id).toBe("calc.multiply");
+      assert.strictEqual(queryActions.length, 1);
+      assert.strictEqual(queryActions[0].id, "calc.multiply");
 
       // 4. 前缀过滤
       const prefixActions = await app.listActions({ prefix: "calc." });
-      expect(prefixActions.length).toBe(2);
+      assert.strictEqual(prefixActions.length, 2);
 
       // 5. 详细规范 describeAction
       const spec = await app.describeAction("calc.add");
-      expect(spec.id).toBe("calc.add");
-      expect(spec.description).toBe("Add two numbers together");
-      expect(spec.entry).toBe("actions/calc-add.ts");
-      expect(spec.filePath).toBe(join(tempDir, "actions/calc-add.ts"));
-      expect(spec.inputSchema).toBeDefined();
+      assert.strictEqual(spec.id, "calc.add");
+      assert.strictEqual(spec.description, "Add two numbers together");
+      assert.strictEqual(spec.entry, "actions/calc-add.ts");
+      assert.strictEqual(spec.filePath, join(tempDir, "actions/calc-add.ts"));
+      assert.notStrictEqual(spec.inputSchema, undefined);
 
       // 支持完全限定标识
       const fqSpec = await app.describeAction("pkg.tools/calc.add");
-      expect(fqSpec.id).toBe("calc.add");
+      assert.strictEqual(fqSpec.id, "calc.add");
 
       // 不存在的 Action 抛出异常
-      await expect(app.describeAction("nonexistent")).rejects.toThrow(
-        "Action 'nonexistent' not found in package 'pkg.tools'"
-      );
+      await assert.rejects(app.describeAction("nonexistent"), 
+        /Action 'nonexistent' not found in package 'pkg\.tools'/);
 
       await app.close();
     } finally {
@@ -181,25 +181,24 @@ Execute build and then deploy artifact.
       });
 
       const playbooks = await app.listPlaybooks();
-      expect(playbooks.length).toBe(1);
-      expect(playbooks[0].id).toBe("deploy");
-      expect(playbooks[0].description).toBe("Deploy application to staging or production");
-      expect(playbooks[0].actions).toEqual(["build-binary", "upload-artifact"]);
+      assert.strictEqual(playbooks.length, 1);
+      assert.strictEqual(playbooks[0].id, "deploy");
+      assert.strictEqual(playbooks[0].description, "Deploy application to staging or production");
+      assert.deepStrictEqual(playbooks[0].actions, ["build-binary", "upload-artifact"]);
 
       // 详细内容获取
       const spec = await app.describePlaybook("deploy");
-      expect(spec.id).toBe("deploy");
-      expect(spec.content).toContain("# Deploy Procedure");
-      expect(spec.filePath).toBe(join(playbooksDir, "deploy.md"));
+      assert.strictEqual(spec.id, "deploy");
+      assert.ok((spec.content).includes("# Deploy Procedure"));
+      assert.strictEqual(spec.filePath, join(playbooksDir, "deploy.md"));
 
       // 支持 .md 后缀
       const specWithExt = await app.describePlaybook("deploy.md");
-      expect(specWithExt.id).toBe("deploy");
+      assert.strictEqual(specWithExt.id, "deploy");
 
       // 不存在的 Playbook 抛出异常
-      await expect(app.describePlaybook("unknown")).rejects.toThrow(
-        "Playbook 'unknown' not found in package 'pkg.sop'"
-      );
+      await assert.rejects(app.describePlaybook("unknown"), 
+        /Playbook 'unknown' not found in package 'pkg\.sop'/);
 
       await app.close();
     } finally {
@@ -248,36 +247,36 @@ Execute build and then deploy artifact.
 
     // 1. 同步执行 runAction
     const syncRes = await app.runAction("math.sum", { x: 15, y: 25 });
-    expect(syncRes.ok).toBe(true);
+    assert.strictEqual(syncRes.ok, true);
     if (syncRes.ok) {
-      expect(syncRes.data).toEqual({ result: 40 });
+      assert.deepStrictEqual(syncRes.data, { result: 40 });
     }
 
     // 2. 异步执行 startAction 并返回票据
     const ticket = await app.startAction("math.sum", { x: 100, y: 200 });
-    expect(ticket.runId).toBeDefined();
-    expect(ticket.status).toBe("running");
-    expect(ticket.result).toBeDefined();
+    assert.notStrictEqual(ticket.runId, undefined);
+    assert.strictEqual(ticket.status, "running");
+    assert.notStrictEqual(ticket.result, undefined);
 
     const asyncRes = await ticket.result!;
-    expect(asyncRes.ok).toBe(true);
+    assert.strictEqual(asyncRes.ok, true);
     if (asyncRes.ok) {
-      expect(asyncRes.data).toEqual({ result: 300 });
+      assert.deepStrictEqual(asyncRes.data, { result: 300 });
     }
 
     // 3. 通过 getRun 检索运行记录
     const runRecord = await app.getRun(ticket.runId);
-    expect(runRecord).toBeDefined();
-    expect(runRecord?.id).toBe(ticket.runId);
-    expect(runRecord?.status).toBe("success");
-    expect(runRecord?.actionId).toBe("math.sum");
-    expect(runRecord?.output).toEqual({ result: 300 });
+    assert.notStrictEqual(runRecord, undefined);
+    assert.strictEqual(runRecord?.id, ticket.runId);
+    assert.strictEqual(runRecord?.status, "success");
+    assert.strictEqual(runRecord?.actionId, "math.sum");
+    assert.deepStrictEqual(runRecord?.output, { result: 300 });
 
     // 4. 输入校验失败分支
     const failRes = await app.runAction("math.sum", { x: "invalid" as any, y: 10 });
-    expect(failRes.ok).toBe(false);
+    assert.strictEqual(failRes.ok, false);
     if (!failRes.ok) {
-      expect(failRes.error?.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(failRes.error?.code, "INPUT_VALIDATION_FAILED");
     }
 
     await app.close();
@@ -316,7 +315,7 @@ Execute build and then deploy artifact.
 
     // 异步启动任务
     const ticket = await app.startAction("test.long", {});
-    expect(ticket.runId).toBeDefined();
+    assert.notStrictEqual(ticket.runId, undefined);
 
     // 订阅事件流
     const capturedEvents: any[] = [];
@@ -332,23 +331,23 @@ Execute build and then deploy artifact.
     // 等待启动后触发取消
     await new Promise((resolve) => setTimeout(resolve, 30));
     const cancelRes = await app.cancelRun(ticket.runId, "user cancelled");
-    expect(cancelRes.outcome).toBe("requested");
+    assert.strictEqual(cancelRes.outcome, "requested");
 
     const result = await ticket.result!;
-    expect(result.ok).toBe(false);
-    expect(cancelled).toBe(true);
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(cancelled, true);
 
     await eventPromise;
-    expect(capturedEvents.some((e) => e.type === "status")).toBe(true);
-    expect(capturedEvents.some((e) => e.type === "finish")).toBe(true);
+    assert.strictEqual(capturedEvents.some((e) => e.type === "status"), true);
+    assert.strictEqual(capturedEvents.some((e) => e.type === "finish"), true);
 
     // 对已终态的运行执行取消返回 already_terminal
     const secondCancel = await app.cancelRun(ticket.runId);
-    expect(secondCancel.outcome).toBe("already_terminal");
+    assert.strictEqual(secondCancel.outcome, "already_terminal");
 
     // 对不存在的任务取消返回 not_found
     const missingCancel = await app.cancelRun("missing-run-id");
-    expect(missingCancel.outcome).toBe("not_found");
+    assert.strictEqual(missingCancel.outcome, "not_found");
 
     await app.close();
   });
@@ -376,22 +375,22 @@ Execute build and then deploy artifact.
 
     // 1. 读取默认配置
     const host = await app.getConfig("HOST");
-    expect(host.value).toBe("localhost");
-    expect(host.configured).toBe(false);
-    expect(host.source).toBe("default");
+    assert.strictEqual(host.value, "localhost");
+    assert.strictEqual(host.configured, false);
+    assert.strictEqual(host.source, "default");
 
     // 2. 覆盖项优先于默认值
     const port = await app.getConfig("PORT");
-    expect(port.value).toBe(9000);
-    expect(port.configured).toBe(true);
-    expect(port.source).toBe("package");
+    assert.strictEqual(port.value, 9000);
+    assert.strictEqual(port.configured, true);
+    assert.strictEqual(port.source, "package");
 
     // 3. 通过 setConfig 写入持久化配置
     await app.setConfig("DB_NAME", "actiondock_test");
     const dbName = await app.getConfig("DB_NAME");
-    expect(dbName.value).toBe("actiondock_test");
-    expect(dbName.configured).toBe(true);
-    expect(dbName.source).toBe("package");
+    assert.strictEqual(dbName.value, "actiondock_test");
+    assert.strictEqual(dbName.configured, true);
+    assert.strictEqual(dbName.source, "package");
 
     await app.close();
   });
@@ -409,24 +408,24 @@ Execute build and then deploy artifact.
     // 1. Action 命名空间状态读写
     await app.setActionState("test-action", "counter", 42);
     const val = await app.getActionState<number>("test-action", "counter");
-    expect(val).toBe(42);
+    assert.strictEqual(val, 42);
 
     // 2. 指定子命名空间状态读写
     await app.setState("test-action", "token", "secret-xyz", { namespace: "auth" });
     const authVal = await app.getState<string>("test-action", "token", { namespace: "auth" });
-    expect(authVal).toBe("secret-xyz");
+    assert.strictEqual(authVal, "secret-xyz");
 
     // 3. 删除子命名空间状态
     const deletedAuth = await app.deleteState("test-action", "token", { namespace: "auth" });
-    expect(deletedAuth).toBe(true);
+    assert.strictEqual(deletedAuth, true);
     const checkDeleted = await app.getState("test-action", "token", { namespace: "auth" });
-    expect(checkDeleted).toBeUndefined();
+    assert.strictEqual(checkDeleted, undefined);
 
     // 4. 删除 Action 根状态
     const deletedRoot = await app.deleteState("test-action", "counter");
-    expect(deletedRoot).toBe(true);
+    assert.strictEqual(deletedRoot, true);
     const checkRoot = await app.getState("test-action", "counter");
-    expect(checkRoot).toBeUndefined();
+    assert.strictEqual(checkRoot, undefined);
 
     await app.close();
   });
@@ -444,23 +443,23 @@ Execute build and then deploy artifact.
     // 1. 通过 options 显式传入 actionId 写入状态
     await app.setState("cache_key", "cached_data", { actionId: "dynamic_worker" });
     const cached = await app.getState<string>("cache_key", { actionId: "dynamic_worker" });
-    expect(cached).toBe("cached_data");
+    assert.strictEqual(cached, "cached_data");
 
     // 2. 动态未注册 actionId，value 恰好是类似 StateScopeOptions 的对象：通过 4 参数调用消除歧义
     const stateObj = { ttl: 60, namespace: "meta" };
     await app.setState("unregistered_action", "item_key", stateObj, {});
     const retrievedObj = await app.getState<any>("unregistered_action", "item_key");
-    expect(retrievedObj).toEqual({ ttl: 60, namespace: "meta" });
+    assert.deepStrictEqual(retrievedObj, { ttl: 60, namespace: "meta" });
 
     // 3. deleteState 与 listStateKeys 支持 opts.actionId
     const keys = await app.listStateKeys({ actionId: "dynamic_worker" });
-    expect(keys).toContain("cache_key");
+    assert.ok((keys).includes("cache_key"));
 
     const deleted = await app.deleteState("cache_key", { actionId: "dynamic_worker" });
-    expect(deleted).toBe(true);
+    assert.strictEqual(deleted, true);
 
     const check = await app.getState("cache_key", { actionId: "dynamic_worker" });
-    expect(check).toBeUndefined();
+    assert.strictEqual(check, undefined);
 
     await app.close();
   });
@@ -476,44 +475,39 @@ Execute build and then deploy artifact.
     });
 
     // 1. setState 显式位置参数与 options.actionId 冲突报错
-    await expect(
+    await assert.rejects(
       app.setState("action-a", "key1", "val1", { actionId: "action-b" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'action\-a' vs options\.actionId 'action\-b'/);
 
     // 2. 正常四参数调用（options.actionId 一致或未指定）成功
     await app.setState("action-a", "key1", "val1", { actionId: "action-a" });
     const val1 = await app.getState<string>("action-a", "key1");
-    expect(val1).toBe("val1");
+    assert.strictEqual(val1, "val1");
 
     // 3. getState 位置参数与 options.actionId 冲突报错
-    await expect(
+    await assert.rejects(
       app.getState("action-a", "key1", { actionId: "action-b" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'action\-a' vs options\.actionId 'action\-b'/);
 
     // 4. deleteState 位置参数与 options.actionId 冲突报错
-    await expect(
+    await assert.rejects(
       app.deleteState("action-a", "key1", { actionId: "action-b" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'action\-a' vs options\.actionId 'action\-b'/);
 
     // 5. listStateKeys 位置参数与 options.actionId 冲突报错
-    await expect(
+    await assert.rejects(
       app.listStateKeys("action-a", { actionId: "action-b" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'action\-a' vs options\.actionId 'action\-b'/);
 
     // 6. clearState 位置参数与 options.actionId 冲突报错
-    await expect(
+    await assert.rejects(
       app.clearState("action-a", { actionId: "action-b" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'action\-a' vs options\.actionId 'action\-b'/);
 
     await app.close();
   });
@@ -531,42 +525,39 @@ Execute build and then deploy artifact.
     // 1. setActionState 写入状态并读取
     await app.setActionState("calc-worker", "counter", 100);
     const counter = await app.getActionState<number>("calc-worker", "counter");
-    expect(counter).toBe(100);
+    assert.strictEqual(counter, 100);
 
     // 2. setActionState 支持子命名空间与 options.detail 读取
     await app.setActionState("calc-worker", "token", "tok_123", { namespace: "auth" });
     const authVal = await app.getActionState<string>("calc-worker", "token", { namespace: "auth" });
-    expect(authVal).toBe("tok_123");
+    assert.strictEqual(authVal, "tok_123");
 
     const detailEntry = await app.getActionState<any>("calc-worker", "token", {
       namespace: "auth",
       detail: true,
     });
-    expect(detailEntry).toBeDefined();
-    expect(detailEntry.value).toBe("tok_123");
+    assert.notStrictEqual(detailEntry, undefined);
+    assert.strictEqual(detailEntry.value, "tok_123");
 
     // 3. deleteActionState 删除状态
     const deleted = await app.deleteActionState("calc-worker", "counter");
-    expect(deleted).toBe(true);
+    assert.strictEqual(deleted, true);
     const afterDelete = await app.getActionState("calc-worker", "counter");
-    expect(afterDelete).toBeUndefined();
+    assert.strictEqual(afterDelete, undefined);
 
     // 4. setActionState / getActionState / deleteActionState 在 options.actionId 冲突时校验报错
-    await expect(
+    await assert.rejects(
       app.setActionState("calc-worker", "k", "v", { actionId: "other-worker" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
-    );
-    await expect(
+    , 
+      /Conflicting actionId specified: positional 'calc\-worker' vs options\.actionId 'other\-worker'/);
+    await assert.rejects(
       app.getActionState("calc-worker", "k", { actionId: "other-worker" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
-    );
-    await expect(
+    , 
+      /Conflicting actionId specified: positional 'calc\-worker' vs options\.actionId 'other\-worker'/);
+    await assert.rejects(
       app.deleteActionState("calc-worker", "k", { actionId: "other-worker" })
-    ).rejects.toThrow(
-      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
-    );
+    , 
+      /Conflicting actionId specified: positional 'calc\-worker' vs options\.actionId 'other\-worker'/);
 
     await app.close();
   });
@@ -584,11 +575,11 @@ Execute build and then deploy artifact.
     // 1. 三参数 setState(key, value, options) 确定性写入包级扁平状态，value 为普通字符串
     await app.setState("theme", "dark", { ttl: 60 });
     const themeVal = await app.getState("theme");
-    expect(themeVal).toBe("dark");
+    assert.strictEqual(themeVal, "dark");
 
     // 绝不可被误当作 Action 状态写入
     const actionVal = await app.getActionState("theme", "dark");
-    expect(actionVal).toBeUndefined();
+    assert.strictEqual(actionVal, undefined);
 
     // 2. Action 命名空间状态显式通过 setActionState 或四参数 setState 写入
     const arbitraryValue = { ttl: 300, namespace: "custom" };
@@ -597,39 +588,39 @@ Execute build and then deploy artifact.
       "unregistered_act",
       "config_meta"
     );
-    expect(result).toEqual({ ttl: 300, namespace: "custom" });
+    assert.deepStrictEqual(result, { ttl: 300, namespace: "custom" });
 
     await app.setState("unregistered_act_2", "config_meta_2", arbitraryValue, {});
     const result2 = await app.getActionState<typeof arbitraryValue>(
       "unregistered_act_2",
       "config_meta_2"
     );
-    expect(result2).toEqual({ ttl: 300, namespace: "custom" });
+    assert.deepStrictEqual(result2, { ttl: 300, namespace: "custom" });
 
     // 3. 非法三参数调用（第三参数传入非对象基元或数组）必须被显式拦截，杜绝静默写错数据
-    await expect(
+    await assert.rejects(
       (app as any).setState("worker", "counter", 42)
-    ).rejects.toThrow("Invalid options provided to setState");
+    , /Invalid options provided to setState/);
 
-    await expect(
+    await assert.rejects(
       (app as any).setState("worker", "counter", "unexpected-value")
-    ).rejects.toThrow("Invalid options provided to setState");
+    , /Invalid options provided to setState/);
 
-    await expect(
+    await assert.rejects(
       (app as any).setState("worker", "counter", [1, 2, 3])
-    ).rejects.toThrow("Invalid options provided to setState");
+    , /Invalid options provided to setState/);
 
     await app.close();
 
     // 4. DefaultPackageRuntime 实体类拥有与 PackageRuntime 相同的重载契约
     const concreteApp = new DefaultPackageRuntime({ inMemory: true });
     await concreteApp.setState("theme", "light");
-    expect(await concreteApp.getState("theme")).toBe("light");
+    assert.strictEqual(await concreteApp.getState("theme"), "light");
     await concreteApp.setState("worker", "counter", 42, {});
-    expect(await concreteApp.getActionState("worker", "counter")).toBe(42);
-    await expect(
+    assert.strictEqual(await concreteApp.getActionState("worker", "counter"), 42);
+    await assert.rejects(
       (concreteApp as any).setState("worker", "counter", 42)
-    ).rejects.toThrow("Invalid options provided to setState");
+    , /Invalid options provided to setState/);
     await concreteApp.close();
   });
 
@@ -662,16 +653,15 @@ Execute build and then deploy artifact.
     } as any);
 
     const res = await app.runAction("dummy", {});
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
 
     // 优雅关机
     await app.close();
-    expect(customStorageClosed).toBe(true);
+    assert.strictEqual(customStorageClosed, true);
 
     // 关机后拒绝接收新任务
-    await expect(app.runAction("dummy", {})).rejects.toThrow(
-      "ExecutionService is closing: new tasks rejected"
-    );
+    await assert.rejects(app.runAction("dummy", {}), 
+      /ExecutionService is closing: new tasks rejected/);
 
     // 重复 close 不报错
     await app.close();
@@ -679,8 +669,8 @@ Execute build and then deploy artifact.
 
   it("支持显式平台注入与默认平台回退", async () => {
     const defaultPlatform = createNodePlatform();
-    expect(defaultPlatform.name).toBeDefined();
-    expect(defaultPlatform.storage).toBeDefined();
+    assert.notStrictEqual(defaultPlatform.name, undefined);
+    assert.notStrictEqual(defaultPlatform.storage, undefined);
 
     const app = await createPackageRuntime({
       projectConfig: {
@@ -692,7 +682,7 @@ Execute build and then deploy artifact.
       inMemory: true,
     });
 
-    expect((app as any).platform).toBe(defaultPlatform);
+    assert.strictEqual((app as any).platform, defaultPlatform);
     await app.close();
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   createActionDock,
 } from "@actiondock/core";
@@ -21,21 +22,21 @@ describe("createTestPlatform 测试平台工厂测试", () => {
     it("具备标准 Test 运行时平台属性契约", () => {
       const platform: TestPlatform = createTestPlatform();
 
-      expect(platform.name).toBe("test");
-      expect(platform.clock).toBeInstanceOf(FakeClock);
-      expect(platform.files).toBeDefined();
-      expect(typeof platform.files.readFile).toBe("function");
-      expect(platform.modules).toBeDefined();
-      expect(typeof platform.modules.load).toBe("function");
-      expect(platform.process).toBeInstanceOf(MockProcessExecutor);
-      expect(platform.eventSink).toBeInstanceOf(TestEventSink);
-      expect(platform.storage).toBeDefined();
-      expect(typeof platform.storage.createStorage).toBe("function");
-      expect(typeof platform.storage.createGlobalStorage).toBe("function");
+      assert.strictEqual(platform.name, "test");
+      assert.ok(platform.clock instanceof FakeClock);
+      assert.notStrictEqual(platform.files, undefined);
+      assert.strictEqual(typeof platform.files.readFile, "function");
+      assert.notStrictEqual(platform.modules, undefined);
+      assert.strictEqual(typeof platform.modules.load, "function");
+      assert.ok(platform.process instanceof MockProcessExecutor);
+      assert.ok(platform.eventSink instanceof TestEventSink);
+      assert.notStrictEqual(platform.storage, undefined);
+      assert.strictEqual(typeof platform.storage.createStorage, "function");
+      assert.strictEqual(typeof platform.storage.createGlobalStorage, "function");
 
       // 验证赋值给通用 RuntimePlatform 接口完全兼容
       const genericPlatform: RuntimePlatform = platform;
-      expect(genericPlatform.name).toBe("test");
+      assert.strictEqual(genericPlatform.name, "test");
     });
 
     it("支持通过 FakeClock 确定性快进时间", async () => {
@@ -43,8 +44,8 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       const initialTime = platform.clock.now().getTime();
 
       await platform.clock.advance(5000);
-      expect(platform.clock.now().getTime()).toBe(initialTime + 5000);
-      expect(platform.clock.monotonic()).toBeGreaterThanOrEqual(5000);
+      assert.strictEqual(platform.clock.now().getTime(), initialTime + 5000);
+      assert.ok((platform.clock.monotonic()) >= 5000);
     });
 
     it("支持通过 MockProcessExecutor 预设并拦截进程执行", async () => {
@@ -56,8 +57,8 @@ describe("createTestPlatform 测试平台工厂测试", () => {
         timeoutMs: 1000,
         maxOutputBytes: 1024,
       });
-      expect(res.exit.code).toBe(0);
-      expect(decodeText(res.chunks)).toContain("On branch main");
+      assert.strictEqual(res.exit.code, 0);
+      assert.ok((decodeText(res.chunks)).includes("On branch main"));
     });
   });
 
@@ -69,16 +70,16 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       const storageA2 = platform.storage.createStorage("package-a");
       const storageB = platform.storage.createStorage("package-b");
 
-      expect(storageA1).toBe(storageA2);
-      expect(storageA1).not.toBe(storageB);
+      assert.strictEqual(storageA1, storageA2);
+      assert.notStrictEqual(storageA1, storageB);
 
       storageA1.setConfig("APP_KEY", "VAL_A");
-      expect(storageA2.getConfig("APP_KEY") as any).toBe("VAL_A");
-      expect(storageB.getConfig("APP_KEY")).toBeUndefined();
+      assert.strictEqual(storageA2.getConfig("APP_KEY") as any, "VAL_A");
+      assert.strictEqual(storageB.getConfig("APP_KEY"), undefined);
 
       storageA1.setState("run-1", "flag", true);
-      expect((await storageA2.getState("run-1", "flag")) as any).toBe(true);
-      expect(await storageB.getState("run-1", "flag")).toBeUndefined();
+      assert.strictEqual((await storageA2.getState("run-1", "flag")) as any, true);
+      assert.strictEqual(await storageB.getState("run-1", "flag"), undefined);
 
       storageA1.close();
       storageB.close();
@@ -93,8 +94,8 @@ describe("createTestPlatform 测试平台工厂测试", () => {
         globalStorage: customGlobal,
       });
 
-      expect(platform.storage.createStorage("any-pkg")).toBe(customStorage);
-      expect(platform.storage.createGlobalStorage()).toBe(customGlobal);
+      assert.strictEqual(platform.storage.createStorage("any-pkg"), customStorage);
+      assert.strictEqual(platform.storage.createGlobalStorage(), customGlobal);
 
       customStorage.close();
       customGlobal.close();
@@ -149,15 +150,15 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       const ticket = await service.execution.start("test-pkg/test-echo", {});
       const result: any = await ticket.result!;
 
-      expect(result).toBeDefined();
-      expect(result.ok).toBe(true);
-      expect((result.data as any).user).toBe("agent-user");
+      assert.notStrictEqual(result, undefined);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual((result.data as any).user, "agent-user");
 
       // 验证事件接收器记录了执行事件
       if (platform.eventSink instanceof TestEventSink) {
         const events = platform.eventSink.getEvents(ticket.runId);
-        expect(events.length).toBeGreaterThan(0);
-        expect(events.some((e) => e.type === "finish")).toBe(true);
+        assert.ok((events.length) > 0);
+        assert.strictEqual(events.some((e) => e.type === "finish"), true);
       }
 
       await service.close();
@@ -184,7 +185,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       });
 
       const data = await runtime.run(action, {});
-      expect((data as any).out).toBe("output-42");
+      assert.strictEqual((data as any).out, "output-42");
     });
   });
 });

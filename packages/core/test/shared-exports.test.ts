@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   createMcpEndpointHandler,
   readBodyWithLimit,
@@ -11,15 +12,15 @@ import { createNonClosingStorageView } from "@actiondock/core/package";
 
 describe("共享导出面验证", () => {
   it("server 子路径导出 readBodyWithLimit 与 RequestTooLargeError", () => {
-    expect(typeof readBodyWithLimit).toBe("function");
-    expect(typeof RequestTooLargeError).toBe("function");
-    expect(typeof resolveCorsHeaders).toBe("function");
-    expect(typeof verifyBearerToken).toBe("function");
-    expect(DEFAULT_MAX_BODY_BYTES).toBe(1024 * 1024);
+    assert.strictEqual(typeof readBodyWithLimit, "function");
+    assert.strictEqual(typeof RequestTooLargeError, "function");
+    assert.strictEqual(typeof resolveCorsHeaders, "function");
+    assert.strictEqual(typeof verifyBearerToken, "function");
+    assert.strictEqual(DEFAULT_MAX_BODY_BYTES, 1024 * 1024);
   });
 
   it("package 子路径导出 createNonClosingStorageView", () => {
-    expect(typeof createNonClosingStorageView).toBe("function");
+    assert.strictEqual(typeof createNonClosingStorageView, "function");
   });
 
   it("createNonClosingStorageView 拦截 close 并转发其余成员", () => {
@@ -29,19 +30,19 @@ describe("共享导出面验证", () => {
       close() { throw new Error("should not close"); },
     };
     const view = createNonClosingStorageView(storage);
-    expect(view.getValue()).toBe(42);
-    expect(() => view.close()).not.toThrow();
-    expect(view !== storage).toBe(true);
+    assert.strictEqual(view.getValue(), 42);
+    assert.doesNotThrow(() => view.close());
+    assert.strictEqual(view !== storage, true);
   });
 
   it("createMcpEndpointHandler 鉴权失败产出标准 401 JSON", async () => {
     const handler = createMcpEndpointHandler(async () => new Response("ok"), { token: "secret" });
     const res = await handler(new Request("http://x/mcp", { method: "POST" }));
-    expect(res!.status).toBe(401);
+    assert.strictEqual(res!.status, 401);
     const body: any = await res!.json();
-    expect(body.ok).toBe(false);
-    expect(body.error.code).toBe("UNAUTHORIZED");
-    expect(body.error.message).toBe("Invalid or missing Bearer token");
+    assert.strictEqual(body.ok, false);
+    assert.strictEqual(body.error.code, "UNAUTHORIZED");
+    assert.strictEqual(body.error.message, "Invalid or missing Bearer token");
   });
 
   it("createMcpEndpointHandler 超限请求产出 413 JSON", async () => {
@@ -54,10 +55,10 @@ describe("共享导出面验证", () => {
       headers: { Authorization: "Bearer secret", "Content-Length": "9999" },
       body: "a".repeat(9999),
     }));
-    expect(res!.status).toBe(413);
+    assert.strictEqual(res!.status, 413);
     const body: any = await res!.json();
-    expect(body.error.code).toBe("REQUEST_TOO_LARGE");
-    expect(body.error.message).toBe("Request body exceeds maximum allowed size");
+    assert.strictEqual(body.error.code, "REQUEST_TOO_LARGE");
+    assert.strictEqual(body.error.message, "Request body exceeds maximum allowed size");
   });
 
   it("createMcpEndpointHandler 委托方接收重建后的 Request", async () => {
@@ -71,17 +72,17 @@ describe("共享导出面验证", () => {
       headers: { Authorization: "Bearer secret", "Content-Type": "application/json" },
       body: JSON.stringify({ hello: "world" }),
     }));
-    expect(res!.status).toBe(200);
-    expect(await res!.text()).toBe("delegated");
-    expect(captured!.method).toBe("POST");
+    assert.strictEqual(res!.status, 200);
+    assert.strictEqual(await res!.text(), "delegated");
+    assert.strictEqual(captured!.method, "POST");
     const text = await new Response(captured!.body).text();
-    expect(JSON.parse(text)).toEqual({ hello: "world" });
+    assert.deepStrictEqual(JSON.parse(text), { hello: "world" });
   });
 
   it("createMcpEndpointHandler 委托返回 null 时透传 null 交回调用方", async () => {
     const handler = createMcpEndpointHandler(async () => null, { token: undefined });
     const res = await handler(new Request("http://x/mcp", { method: "GET" }));
-    expect(res).toBeNull();
+    assert.strictEqual(res, null);
   });
 
   it("createMcpEndpointHandler 支持 CORS 合并模式与 JSON-RPC 401 定制", async () => {
@@ -100,10 +101,10 @@ describe("共享导出面验证", () => {
 
     // JSON-RPC 401 形态
     const unauthorized = await handler(new Request("http://x/mcp", { method: "POST" }));
-    expect(unauthorized!.status).toBe(401);
+    assert.strictEqual(unauthorized!.status, 401);
     const errBody: any = await unauthorized!.json();
-    expect(errBody.jsonrpc).toBe("2.0");
-    expect(errBody.error.code).toBe(-32000);
+    assert.strictEqual(errBody.jsonrpc, "2.0");
+    assert.strictEqual(errBody.error.code, -32000);
 
     // CORS 合并模式
     const ok = await handler(new Request("http://x/mcp", {
@@ -111,7 +112,7 @@ describe("共享导出面验证", () => {
       headers: { Authorization: "Bearer secret", Origin: "https://app.example" },
       body: "{}",
     }));
-    expect(ok!.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example");
-    expect(ok!.headers.get("X-Origin")).toBe("mcp");
+    assert.strictEqual(ok!.headers.get("Access-Control-Allow-Origin"), "https://app.example");
+    assert.strictEqual(ok!.headers.get("X-Origin"), "mcp");
   });
 });

@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +17,7 @@ import { withService } from "../src/utils/target";
 describe("Profile Insecure TLS Integration", () => {
   const tempHome = mkdtempSync(join(tmpdir(), "actiondock-profile-tls-test-"));
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(tempHome, { recursive: true, force: true });
     } catch {
@@ -36,9 +37,9 @@ describe("Profile Insecure TLS Integration", () => {
     );
 
     const entry = getProfile("remote-insecure", tempHome);
-    expect(entry).toBeDefined();
-    expect(entry?.serverUrl).toBe("https://10.0.0.1:5177");
-    expect(entry?.insecure).toBe(true);
+    assert.notStrictEqual(entry, undefined);
+    assert.strictEqual(entry?.serverUrl, "https://10.0.0.1:5177");
+    assert.strictEqual(entry?.insecure, true);
   });
 
   it("updateProfile 支持更新已有 Profile 的 insecure 配置", () => {
@@ -51,7 +52,7 @@ describe("Profile Insecure TLS Integration", () => {
     );
 
     const entry = getProfile("remote-insecure", tempHome);
-    expect(entry?.insecure).toBe(false);
+    assert.strictEqual(entry?.insecure, false);
 
     updateProfile(
       "remote-insecure",
@@ -60,16 +61,16 @@ describe("Profile Insecure TLS Integration", () => {
       },
       tempHome
     );
-    expect(getProfile("remote-insecure", tempHome)?.insecure).toBe(true);
+    assert.strictEqual(getProfile("remote-insecure", tempHome)?.insecure, true);
   });
 
   it("resolveTarget 正确继承 Profile 中的 insecure 配置并支持选项覆盖", () => {
     const resolved = resolveTarget({ profile: "remote-insecure" }, tempHome);
-    expect(resolved.type).toBe("remote");
-    expect(resolved.insecure).toBe(true);
+    assert.strictEqual(resolved.type, "remote");
+    assert.strictEqual(resolved.insecure, true);
 
     const overridden = resolveTarget({ profile: "remote-insecure", insecure: false }, tempHome);
-    expect(overridden.insecure).toBe(false);
+    assert.strictEqual(overridden.insecure, false);
   });
 
   it("resolveTarget 支持通过 ACTIONDOCK_INSECURE 环境变量全局启用 insecure", () => {
@@ -77,7 +78,7 @@ describe("Profile Insecure TLS Integration", () => {
     try {
       process.env.ACTIONDOCK_INSECURE = "true";
       const resolved = resolveTarget({ server: "https://example.internal:5177" }, tempHome);
-      expect(resolved.insecure).toBe(true);
+      assert.strictEqual(resolved.insecure, true);
     } finally {
       if (prev === undefined) {
         delete process.env.ACTIONDOCK_INSECURE;
@@ -99,15 +100,15 @@ describe("Profile Insecure TLS Integration", () => {
       // 执行 ad profile add prod-node -s https://prod:5177 -k
       await program.parseAsync(["node", "ad", "profile", "add", "prod-node", "-s", "https://prod:5177", "-k"]);
       const added = getProfile("prod-node", tempHome);
-      expect(added).toBeDefined();
-      expect(added?.insecure).toBe(true);
+      assert.notStrictEqual(added, undefined);
+      assert.strictEqual(added?.insecure, true);
 
       // 执行 ad profile update prod-node --no-insecure
       const programUpdate = new Command();
       registerProfileCommands(programUpdate);
       await programUpdate.parseAsync(["node", "ad", "profile", "update", "prod-node", "--no-insecure"]);
       const updated = getProfile("prod-node", tempHome);
-      expect(updated?.insecure).toBe(false);
+      assert.strictEqual(updated?.insecure, false);
     } finally {
       if (prevHome === undefined) {
         delete process.env.ACTIONDOCK_HOME;
@@ -134,10 +135,10 @@ describe("Profile Insecure TLS Integration", () => {
       }
     );
 
-    expect(capturedResolvedTarget.insecure).toBe(true);
-    expect(capturedResolvedTarget.allowInsecureHttp).toBe(true);
-    expect(capturedTarget.insecure).toBe(true);
-    expect(capturedTarget.allowInsecureHttp).toBe(true);
+    assert.strictEqual(capturedResolvedTarget.insecure, true);
+    assert.strictEqual(capturedResolvedTarget.allowInsecureHttp, true);
+    assert.strictEqual(capturedTarget.insecure, true);
+    assert.strictEqual(capturedTarget.allowInsecureHttp, true);
 
     let capturedRemoteResolvedTarget: any;
     let capturedRemoteTarget: any;
@@ -156,10 +157,10 @@ describe("Profile Insecure TLS Integration", () => {
       { requireRemote: true }
     );
 
-    expect(capturedRemoteResolvedTarget.insecure).toBe(true);
-    expect(capturedRemoteResolvedTarget.allowInsecureHttp).toBe(true);
-    expect(capturedRemoteTarget.insecure).toBe(true);
-    expect(capturedRemoteTarget.allowInsecureHttp).toBe(true);
+    assert.strictEqual(capturedRemoteResolvedTarget.insecure, true);
+    assert.strictEqual(capturedRemoteResolvedTarget.allowInsecureHttp, true);
+    assert.strictEqual(capturedRemoteTarget.insecure, true);
+    assert.strictEqual(capturedRemoteTarget.allowInsecureHttp, true);
 
     // requireRemote 在 local 分支必须直接拒绝（与 ad runs cancel 的本地拒绝语义一致）
     await withService(
@@ -174,7 +175,7 @@ describe("Profile Insecure TLS Integration", () => {
         throw new Error("requireRemote should reject local target");
       },
       (err: any) => {
-        expect(err.message).toBe(
+        assert.strictEqual(err.message, 
           "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
         );
       }

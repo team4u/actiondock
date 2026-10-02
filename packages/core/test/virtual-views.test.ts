@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import { createActionDockMcpServer } from "@actiondock/mcp";
 import { createMcpHandler } from "@modelcontextprotocol/server";
@@ -36,24 +37,24 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
       });
 
-      expect(defaultView.name).toBe("default");
-      expect(defaultView.policy.token).toBe("global-token");
-      expect(defaultView.policy.packageAllowlist).toEqual(["pkg.a"]);
-      expect(defaultView.policy.enableManagement).toBe(false);
+      assert.strictEqual(defaultView.name, "default");
+      assert.strictEqual(defaultView.policy.token, "global-token");
+      assert.deepStrictEqual(defaultView.policy.packageAllowlist, ["pkg.a"]);
+      assert.strictEqual(defaultView.policy.enableManagement, false);
 
-      expect(views.size).toBe(3);
-      expect(views.has("default")).toBe(true);
-      expect(views.has("admin")).toBe(true);
-      expect(views.has("readonly")).toBe(true);
+      assert.strictEqual(views.size, 3);
+      assert.strictEqual(views.has("default"), true);
+      assert.strictEqual(views.has("admin"), true);
+      assert.strictEqual(views.has("readonly"), true);
 
       const adminView = views.get("admin")!;
-      expect(adminView.policy.token).toBe("admin-token");
-      expect(adminView.policy.enableManagement).toBe(true);
+      assert.strictEqual(adminView.policy.token, "admin-token");
+      assert.strictEqual(adminView.policy.enableManagement, true);
 
       const roView = views.get("readonly")!;
-      expect(roView.policy.token).toBe("ro-token");
-      expect(roView.policy.packageAllowlist).toEqual(["pkg.b"]);
-      expect(roView.policy.actionAllowlist).toEqual(["pkg.b/read"]);
+      assert.strictEqual(roView.policy.token, "ro-token");
+      assert.deepStrictEqual(roView.policy.packageAllowlist, ["pkg.b"]);
+      assert.deepStrictEqual(roView.policy.actionAllowlist, ["pkg.b/read"]);
     });
 
     it("正确归一化数组形式配置的视图并支持显式覆盖 default 视图", () => {
@@ -73,11 +74,11 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         ],
       });
 
-      expect(defaultView.policy.token).toBe("overridden-default-token");
-      expect(defaultView.policy.packageAllowlist).toEqual(["pkg.common"]);
+      assert.strictEqual(defaultView.policy.token, "overridden-default-token");
+      assert.deepStrictEqual(defaultView.policy.packageAllowlist, ["pkg.common"]);
 
-      expect(views.get("worker")?.policy.token).toBe("worker-token");
-      expect(views.get("worker")?.policy.actionAllowlist).toEqual(["run-job"]);
+      assert.strictEqual(views.get("worker")?.policy.token, "worker-token");
+      assert.deepStrictEqual(views.get("worker")?.policy.actionAllowlist, ["run-job"]);
     });
 
     it("通过 matchViewByToken 安全匹配视图并防范未命中", () => {
@@ -89,16 +90,16 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       });
 
       const matchedAdmin = matchViewByToken("secret-admin", views.values());
-      expect(matchedAdmin?.name).toBe("admin");
+      assert.strictEqual(matchedAdmin?.name, "admin");
 
       const matchedGuest = matchViewByToken("secret-guest", views.values());
-      expect(matchedGuest?.name).toBe("guest");
+      assert.strictEqual(matchedGuest?.name, "guest");
 
       const notFound = matchViewByToken("unknown-token", views.values());
-      expect(notFound).toBeUndefined();
+      assert.strictEqual(notFound, undefined);
 
       const emptyToken = matchViewByToken("", views.values());
-      expect(emptyToken).toBeUndefined();
+      assert.strictEqual(emptyToken, undefined);
     });
 
     it("isActionAllowedByPolicy 与 filterActionsByPolicy 判定逻辑正确", () => {
@@ -109,17 +110,17 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       };
 
       // 允许列表中的全限定动作
-      expect(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "calc" }, policy)).toBe(true);
-      expect(isActionAllowedByPolicy("pkg.math/calc", policy)).toBe(true);
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "calc" }, policy), true);
+      assert.strictEqual(isActionAllowedByPolicy("pkg.math/calc", policy), true);
 
       // 短名 ping，但所属包在 packageAllowlist 中
-      expect(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "ping" }, policy)).toBe(true);
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "ping" }, policy), true);
 
       // 所属包不在 packageAllowlist 中
-      expect(isActionAllowedByPolicy({ packageId: "pkg.other", actionId: "calc" }, policy)).toBe(false);
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.other", actionId: "calc" }, policy), false);
 
       // 包允许但动作不在 actionAllowlist 中
-      expect(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "unknown" }, policy)).toBe(false);
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "unknown" }, policy), false);
 
       // 过滤动作列表
       const allActions = [
@@ -128,21 +129,21 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         { id: "pkg.other/ping", packageId: "pkg.other", actionId: "ping" },
       ];
       const filtered = filterActionsByPolicy(allActions, policy);
-      expect(filtered.length).toBe(1);
-      expect(filtered[0].id).toBe("pkg.math/calc");
+      assert.strictEqual(filtered.length, 1);
+      assert.strictEqual(filtered[0].id, "pkg.math/calc");
     });
 
     it("isPackageAllowedByPolicy 与 isManagementAllowedByPolicy 判定正确", () => {
       const policyA = { packageAllowlist: ["pkg.a"], enableManagement: true };
       const policyB = { enableManagement: false };
 
-      expect(isPackageAllowedByPolicy("pkg.a", policyA)).toBe(true);
-      expect(isPackageAllowedByPolicy("pkg.b", policyA)).toBe(false);
-      expect(isPackageAllowedByPolicy("pkg.b", policyB)).toBe(true);
+      assert.strictEqual(isPackageAllowedByPolicy("pkg.a", policyA), true);
+      assert.strictEqual(isPackageAllowedByPolicy("pkg.b", policyA), false);
+      assert.strictEqual(isPackageAllowedByPolicy("pkg.b", policyB), true);
 
-      expect(isManagementAllowedByPolicy(policyA)).toBe(true);
-      expect(isManagementAllowedByPolicy(policyB)).toBe(false);
-      expect(isManagementAllowedByPolicy(undefined)).toBe(false);
+      assert.strictEqual(isManagementAllowedByPolicy(policyA), true);
+      assert.strictEqual(isManagementAllowedByPolicy(policyB), false);
+      assert.strictEqual(isManagementAllowedByPolicy(undefined), false);
     });
   });
 
@@ -151,7 +152,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
     let baseUrl: string;
     const recordedMcpCalls: Array<{ path: string; viewName?: string; token?: string }> = [];
 
-    beforeAll(async () => {
+    before(async () => {
       const calcAction = defineAction({
         run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
       });
@@ -242,7 +243,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       baseUrl = server.url;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (server) {
         await server.stop();
       }
@@ -252,25 +253,25 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       const res = await fetch(`${baseUrl}/api/v2/actions`, {
         headers: { Authorization: "Bearer master-token" },
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const data: any = await res.json();
-      expect(data.length).toBe(3); // calc, advanced, manage 全部可见
+      assert.strictEqual(data.length, 3); // calc, advanced, manage 全部可见
 
       // 默认视图未开启 management，返回 403
       const cfgRes = await fetch(`${baseUrl}/api/v2/config`, {
         headers: { Authorization: "Bearer master-token" },
       });
-      expect(cfgRes.status).toBe(403);
+      assert.strictEqual(cfgRes.status, 403);
     });
 
     it("根路径鉴权拦截：未携带或携带错误 Token 返回 401", async () => {
       const noAuthRes = await fetch(`${baseUrl}/api/v2/actions`);
-      expect(noAuthRes.status).toBe(401);
+      assert.strictEqual(noAuthRes.status, 401);
 
       const wrongAuthRes = await fetch(`${baseUrl}/api/v2/actions`, {
         headers: { Authorization: "Bearer wrong-token" },
       });
-      expect(wrongAuthRes.status).toBe(401);
+      assert.strictEqual(wrongAuthRes.status, 401);
     });
 
     it("命名空间视图访问：正确映射 /views/:viewName/api/v2/* 与独立白名单", async () => {
@@ -278,10 +279,10 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       const res = await fetch(`${baseUrl}/views/math-only/api/v2/actions`, {
         headers: { Authorization: "Bearer math-token" },
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const actions: any = await res.json();
-      expect(actions.length).toBe(1);
-      expect(actions[0].id).toBe("pkg.math/calc");
+      assert.strictEqual(actions.length, 1);
+      assert.strictEqual(actions[0].id, "pkg.math/calc");
 
       // 访问白名单外的动作详情返回 403
       const forbiddenActionRes = await fetch(
@@ -290,7 +291,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           headers: { Authorization: "Bearer math-token" },
         }
       );
-      expect(forbiddenActionRes.status).toBe(403);
+      assert.strictEqual(forbiddenActionRes.status, 403);
 
       // 访问白名单外的包返回 403
       const forbiddenPkgRes = await fetch(
@@ -299,7 +300,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           headers: { Authorization: "Bearer math-token" },
         }
       );
-      expect(forbiddenPkgRes.status).toBe(403);
+      assert.strictEqual(forbiddenPkgRes.status, 403);
     });
 
     it("命名空间视图鉴权：Token 不匹配目标视图时拒绝访问", async () => {
@@ -307,16 +308,16 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       const res = await fetch(`${baseUrl}/views/math-only/api/v2/actions`, {
         headers: { Authorization: "Bearer admin-token" },
       });
-      expect(res.status).toBe(401);
+      assert.strictEqual(res.status, 401);
     });
 
     it("命名空间视图访问不存在的视图返回 404", async () => {
       const res = await fetch(`${baseUrl}/views/non-existent-view/api/v2/actions`, {
         headers: { Authorization: "Bearer admin-token" },
       });
-      expect(res.status).toBe(404);
+      assert.strictEqual(res.status, 404);
       const json: any = await res.json();
-      expect(json.error.message).toContain("non-existent-view");
+      assert.ok((json.error.message).includes("non-existent-view"));
     });
 
     it("命名空间视图管理权限控制：admin 视图允许，math-only 视图拒绝", async () => {
@@ -324,13 +325,13 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       const adminCfgRes = await fetch(`${baseUrl}/views/admin/api/v2/config?package=pkg.math`, {
         headers: { Authorization: "Bearer admin-token" },
       });
-      expect(adminCfgRes.status).toBe(200);
+      assert.strictEqual(adminCfgRes.status, 200);
 
       // math-only 视图管理接口关闭
       const mathCfgRes = await fetch(`${baseUrl}/views/math-only/api/v2/config?package=pkg.math`, {
         headers: { Authorization: "Bearer math-token" },
       });
-      expect(mathCfgRes.status).toBe(403);
+      assert.strictEqual(mathCfgRes.status, 403);
     });
 
     it("根路径智能匹配：根据 Bearer Token 自动绑定到对应的视图策略", async () => {
@@ -338,16 +339,16 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       const res = await fetch(`${baseUrl}/api/v2/actions`, {
         headers: { Authorization: "Bearer math-token" },
       });
-      expect(res.status).toBe(200);
+      assert.strictEqual(res.status, 200);
       const actions: any = await res.json();
-      expect(actions.length).toBe(1);
-      expect(actions[0].id).toBe("pkg.math/calc");
+      assert.strictEqual(actions.length, 1);
+      assert.strictEqual(actions[0].id, "pkg.math/calc");
 
       // 请求根路径 /api/v2/config，携带 admin-token，应自动激活 admin 视图的管理权限
       const adminRes = await fetch(`${baseUrl}/api/v2/config?package=pkg.math`, {
         headers: { Authorization: "Bearer admin-token" },
       });
-      expect(adminRes.status).toBe(200);
+      assert.strictEqual(adminRes.status, 200);
     });
 
     it("支持通过各视图运行动作并校验白名单拦截", async () => {
@@ -360,10 +361,10 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ input: { x: 10, y: 20 } }),
       });
-      expect(runRes.status).toBe(200);
+      assert.strictEqual(runRes.status, 200);
       const result: any = await runRes.json();
-      expect(result.ok).toBe(true);
-      expect(result.data.result).toBe(30);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.data.result, 30);
 
       // 在 math-only 视图下尝试执行未在白名单的 advanced
       const forbiddenRun = await fetch(`${baseUrl}/views/math-only/api/v2/actions/advanced/run`, {
@@ -374,7 +375,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ input: {} }),
       });
-      expect(forbiddenRun.status).toBe(403);
+      assert.strictEqual(forbiddenRun.status, 403);
     });
 
     it("MCP 统一网关分发：支持独立视图端点与根路径智能分发", async () => {
@@ -389,10 +390,10 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 }),
       });
-      expect(adminMcp.status).toBe(200);
+      assert.strictEqual(adminMcp.status, 200);
       const adminJson: any = await adminMcp.json();
-      expect(adminJson.mcp).toBe(true);
-      expect(adminJson.view).toBe("admin");
+      assert.strictEqual(adminJson.mcp, true);
+      assert.strictEqual(adminJson.view, "admin");
 
       // 2. 访问禁用 MCP 的视图: /views/no-mcp/mcp 应返回 404
       const disabledMcp = await fetch(`${baseUrl}/views/no-mcp/mcp`, {
@@ -403,7 +404,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 2 }),
       });
-      expect(disabledMcp.status).toBe(404);
+      assert.strictEqual(disabledMcp.status, 404);
 
       // 3. 根路径 /mcp 携带 math-token 智能分发到 math-only 视图
       const rootMcpMath = await fetch(`${baseUrl}/mcp`, {
@@ -414,9 +415,9 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 3 }),
       });
-      expect(rootMcpMath.status).toBe(200);
+      assert.strictEqual(rootMcpMath.status, 200);
       const mathJson: any = await rootMcpMath.json();
-      expect(mathJson.view).toBe("math-only");
+      assert.strictEqual(mathJson.view, "math-only");
 
       // 4. 根路径 /mcp 携带 master-token 分发到 default 视图
       const rootMcpMaster = await fetch(`${baseUrl}/mcp`, {
@@ -427,9 +428,9 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 4 }),
       });
-      expect(rootMcpMaster.status).toBe(200);
+      assert.strictEqual(rootMcpMaster.status, 200);
       const masterJson: any = await rootMcpMaster.json();
-      expect(masterJson.view).toBe("default");
+      assert.strictEqual(masterJson.view, "default");
     });
   });
 
@@ -473,7 +474,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       return { status: res.status, data, sessionId: newSessionId, rawText };
     };
 
-    beforeAll(async () => {
+    before(async () => {
       const calcAction = defineAction({
         run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
       });
@@ -558,7 +559,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       mcpBaseUrl = mcpServer.url;
     });
 
-    afterAll(async () => {
+    after(async () => {
       if (mcpServer) {
         await mcpServer.stop();
       }
@@ -575,7 +576,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           clientInfo: { name: "admin-client", version: "1.0.0" },
         },
       });
-      expect(init.status).toBe(200);
+      assert.strictEqual(init.status, 200);
 
       const tools = await callMcp(
         `${mcpBaseUrl}/views/admin/mcp`,
@@ -588,11 +589,11 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         init.sessionId
       );
-      expect(tools.status).toBe(200);
+      assert.strictEqual(tools.status, 200);
       const toolNames = tools.data?.result?.tools?.map((t: any) => t.name) || [];
-      expect(toolNames).toContain("calc");
-      expect(toolNames).toContain("advanced");
-      expect(toolNames).toContain("manage");
+      assert.ok((toolNames).includes("calc"));
+      assert.ok((toolNames).includes("advanced"));
+      assert.ok((toolNames).includes("manage"));
     });
 
     it("通过 POST /views/restricted/mcp 调用 tools/list，验证严格按照白名单隔离且不包含未授权工具", async () => {
@@ -606,7 +607,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           clientInfo: { name: "restricted-client", version: "1.0.0" },
         },
       });
-      expect(init.status).toBe(200);
+      assert.strictEqual(init.status, 200);
 
       const tools = await callMcp(
         `${mcpBaseUrl}/views/restricted/mcp`,
@@ -619,11 +620,11 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         init.sessionId
       );
-      expect(tools.status).toBe(200);
+      assert.strictEqual(tools.status, 200);
       const toolNames = tools.data?.result?.tools?.map((t: any) => t.name) || [];
-      expect(toolNames).toContain("calc");
-      expect(toolNames).not.toContain("advanced");
-      expect(toolNames).not.toContain("manage");
+      assert.ok((toolNames).includes("calc"));
+      assert.ok(!(toolNames).includes("advanced"));
+      assert.ok(!(toolNames).includes("manage"));
     });
 
     it("携带 admin token 请求 restricted 视图 MCP 端点时返回 401 拦截", async () => {
@@ -633,8 +634,8 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         method: "tools/list",
         params: {},
       });
-      expect(res.status).toBe(401);
-      expect(res.data?.error?.code).toBe("UNAUTHORIZED");
+      assert.strictEqual(res.status, 401);
+      assert.strictEqual(res.data?.error?.code, "UNAUTHORIZED");
     });
 
     it("携带 restricted token 请求 admin 视图 MCP 端点时返回 401 拦截", async () => {
@@ -644,8 +645,8 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         method: "tools/list",
         params: {},
       });
-      expect(res.status).toBe(401);
-      expect(res.data?.error?.code).toBe("UNAUTHORIZED");
+      assert.strictEqual(res.status, 401);
+      assert.strictEqual(res.data?.error?.code, "UNAUTHORIZED");
     });
 
     it("根路径 /mcp 携带 restricted-token 智能隔离为仅含白名单工具", async () => {
@@ -659,7 +660,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           clientInfo: { name: "client", version: "1.0.0" },
         },
       });
-      expect(init.status).toBe(200);
+      assert.strictEqual(init.status, 200);
 
       const tools = await callMcp(
         `${mcpBaseUrl}/mcp`,
@@ -672,11 +673,11 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         },
         init.sessionId
       );
-      expect(tools.status).toBe(200);
+      assert.strictEqual(tools.status, 200);
       const toolNames = tools.data?.result?.tools?.map((t: any) => t.name) || [];
-      expect(toolNames).toContain("calc");
-      expect(toolNames).not.toContain("advanced");
-      expect(toolNames).not.toContain("manage");
+      assert.ok((toolNames).includes("calc"));
+      assert.ok(!(toolNames).includes("advanced"));
+      assert.ok(!(toolNames).includes("manage"));
     });
   });
 
@@ -702,15 +703,15 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       ];
 
       const matched = matchViewByToken("token-view-1", fakeViews as any);
-      expect(matched?.name).toBe("view1");
-      expect(view2Checked).toBe(true);
+      assert.strictEqual(matched?.name, "view1");
+      assert.strictEqual(view2Checked, true);
     });
 
     it("safeEqual: 长度不匹配时执行恒定时间自我比对而不提前泄露", () => {
-      expect(safeEqual("abc", "abcdef")).toBe(false);
-      expect(safeEqual("abcdef", "abc")).toBe(false);
-      expect(safeEqual("secret-token", "secret-token")).toBe(true);
-      expect(safeEqual("", "")).toBe(true);
+      assert.strictEqual(safeEqual("abc", "abcdef"), false);
+      assert.strictEqual(safeEqual("abcdef", "abc"), false);
+      assert.strictEqual(safeEqual("secret-token", "secret-token"), true);
+      assert.strictEqual(safeEqual("", ""), true);
     });
 
     it("normalizeServerViews: 自动过滤危险视图名 . 与 ..", () => {
@@ -721,9 +722,9 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           normal: { token: "normal-token" },
         },
       });
-      expect(views.has(".")).toBe(false);
-      expect(views.has("..")).toBe(false);
-      expect(views.has("normal")).toBe(true);
+      assert.strictEqual(views.has("."), false);
+      assert.strictEqual(views.has(".."), false);
+      assert.strictEqual(views.has("normal"), true);
     });
 
     it("isActionAllowedByPolicy: 仅配置包白名单时拒绝未指明所属包的短名动作", () => {
@@ -733,12 +734,12 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       };
 
       // 明确包名的动作放行
-      expect(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "calc" }, pkgOnlyPolicy)).toBe(true);
-      expect(isActionAllowedByPolicy("pkg.math/calc", pkgOnlyPolicy)).toBe(true);
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "calc" }, pkgOnlyPolicy), true);
+      assert.strictEqual(isActionAllowedByPolicy("pkg.math/calc", pkgOnlyPolicy), true);
 
       // 短名动作且未声明包名，拒绝放行
-      expect(isActionAllowedByPolicy("calc", pkgOnlyPolicy)).toBe(false);
-      expect(isActionAllowedByPolicy({ actionId: "calc" }, pkgOnlyPolicy)).toBe(false);
+      assert.strictEqual(isActionAllowedByPolicy("calc", pkgOnlyPolicy), false);
+      assert.strictEqual(isActionAllowedByPolicy({ actionId: "calc" }, pkgOnlyPolicy), false);
     });
 
     it("HTTP 服务端防范路径混淆、多斜杠与畸形编码穿透", async () => {
@@ -788,19 +789,19 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         const specialRes = await fetch(`${secUrl}/views/%E7%89%B9%E6%AE%8A%20%E8%A7%86%E5%9B%BE/api/v2/actions`, {
           headers: { Authorization: "Bearer special-token" },
         });
-        expect(specialRes.status).toBe(200);
+        assert.strictEqual(specialRes.status, 200);
 
         // 2. 畸形 URL 编码视图名返回 400 Bad Request
         const malformedRes = await fetch(`${secUrl}/views/%FF/api/v2/actions`, {
           headers: { Authorization: "Bearer special-token" },
         });
-        expect(malformedRes.status).toBe(400);
+        assert.strictEqual(malformedRes.status, 400);
 
         // 3. 多斜杠与相对路径跳转安全折叠规范化
         const doubleSlashRes = await fetch(`${secUrl}/views/target//api/v2///actions`, {
           headers: { Authorization: "Bearer target-token" },
         });
-        expect(doubleSlashRes.status).toBe(200);
+        assert.strictEqual(doubleSlashRes.status, 200);
       } finally {
         await secServer.stop();
       }

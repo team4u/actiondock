@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   FakeProcessDriver,
   type ProcessHandle,
@@ -14,7 +15,7 @@ describe("FakeProcessDriver 测试桩驱动测试", () => {
 
     driver.simulateSpawnFailure(new Error("cannot start broken-bin"));
 
-    await expect(
+    await assert.rejects(
       driver.spawn(
         { executable: "broken-bin", args: [], io: { mode: "pipe" } },
         {
@@ -32,12 +33,12 @@ describe("FakeProcessDriver 测试桩驱动测试", () => {
           },
         }
       )
-    ).rejects.toThrow("cannot start broken-bin");
+    , /cannot start broken\-bin/);
 
     // 与 NodeProcessDriver 契约一致：fault 先行，exited 携带 spawn 失败语义（code 与 signal 均为 null），随后 outputClosed
-    expect(events).toEqual(["fault", "exited", "outputClosed:natural"]);
-    expect(reportedFault?.message).toBe("cannot start broken-bin");
-    expect(exitResult).toEqual({ code: null, signal: null });
+    assert.deepStrictEqual(events, ["fault", "exited", "outputClosed:natural"]);
+    assert.strictEqual(reportedFault?.message, "cannot start broken-bin");
+    assert.deepStrictEqual(exitResult, { code: null, signal: null });
   });
 });
 
@@ -61,13 +62,13 @@ describe("FakeProcessDriver 原有行为测试", () => {
       }
     );
 
-    expect(handle.id).toBeDefined();
-    expect(driver.spawnCalls.length).toBe(1);
-    expect(driver.spawnCalls[0].spec.executable).toBe("test-bin");
-    expect(driver.getLastHandle()?.id).toBe(handle.id);
+    assert.notStrictEqual(handle.id, undefined);
+    assert.strictEqual(driver.spawnCalls.length, 1);
+    assert.strictEqual(driver.spawnCalls[0].spec.executable, "test-bin");
+    assert.strictEqual(driver.getLastHandle()?.id, handle.id);
 
     driver.emitExit(handle, { code: 0 });
-    expect(exitedCalled).toBe(true);
+    assert.strictEqual(exitedCalled, true);
   });
 
   it("支持确定性模拟输出 emitOutput 并正确传递流与字节", async () => {
@@ -99,9 +100,9 @@ describe("FakeProcessDriver 原有行为测试", () => {
     driver.emitOutput(handle, "stderr", "error-msg");
     driver.emitOutput(handle, "pty", "pty-text");
 
-    expect(stdoutParts.join("")).toBe("chunk-stdout-1-chunk-stdout-2");
-    expect(stderrParts.join("")).toBe("error-msg");
-    expect(ptyParts.join("")).toBe("pty-text");
+    assert.strictEqual(stdoutParts.join(""), "chunk-stdout-1-chunk-stdout-2");
+    assert.strictEqual(stderrParts.join(""), "error-msg");
+    assert.strictEqual(ptyParts.join(""), "pty-text");
   });
 
   it("支持确定性模拟退出 emitExit 与输出关闭 emitOutputClosed", async () => {
@@ -129,11 +130,11 @@ describe("FakeProcessDriver 原有行为测试", () => {
     );
 
     driver.emitExit(handle, { code: 137, signal: "SIGKILL" });
-    expect(exitCode).toBe(137);
-    expect(exitSignal).toBe("SIGKILL");
+    assert.strictEqual(exitCode, 137);
+    assert.strictEqual(exitSignal, "SIGKILL");
 
     driver.emitOutputClosed(handle, "drain-timeout");
-    expect(closeReason).toBe("drain-timeout");
+    assert.strictEqual(closeReason, "drain-timeout");
   });
 
   it("支持确定性模拟底层故障 emitFault", async () => {
@@ -158,7 +159,7 @@ describe("FakeProcessDriver 原有行为测试", () => {
 
     const testError = new Error("simulated driver crash");
     driver.emitFault(handle, testError);
-    expect(caughtFault).toBe(testError);
+    assert.strictEqual(caughtFault, testError);
   });
 
   it("支持记录写入、EOF 与前台作业中断", async () => {
@@ -182,10 +183,10 @@ describe("FakeProcessDriver 原有行为测试", () => {
     await driver.inputEOF(handle);
     await driver.interruptForeground(handle);
 
-    expect(driver.writes.length).toBe(2);
-    expect(driver.getWrittenStrings(handle)).toEqual(["line 1\n", "line 2\n"]);
-    expect(driver.hasInputEOF(handle)).toBe(true);
-    expect(driver.hasInterrupted(handle)).toBe(true);
+    assert.strictEqual(driver.writes.length, 2);
+    assert.deepStrictEqual(driver.getWrittenStrings(handle), ["line 1\n", "line 2\n"]);
+    assert.strictEqual(driver.hasInputEOF(handle), true);
+    assert.strictEqual(driver.hasInterrupted(handle), true);
   });
 
   it("支持记录调整终端尺寸与终止流程", async () => {
@@ -208,14 +209,14 @@ describe("FakeProcessDriver 原有行为测试", () => {
     await driver.terminate(handle, 500);
     await driver.dispose(handle);
 
-    expect(driver.resizeCalls.length).toBe(1);
-    expect(driver.resizeCalls[0].cols).toBe(120);
-    expect(driver.resizeCalls[0].rows).toBe(40);
+    assert.strictEqual(driver.resizeCalls.length, 1);
+    assert.strictEqual(driver.resizeCalls[0].cols, 120);
+    assert.strictEqual(driver.resizeCalls[0].rows, 40);
 
-    expect(driver.terminateCalls.length).toBe(1);
-    expect(driver.terminateCalls[0].graceMs).toBe(500);
+    assert.strictEqual(driver.terminateCalls.length, 1);
+    assert.strictEqual(driver.terminateCalls[0].graceMs, 500);
 
-    expect(driver.disposeCalls.length).toBe(1);
+    assert.strictEqual(driver.disposeCalls.length, 1);
   });
 
   it("支持故障注入 simulateSpawnFailure 与 simulateWriteFailure", async () => {
@@ -223,33 +224,33 @@ describe("FakeProcessDriver 原有行为测试", () => {
 
     // 注入 spawn 失败
     driver.simulateSpawnFailure(new Error("cannot fork process"));
-    await expect(
+    await assert.rejects(
       driver.spawn(
         { executable: "failing-bin", args: [], io: { mode: "pipe" } },
         { output() {}, exited() {}, outputClosed() {} }
       )
-    ).rejects.toThrow("cannot fork process");
+    , /cannot fork process/);
 
     // 随后一次正常恢复
     const handle = await driver.spawn(
       { executable: "ok-bin", args: [], io: { mode: "pipe" } },
       { output() {}, exited() {}, outputClosed() {} }
     );
-    expect(handle).toBeDefined();
+    assert.notStrictEqual(handle, undefined);
 
     // 注入 write 失败
     driver.simulateWriteFailure(new Error("broken pipe simulation"));
-    await expect(
+    await assert.rejects(
       driver.write(handle, new TextEncoder().encode("test"))
-    ).rejects.toThrow("broken pipe simulation");
+    , /broken pipe simulation/);
 
     // 注入 resize 失败
     driver.simulateResizeFailure(new Error("resize rejected"));
-    await expect(driver.resize(handle, 80, 24)).rejects.toThrow("resize rejected");
+    await assert.rejects(driver.resize(handle, 80, 24), /resize rejected/);
 
     // 注入 terminate 失败
     driver.simulateTerminateFailure(new Error("kill permission denied"));
-    await expect(driver.terminate(handle, 100)).rejects.toThrow("kill permission denied");
+    await assert.rejects(driver.terminate(handle, 100), /kill permission denied/);
   });
 
   it("支持 reset 重置全部状态与历史记录", async () => {
@@ -261,13 +262,13 @@ describe("FakeProcessDriver 原有行为测试", () => {
     );
     await driver.write(handle, new TextEncoder().encode("msg"));
 
-    expect(driver.spawnCalls.length).toBe(1);
-    expect(driver.writes.length).toBe(1);
+    assert.strictEqual(driver.spawnCalls.length, 1);
+    assert.strictEqual(driver.writes.length, 1);
 
     driver.reset();
 
-    expect(driver.spawnCalls.length).toBe(0);
-    expect(driver.writes.length).toBe(0);
-    expect(driver.getLastHandle()).toBeUndefined();
+    assert.strictEqual(driver.spawnCalls.length, 0);
+    assert.strictEqual(driver.writes.length, 0);
+    assert.strictEqual(driver.getLastHandle(), undefined);
   });
 });

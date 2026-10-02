@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,7 +12,7 @@ const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 let customHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -27,7 +29,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
   let customDataDir: string;
   let env: Record<string, string>;
 
-  beforeAll(() => {
+  before(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-project-"));
     customHome = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-home-"));
     customDataDir = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-data-"));
@@ -45,7 +47,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
     initProject(tempDir, { id: "reg.demo", name: "Regression Demo" });
   });
 
-  afterAll(async () => {
+  after(async () => {
     for (const dir of [tempDir, customHome, customDataDir]) {
       if (dir && existsSync(dir)) {
         try {
@@ -72,7 +74,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
         tempDir,
         env
       );
-      expect(setProc.exitCode).toBe(0);
+      assert.strictEqual(setProc.exitCode, 0);
 
       // Get from customDataDir -> exists
       const getCustomProc = runCli(
@@ -80,9 +82,9 @@ describe("CLI Review - Runtime & Project Regression", () => {
         tempDir,
         env
       );
-      expect(getCustomProc.exitCode).toBe(0);
+      assert.strictEqual(getCustomProc.exitCode, 0);
       const getCustomData = JSON.parse(getCustomProc.stdout.toString());
-      expect(getCustomData.value).toBe("custom_val");
+      assert.strictEqual(getCustomData.value, "custom_val");
 
       // Get from otherDataDir -> not found (exit code 1)
       const getOtherProc = runCli(
@@ -90,7 +92,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
         tempDir,
         env
       );
-      expect(getOtherProc.exitCode).toBe(1);
+      assert.strictEqual(getOtherProc.exitCode, 1);
     } finally {
       if (existsSync(otherDataDir)) {
         try {
@@ -107,7 +109,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
       tempDir,
       env
     );
-    expect(setGlobalProc.exitCode).toBe(0);
+    assert.strictEqual(setGlobalProc.exitCode, 0);
 
     // 2. 验证全局配置存在: ad config get SAMPLE_GREETING --global --json
     const getGlobalProc = runCli(
@@ -115,9 +117,9 @@ describe("CLI Review - Runtime & Project Regression", () => {
       tempDir,
       env
     );
-    expect(getGlobalProc.exitCode).toBe(0);
+    assert.strictEqual(getGlobalProc.exitCode, 0);
     const getGlobalData = JSON.parse(getGlobalProc.stdout.toString());
-    expect(getGlobalData.value).toBe("Nihao");
+    assert.strictEqual(getGlobalData.value, "Nihao");
 
     // 3. 执行 ad run，验证 ctx.config.get 回退到全局配置
     const runProc = runCli(
@@ -125,10 +127,10 @@ describe("CLI Review - Runtime & Project Regression", () => {
       tempDir,
       env
     );
-    expect(runProc.exitCode).toBe(0);
+    assert.strictEqual(runProc.exitCode, 0);
     const runRes = JSON.parse(runProc.stdout.toString());
-    expect(runRes.ok).toBe(true);
-    expect(runRes.data.message).toBe("Nihao, Beijing!");
+    assert.strictEqual(runRes.ok, true);
+    assert.strictEqual(runRes.data.message, "Nihao, Beijing!");
   });
 
   it("sets exit code 1 on ad config schema when required config is missing", () => {
@@ -145,10 +147,10 @@ describe("CLI Review - Runtime & Project Regression", () => {
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
     const schemaProc = runCli(["config", "schema", "--json"], tempDir);
-    expect(schemaProc.exitCode).toBe(1);
+    assert.strictEqual(schemaProc.exitCode, 1);
     const schemaData = JSON.parse(schemaProc.stdout.toString());
-    expect(schemaData.ok).toBe(false);
-    expect(schemaData.missingCount).toBe(1);
+    assert.strictEqual(schemaData.ok, false);
+    assert.strictEqual(schemaData.missingCount, 1);
   });
 
   it("scaffolds new actions and playbooks via action create and playbook create and updates actiondock.json", () => {
@@ -158,62 +160,62 @@ describe("CLI Review - Runtime & Project Regression", () => {
       ["action", "create", "calculator", "--desc", "Perform calculations", "--file", "calc.ts"],
       tempDir
     );
-    expect(newActionProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "actions", "calc.ts"))).toBe(true);
+    assert.strictEqual(newActionProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "calc.ts")), true);
     const actionContent = readFileSync(join(tempDir, "actions", "calc.ts"), "utf-8");
-    expect(actionContent).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
-    expect(actionContent).toContain('export type Input = ActionInput<"calculator">;');
-    expect(actionContent).toContain('export type Output = ActionOutput<"calculator">;');
-    expect(actionContent).not.toContain("export interface Input {");
-    expect(actionContent).not.toContain("export interface Output {");
+    assert.ok((actionContent).includes('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";'));
+    assert.ok((actionContent).includes('export type Input = ActionInput<"calculator">;'));
+    assert.ok((actionContent).includes('export type Output = ActionOutput<"calculator">;'));
+    assert.ok(!(actionContent).includes("export interface Input {"));
+    assert.ok(!(actionContent).includes("export interface Output {"));
 
     // Verify .actiondock/generated/actions.d.ts is automatically generated
     const generatedTypesPath = join(tempDir, ".actiondock", "generated", "actions.d.ts");
-    expect(existsSync(generatedTypesPath)).toBe(true);
+    assert.strictEqual(existsSync(generatedTypesPath), true);
     const generatedTypes = readFileSync(generatedTypesPath, "utf-8");
-    expect(generatedTypes).toContain("export namespace Actions");
-    expect(generatedTypes).toContain('"calculator": {');
+    assert.ok((generatedTypes).includes("export namespace Actions"));
+    assert.ok((generatedTypes).includes('"calculator": {'));
 
     // Test nested action relative path computation
     const nestedActionProc = runCli(
       ["action", "create", "nested-calc", "--file", "math/sub/calc.ts"],
       tempDir
     );
-    expect(nestedActionProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "actions", "math", "sub", "calc.ts"))).toBe(true);
+    assert.strictEqual(nestedActionProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "actions", "math", "sub", "calc.ts")), true);
     const nestedContent = readFileSync(join(tempDir, "actions", "math", "sub", "calc.ts"), "utf-8");
-    expect(nestedContent).toContain('import type { ActionInput, ActionOutput } from "../../../.actiondock/generated/actions";');
-    expect(nestedContent).toContain('export type Input = ActionInput<"nested-calc">;');
-    expect(nestedContent).toContain('export type Output = ActionOutput<"nested-calc">;');
+    assert.ok((nestedContent).includes('import type { ActionInput, ActionOutput } from "../../../.actiondock/generated/actions";'));
+    assert.ok((nestedContent).includes('export type Input = ActionInput<"nested-calc">;'));
+    assert.ok((nestedContent).includes('export type Output = ActionOutput<"nested-calc">;'));
 
     const manifestAfterAction = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(manifestAfterAction.actions.calculator).toBeDefined();
-    expect(manifestAfterAction.actions.calculator.description).toBe("Perform calculations");
-    expect(manifestAfterAction.actions.calculator.entry).toBe("actions/calc.ts");
-    expect(manifestAfterAction.actions["nested-calc"]).toBeDefined();
-    expect(manifestAfterAction.actions["nested-calc"].entry).toBe("actions/math/sub/calc.ts");
+    assert.notStrictEqual(manifestAfterAction.actions.calculator, undefined);
+    assert.strictEqual(manifestAfterAction.actions.calculator.description, "Perform calculations");
+    assert.strictEqual(manifestAfterAction.actions.calculator.entry, "actions/calc.ts");
+    assert.notStrictEqual(manifestAfterAction.actions["nested-calc"], undefined);
+    assert.strictEqual(manifestAfterAction.actions["nested-calc"].entry, "actions/math/sub/calc.ts");
 
     const newPlaybookProc = runCli(
       ["playbook", "create", "deploy-flow", "--desc", "Deployment flow SOP", "--actions", "calculator"],
       tempDir
     );
-    expect(newPlaybookProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "playbooks", "deploy-flow.md"))).toBe(true);
+    assert.strictEqual(newPlaybookProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(tempDir, "playbooks", "deploy-flow.md")), true);
 
     const manifestAfterPb = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
-    expect(manifestAfterPb.playbooks["deploy-flow"]).toBeDefined();
-    expect(manifestAfterPb.playbooks["deploy-flow"].description).toBe("Deployment flow SOP");
-    expect(manifestAfterPb.playbooks["deploy-flow"].actions).toEqual(["calculator"]);
+    assert.notStrictEqual(manifestAfterPb.playbooks["deploy-flow"], undefined);
+    assert.strictEqual(manifestAfterPb.playbooks["deploy-flow"].description, "Deployment flow SOP");
+    assert.deepStrictEqual(manifestAfterPb.playbooks["deploy-flow"].actions, ["calculator"]);
   });
 
   it("validates ad pack --dry-run", () => {
     initProject(tempDir, { id: "test.build-modes" });
 
     const packDryProc = runCli(["pack", "--dry-run", "--json"], tempDir);
-    expect(packDryProc.exitCode).toBe(0);
+    assert.strictEqual(packDryProc.exitCode, 0);
     const packDryRes = JSON.parse(packDryProc.stdout.toString());
-    expect(packDryRes.packageId).toBe("test.build-modes");
-    expect(packDryRes.tarballPath).toBeUndefined();
+    assert.strictEqual(packDryRes.packageId, "test.build-modes");
+    assert.strictEqual(packDryRes.tarballPath, undefined);
   });
 
   it("info does not auto install dependencies and does not import actions when manifest is absent", () => {
@@ -251,21 +253,21 @@ describe("CLI Review - Runtime & Project Regression", () => {
       );
 
       const infoProc = runCli(["info", "--json"], noManifestDir);
-      expect(infoProc.exitCode).toBe(0);
+      assert.strictEqual(infoProc.exitCode, 0);
       const info = JSON.parse(infoProc.stdout.toString());
-      expect(info.id).toBe("team.no-manifest");
-      expect(info.actions.length).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(info.id, "team.no-manifest");
+      assert.strictEqual(info.actions.length, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionListProc = runCli(["list", "--json"], noManifestDir);
-      expect(actionListProc.exitCode).toBe(0);
+      assert.strictEqual(actionListProc.exitCode, 0);
       const actionList = JSON.parse(actionListProc.stdout.toString());
-      expect(actionList.items.length).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionList.items.length, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const doctorProc = runCli(["doctor", "--json"], noManifestDir);
-      expect(doctorProc.exitCode).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(doctorProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       writeFileSync(
         join(noManifestDir, "actiondock.json"),
@@ -288,29 +290,29 @@ describe("CLI Review - Runtime & Project Regression", () => {
       );
 
       const infoWithManifestProc = runCli(["info", "--json"], noManifestDir);
-      expect(infoWithManifestProc.exitCode).toBe(0);
+      assert.strictEqual(infoWithManifestProc.exitCode, 0);
       const infoWithManifest = JSON.parse(infoWithManifestProc.stdout.toString());
-      expect(infoWithManifest.actions.length).toBe(1);
-      expect(infoWithManifest.actions[0].id).toBe("team.foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(infoWithManifest.actions.length, 1);
+      assert.strictEqual(infoWithManifest.actions[0].id, "team.foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionListWithManifestProc = runCli(["list", "--json"], noManifestDir);
-      expect(actionListWithManifestProc.exitCode).toBe(0);
+      assert.strictEqual(actionListWithManifestProc.exitCode, 0);
       const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
-      expect(actionListWithManifest.items.length).toBe(1);
-      expect(actionListWithManifest.items[0].id).toBe("team.foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionListWithManifest.items.length, 1);
+      assert.strictEqual(actionListWithManifest.items[0].id, "team.foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const actionShowProc = runCli(["describe", "team.foo", "--json"], noManifestDir);
-      expect(actionShowProc.exitCode).toBe(0);
+      assert.strictEqual(actionShowProc.exitCode, 0);
       const actionShow = JSON.parse(actionShowProc.stdout.toString());
-      expect(actionShow.id).toBe("team.foo");
-      expect(actionShow.description).toBe("Test action foo");
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(actionShow.id, "team.foo");
+      assert.strictEqual(actionShow.description, "Test action foo");
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
 
       const doctorWithManifestProc = runCli(["doctor", "--json"], noManifestDir);
-      expect(doctorWithManifestProc.exitCode).toBe(0);
-      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+      assert.strictEqual(doctorWithManifestProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(noManifestDir, "node_modules")), false);
     } finally {
       if (existsSync(noManifestDir)) {
         try {

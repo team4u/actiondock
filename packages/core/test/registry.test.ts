@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -141,26 +142,26 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   it("links, lists, and unlinks packages in global registry", async () => {
     // 1. Link pkg A
     const entryA = await linkPackage(pkgADir, fakeHome);
-    expect(entryA.id).toBe("team.pkg-a");
-    expect(entryA.path).toBe(pkgADir);
+    assert.strictEqual(entryA.id, "team.pkg-a");
+    assert.strictEqual(entryA.path, pkgADir);
 
     // 2. Link pkg B
     const entryB = await linkPackage(pkgBDir, fakeHome);
-    expect(entryB.id).toBe("team.pkg-b");
+    assert.strictEqual(entryB.id, "team.pkg-b");
 
     // 3. List
     const list = listLinkedPackages(fakeHome);
-    expect(list.length).toBe(2);
-    expect(list.map((p) => p.id)).toContain("team.pkg-a");
-    expect(list.map((p) => p.id)).toContain("team.pkg-b");
+    assert.strictEqual(list.length, 2);
+    assert.ok((list.map((p) => p.id)).includes("team.pkg-a"));
+    assert.ok((list.map((p) => p.id)).includes("team.pkg-b"));
 
     // 4. Unlink
     const unlinked = await unlinkPackage("team.pkg-a", fakeHome);
-    expect(unlinked?.id).toBe("team.pkg-a");
+    assert.strictEqual(unlinked?.id, "team.pkg-a");
 
     const afterList = listLinkedPackages(fakeHome);
-    expect(afterList.length).toBe(1);
-    expect(afterList[0].id).toBe("team.pkg-b");
+    assert.strictEqual(afterList.length, 1);
+    assert.strictEqual(afterList[0].id, "team.pkg-b");
   });
 
   it("resolves action from current project first", async () => {
@@ -172,8 +173,8 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
 
     // When running inside pkgADir, resolving common.action should resolve to pkg A
     const res = resolveAction("common.action", { graph, catalog, caller: "team.pkg-a" });
-    expect(res.package.id).toBe("team.pkg-a");
-    expect(graph.packages.get(res.package.id)?.root).toBe(pkgADir);
+    assert.strictEqual(res.package.id, "team.pkg-a");
+    assert.strictEqual(graph.packages.get(res.package.id)?.root, pkgADir);
   });
 
   it("resolves unique action from linked packages when outside of project", async () => {
@@ -184,8 +185,8 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     const catalog = new DefaultActionCatalog(graph);
 
     const res = resolveAction("unique.b", { graph, catalog });
-    expect(res.package.id).toBe("team.pkg-b");
-    expect(graph.packages.get(res.package.id)?.root).toBe(pkgBDir);
+    assert.strictEqual(res.package.id, "team.pkg-b");
+    assert.strictEqual(graph.packages.get(res.package.id)?.root, pkgBDir);
   });
 
   it("detects conflict and allows scoped package resolution", async () => {
@@ -197,16 +198,15 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     const catalog = new DefaultActionCatalog(graph);
 
     // Unscoped common.action should throw error because both A and B provide it
-    expect(() =>
-      resolveAction("common.action", { graph, catalog })
-    ).toThrow(/ambiguous/i);
+    assert.throws(() =>
+      resolveAction("common.action", { graph, catalog }), /ambiguous/i);
 
     // Scoped package specification should resolve cleanly
     const resA = resolveAction("team.pkg-a/common.action", { graph, catalog });
-    expect(resA.package.id).toBe("team.pkg-a");
+    assert.strictEqual(resA.package.id, "team.pkg-a");
 
     const resB = resolveAction("team.pkg-b/common.action", { graph, catalog });
-    expect(resB.package.id).toBe("team.pkg-b");
+    assert.strictEqual(resB.package.id, "team.pkg-b");
   });
 
   it("resolves playbook from current project and linked packages", async () => {
@@ -218,25 +218,24 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
 
     // 1. Inside pkgADir
     const localRes = resolvePlaybook("common-sop", { graph, caller: "team.pkg-a" });
-    expect(localRes.packageId).toBe("team.pkg-a");
-    expect(localRes.playbook.description).toBe("Common SOP in A");
+    assert.strictEqual(localRes.packageId, "team.pkg-a");
+    assert.strictEqual(localRes.playbook.description, "Common SOP in A");
 
     // 2. Outside project: unique playbook
     const outsideDiscovery = new PackageDiscovery({ customHome: fakeHome });
     const outsideGraph = new PackageGraphBuilder({ packages: outsideDiscovery.discoverSync() }).buildSync();
     const uniqueRes = resolvePlaybook("unique-b-sop", { graph: outsideGraph });
-    expect(uniqueRes.packageId).toBe("team.pkg-b");
-    expect(uniqueRes.playbook.id).toBe("unique-b-sop");
+    assert.strictEqual(uniqueRes.packageId, "team.pkg-b");
+    assert.strictEqual(uniqueRes.playbook.id, "unique-b-sop");
 
     // 3. Outside project: conflicting playbook throws
-    expect(() =>
-      resolvePlaybook("common-sop", { graph: outsideGraph })
-    ).toThrow("provided by multiple linked packages");
+    assert.throws(() =>
+      resolvePlaybook("common-sop", { graph: outsideGraph }), /provided by multiple linked packages/);
 
     // 4. Outside project: scoped playbook resolves cleanly
     const scopedRes = resolvePlaybook("team.pkg-a/common-sop", { graph: outsideGraph });
-    expect(scopedRes.packageId).toBe("team.pkg-a");
-    expect(scopedRes.playbook.id).toBe("common-sop");
+    assert.strictEqual(scopedRes.packageId, "team.pkg-a");
+    assert.strictEqual(scopedRes.playbook.id, "common-sop");
   });
 
   it("links workspace directory and auto-discovers subprojects", async () => {
@@ -250,24 +249,24 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
 
     // Link the workspace root (which does NOT have actiondock.json itself)
     const result = await linkPackage(wsDir, fakeHome);
-    expect(result.isWorkspace).toBe(true);
-    expect(result.entries.length).toBe(2);
-    expect(result.entries.map((e) => e.id)).toContain("team.sub-1");
-    expect(result.entries.map((e) => e.id)).toContain("team.sub-2");
+    assert.strictEqual(result.isWorkspace, true);
+    assert.strictEqual(result.entries.length, 2);
+    assert.ok((result.entries.map((e) => e.id)).includes("team.sub-1"));
+    assert.ok((result.entries.map((e) => e.id)).includes("team.sub-2"));
 
     // listLinkedPackages should list both
     const linked = listLinkedPackages(fakeHome);
-    expect(linked.map((p) => p.id)).toContain("team.sub-1");
-    expect(linked.map((p) => p.id)).toContain("team.sub-2");
+    assert.ok((linked.map((p) => p.id)).includes("team.sub-1"));
+    assert.ok((linked.map((p) => p.id)).includes("team.sub-2"));
 
     // Unlink workspace
     const unlinked = await unlinkPackage(wsDir, fakeHome);
-    expect(unlinked?.type).toBe("workspace");
-    expect(unlinked?.packagesCount).toBe(2);
+    assert.strictEqual(unlinked?.type, "workspace");
+    assert.strictEqual(unlinked?.packagesCount, 2);
 
     const afterUnlink = listLinkedPackages(fakeHome);
-    expect(afterUnlink.find((p) => p.id === "team.sub-1")).toBeUndefined();
-    expect(afterUnlink.find((p) => p.id === "team.sub-2")).toBeUndefined();
+    assert.strictEqual(afterUnlink.find((p) => p.id === "team.sub-1"), undefined);
+    assert.strictEqual(afterUnlink.find((p) => p.id === "team.sub-2"), undefined);
 
     rmSync(wsDir, { recursive: true, force: true });
   });
@@ -296,8 +295,8 @@ export default defineAction(async () => ({ ok: true }));
 
     // 2. Link workspace
     const res = await linkPackage(wsDir, fakeHome);
-    expect(res.isWorkspace).toBe(true);
-    expect(res.entries.length).toBe(1);
+    assert.strictEqual(res.isWorkspace, true);
+    assert.strictEqual(res.entries.length, 1);
 
     // 3. Add sub2 into workspace WITHOUT calling linkPackage again (simulating git pull / new package)
     const sub2 = join(wsDir, "tools", "sub2");
@@ -319,17 +318,17 @@ export default defineAction(async () => ({ fromDyn2: true }));
 
     // 4. listLinkedPackages should automatically include newly added sub2!
     const allLinked = listLinkedPackages(fakeHome);
-    expect(allLinked.map((p) => p.id)).toContain("team.dyn-1");
-    expect(allLinked.map((p) => p.id)).toContain("team.dyn-2");
+    assert.ok((allLinked.map((p) => p.id)).includes("team.dyn-1"));
+    assert.ok((allLinked.map((p) => p.id)).includes("team.dyn-2"));
 
     // 5. resolveAction should seamlessly resolve action from newly added sub2!
     const wsDiscovery = new PackageDiscovery({ customHome: fakeHome });
     const wsGraph = new PackageGraphBuilder({ packages: wsDiscovery.discoverSync() }).buildSync();
     const wsCatalog = new DefaultActionCatalog(wsGraph);
     const resolved = resolveAction("dyn.action2", { graph: wsGraph, catalog: wsCatalog });
-    expect(resolved.package.id).toBe("team.dyn-2");
-    expect(wsGraph.packages.get(resolved.package.id)?.root).toBe(sub2);
-    expect(resolved.ref.actionId).toBe("dyn.action2");
+    assert.strictEqual(resolved.package.id, "team.dyn-2");
+    assert.strictEqual(wsGraph.packages.get(resolved.package.id)?.root, sub2);
+    assert.strictEqual(resolved.ref.actionId, "dyn.action2");
 
     rmSync(wsDir, { recursive: true, force: true });
   });
@@ -350,25 +349,25 @@ export default defineAction(async () => ({ fromDyn2: true }));
       await linkPackage(wsDirB, fakeHome);
 
       const beforeList = listLinkedPackages(fakeHome);
-      expect(beforeList.map((p) => p.id)).toContain("team.sibling-a");
-      expect(beforeList.map((p) => p.id)).toContain("team.sibling-b");
+      assert.ok((beforeList.map((p) => p.id)).includes("team.sibling-a"));
+      assert.ok((beforeList.map((p) => p.id)).includes("team.sibling-b"));
 
       // 仅解除 wsDirA：wsDirB 与其子包必须完整保留
       const unlinked = await unlinkPackage(wsDirA, fakeHome);
-      expect(unlinked?.type).toBe("workspace");
-      expect(unlinked?.packagesCount).toBe(1);
+      assert.strictEqual(unlinked?.type, "workspace");
+      assert.strictEqual(unlinked?.packagesCount, 1);
 
       const afterList = listLinkedPackages(fakeHome);
-      expect(afterList.find((p) => p.id === "team.sibling-a")).toBeUndefined();
-      expect(afterList.find((p) => p.id === "team.sibling-b")).toBeDefined();
+      assert.strictEqual(afterList.find((p) => p.id === "team.sibling-a"), undefined);
+      assert.notStrictEqual(afterList.find((p) => p.id === "team.sibling-b"), undefined);
 
       // 通过目录别名解除时同样不得误删兄弟目录下的包记录
       await linkPackage(wsDirA, fakeHome);
       const aliasUnlinked = await unlinkPackage(basename(wsDirB), fakeHome);
-      expect(aliasUnlinked?.type).toBe("workspace");
+      assert.strictEqual(aliasUnlinked?.type, "workspace");
       const finalList = listLinkedPackages(fakeHome);
-      expect(finalList.find((p) => p.id === "team.sibling-a")).toBeDefined();
-      expect(finalList.find((p) => p.id === "team.sibling-b")).toBeUndefined();
+      assert.notStrictEqual(finalList.find((p) => p.id === "team.sibling-a"), undefined);
+      assert.strictEqual(finalList.find((p) => p.id === "team.sibling-b"), undefined);
     } finally {
       rmSync(wsDirA, { recursive: true, force: true });
       rmSync(wsDirB, { recursive: true, force: true });
@@ -389,20 +388,20 @@ export default defineAction(async () => ({ fromDyn2: true }));
 
     // 3. getRegistryStatus should detect 1 active and 1 stale
     const statusBefore = getRegistryStatus(fakeHome);
-    expect(statusBefore.staleCount).toBe(1);
-    expect(statusBefore.packages.some((p: any) => p.id === "team.pkg-a" && p.status === "active")).toBe(true);
-    expect(statusBefore.packages.some((p: any) => p.id === "team.will-delete" && p.status === "stale")).toBe(true);
+    assert.strictEqual(statusBefore.staleCount, 1);
+    assert.strictEqual(statusBefore.packages.some((p: any) => p.id === "team.pkg-a" && p.status === "active"), true);
+    assert.strictEqual(statusBefore.packages.some((p: any) => p.id === "team.will-delete" && p.status === "stale"), true);
 
     // 4. pruneRegistry should remove the stale entry
     const pruneRes = await pruneRegistry(fakeHome);
-    expect(pruneRes.prunedPackages.length).toBe(1);
-    expect(pruneRes.prunedPackages[0].id).toBe("team.will-delete");
+    assert.strictEqual(pruneRes.prunedPackages.length, 1);
+    assert.strictEqual(pruneRes.prunedPackages[0].id, "team.will-delete");
 
     // 5. getRegistryStatus after prune should have 0 stale
     const statusAfter = getRegistryStatus(fakeHome);
-    expect(statusAfter.staleCount).toBe(0);
-    expect(statusAfter.packages.length).toBe(1);
-    expect(statusAfter.packages[0].id).toBe("team.pkg-a");
+    assert.strictEqual(statusAfter.staleCount, 0);
+    assert.strictEqual(statusAfter.packages.length, 1);
+    assert.strictEqual(statusAfter.packages[0].id, "team.pkg-a");
   });
 
   it("resolves scoped package IDs, package root, and playbooks (@scope/pkg)", async () => {
@@ -447,7 +446,7 @@ export default defineAction({
 
       // 1. resolvePackageRoot should resolve @team/tools without being treated as an invalid explicit file path
       const root = resolvePackageRoot("@team/tools", fakeHome, fakeHome);
-      expect(root).toBe(scopedDir);
+      assert.strictEqual(root, scopedDir);
 
       const scopedDiscovery = new PackageDiscovery({ customHome: fakeHome });
       const scopedGraph = new PackageGraphBuilder({ packages: scopedDiscovery.discoverSync() }).buildSync();
@@ -455,16 +454,16 @@ export default defineAction({
 
       // 2. resolvePlaybook should resolve @team/tools/deploy correctly using lastIndexOf
       const pbRes = resolvePlaybook("@team/tools/deploy", { graph: scopedGraph });
-      expect(pbRes.packageId).toBe("@team/tools");
-      expect(pbRes.playbookId).toBe("deploy");
-      expect(pbRes.playbook.description).toBe("Scoped Deploy Playbook");
-      expect(pbRes.projectRoot).toBe(scopedDir);
+      assert.strictEqual(pbRes.packageId, "@team/tools");
+      assert.strictEqual(pbRes.playbookId, "deploy");
+      assert.strictEqual(pbRes.playbook.description, "Scoped Deploy Playbook");
+      assert.strictEqual(pbRes.projectRoot, scopedDir);
 
       // 3. resolveAction should resolve @team/tools/greet
       const actRes = resolveAction("@team/tools/greet", { graph: scopedGraph, catalog: scopedCatalog });
-      expect(actRes.package.id).toBe("@team/tools");
-      expect(actRes.ref.actionId).toBe("greet");
-      expect(scopedGraph.packages.get(actRes.package.id)?.root).toBe(scopedDir);
+      assert.strictEqual(actRes.package.id, "@team/tools");
+      assert.strictEqual(actRes.ref.actionId, "greet");
+      assert.strictEqual(scopedGraph.packages.get(actRes.package.id)?.root, scopedDir);
     } finally {
       rmSync(scopedDir, { recursive: true, force: true });
     }
@@ -537,7 +536,7 @@ export default defineAction({
 
       // When executing inside currentDir:
       // 1. resolvePackageRoot should return currentDir, NOT oldDir
-      expect(resolvePackageRoot("team.shared", currentDir, fakeHome)).toBe(currentDir);
+      assert.strictEqual(resolvePackageRoot("team.shared", currentDir, fakeHome), currentDir);
 
       const prioDiscovery = new PackageDiscovery({ currentProjectRoot: currentDir, customHome: fakeHome });
       const prioGraph = new PackageGraphBuilder({ packages: prioDiscovery.discoverSync(), root: currentDir }).buildSync();
@@ -545,12 +544,12 @@ export default defineAction({
 
       // 2. resolveAction should resolve from currentDir
       const syncAct = resolveAction("team.shared/echo", { graph: prioGraph, catalog: prioCatalog });
-      expect(prioGraph.packages.get(syncAct.package.id)?.root).toBe(currentDir);
+      assert.strictEqual(prioGraph.packages.get(syncAct.package.id)?.root, currentDir);
 
       // 3. resolvePlaybook should resolve from currentDir
       const pbRes = resolvePlaybook("team.shared/sop", { graph: prioGraph });
-      expect(pbRes.projectRoot).toBe(currentDir);
-      expect(pbRes.playbook.description).toBe("Current SOP");
+      assert.strictEqual(pbRes.projectRoot, currentDir);
+      assert.strictEqual(pbRes.playbook.description, "Current SOP");
     } finally {
       rmSync(oldDir, { recursive: true, force: true });
       rmSync(currentDir, { recursive: true, force: true });
@@ -564,15 +563,15 @@ export default defineAction({
 
     // 2. List packages
     const list = listLinkedPackages(fakeHome);
-    expect(list.length).toBe(2);
-    expect(list.some((l) => l.path === pkgADir)).toBe(true);
-    expect(list.some((l) => l.path === pkgBDir)).toBe(true);
+    assert.strictEqual(list.length, 2);
+    assert.strictEqual(list.some((l) => l.path === pkgADir), true);
+    assert.strictEqual(list.some((l) => l.path === pkgBDir), true);
 
     // 3. Unlink package
     await unlinkPackage("team.pkg-a", fakeHome);
     const updatedList = listLinkedPackages(fakeHome);
-    expect(updatedList.length).toBe(1);
-    expect(updatedList[0].path).toBe(pkgBDir);
+    assert.strictEqual(updatedList.length, 1);
+    assert.strictEqual(updatedList[0].path, pkgBDir);
 
     // 4. Test raw migration when registry file contains ONLY schemaVersion 1 links
     const filePath = getRegistryFilePath(fakeHome);
@@ -586,8 +585,8 @@ export default defineAction({
     );
 
     const migrated = loadRegistry(fakeHome);
-    expect(migrated.packages["team.pkg-a"]).toBeDefined();
-    expect(migrated.packages["team.pkg-a"].path).toBe(pkgADir);
+    assert.notStrictEqual(migrated.packages["team.pkg-a"], undefined);
+    assert.strictEqual(migrated.packages["team.pkg-a"].path, pkgADir);
   });
 });
 

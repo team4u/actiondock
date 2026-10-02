@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,13 +28,13 @@ describe("MCP STDIO service ownership", () => {
     }
   });
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
   });
 
-  it("does not close an externally injected service when stdin ends", async () => {
+  it("does not close an externally injected service when stdin ends", { timeout: 10000 }, async () => {
     let closeCalls = 0;
     const fakeService: any = {
       info: async () => [{ id: "fake-pkg", name: "Fake", version: "1.0.0" }],
@@ -56,10 +57,10 @@ describe("MCP STDIO service ownership", () => {
     // cleanup 是异步链路，等待微任务与事件循环排空
     await new Promise((r) => setTimeout(r, 200));
 
-    expect(closeCalls).toBe(0);
-  }, 10000);
+    assert.strictEqual(closeCalls, 0);
+  });
 
-  it("closes a self-owned service created from actions after stdin ends", async () => {
+  it("closes a self-owned service created from actions after stdin ends", { timeout: 10000 }, async () => {
     const stderrChunks: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
     (process.stderr as any).write = (chunk: any, ...rest: any[]) => {
@@ -79,7 +80,7 @@ describe("MCP STDIO service ownership", () => {
 
     const { resolveService } = await import("../src/adapter");
     const owned = await resolveService({ actions: new Map([["self.owned", echo]]) });
-    expect(owned.ownsService).toBe(true);
+    assert.strictEqual(owned.ownsService, true);
     // 自建实例随契约关闭，不残留句柄
     await owned.service.close();
 
@@ -89,11 +90,11 @@ describe("MCP STDIO service ownership", () => {
 
     const fullStderr = stderrChunks.join("");
     // 自建 service 的 close 链路正常收敛：无清理失败诊断行
-    expect(fullStderr).not.toContain("Cleanup Failed");
-    expect(fullStderr).not.toContain("Cleanup Error");
-  }, 10000);
+    assert.ok(!(fullStderr).includes("Cleanup Failed"));
+    assert.ok(!(fullStderr).includes("Cleanup Error"));
+  });
 
-  it("keeps externally injected service usable after stdio cleanup path", async () => {
+  it("keeps externally injected service usable after stdio cleanup path", { timeout: 10000 }, async () => {
     // 端到端契约：注入的 service 在 cleanup 后仍可继续调用（未被 SERVICE_CLOSED 误杀）
     const calls: string[] = [];
     const fakeService: any = {
@@ -123,11 +124,11 @@ describe("MCP STDIO service ownership", () => {
     process.stdin.emit("end");
     await new Promise((r) => setTimeout(r, 200));
 
-    expect(calls).not.toContain("close");
+    assert.ok(!(calls).includes("close"));
     // service 仍可响应调用（未被关闭）
     await fakeService.discovery.listActions();
-    expect(calls).toContain("listActions");
-  }, 10000);
+    assert.ok((calls).includes("listActions"));
+  });
 });
 
 describe("MCP adapter tool description anchoring", () => {
@@ -141,7 +142,7 @@ describe("MCP adapter tool description anchoring", () => {
     }
   });
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
@@ -194,16 +195,16 @@ describe("MCP adapter tool description anchoring", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(toolsList).toBeDefined();
+    assert.notStrictEqual(toolsList, undefined);
     // 单包场景：描述不得带 [full-id] 误导性前缀
     for (const tool of toolsList) {
-      expect(tool.description.startsWith("[")).toBe(false);
+      assert.strictEqual(tool.description.startsWith("["), false);
     }
 
     await server.close();
   });
 
-  it("writes a one-time degradation warning when cancel signal shape is missing", async () => {
+  it("writes a one-time degradation warning when cancel signal shape is missing", { timeout: 10000 }, async () => {
     const echo = defineAction({
       id: "cancel.probe",
       description: "Cancel probe",
@@ -254,9 +255,9 @@ describe("MCP adapter tool description anchoring", () => {
     (process.stderr as any).write = origWrite;
 
     // 工具仍可正常执行（降级不阻断执行）
-    expect(callResult).toBeDefined();
-    expect(callResult.isError).toBeFalsy();
+    assert.notStrictEqual(callResult, undefined);
+    assert.ok(!(callResult.isError));
 
     await server.close();
-  }, 10000);
+  });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import { DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -28,16 +29,16 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
     });
 
     const res = await runner.execute("test.reject", { some: "data" });
-    expect(res.ok).toBe(false);
-    expect(executed).toBe(false);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(executed, false);
     if (!res.ok) {
-      expect(res.error.code).toBe("INPUT_VALIDATION_FAILED");
+      assert.strictEqual(res.error.code, "INPUT_VALIDATION_FAILED");
     }
 
     const runs = storage.listRuns();
-    expect(runs.length).toBe(1);
-    expect(runs[0].status).toBe("failed");
-    expect(runs[0].error?.code).toBe("INPUT_VALIDATION_FAILED");
+    assert.strictEqual(runs.length, 1);
+    assert.strictEqual(runs[0].status, "failed");
+    assert.strictEqual(runs[0].error?.code, "INPUT_VALIDATION_FAILED");
   });
 
   it("outputSchema: false 拦截所有输出并返回 OUTPUT_VALIDATION_FAILED", async () => {
@@ -62,16 +63,16 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
     });
 
     const res = await runner.execute("test.out-reject", {});
-    expect(res.ok).toBe(false);
-    expect(executed).toBe(true);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(executed, true);
     if (!res.ok) {
-      expect(res.error.code).toBe("OUTPUT_VALIDATION_FAILED");
+      assert.strictEqual(res.error.code, "OUTPUT_VALIDATION_FAILED");
     }
 
     const runs = storage.listRuns();
-    expect(runs.length).toBe(1);
-    expect(runs[0].status).toBe("failed");
-    expect(runs[0].error?.code).toBe("OUTPUT_VALIDATION_FAILED");
+    assert.strictEqual(runs.length, 1);
+    assert.strictEqual(runs[0].status, "failed");
+    assert.strictEqual(runs[0].error?.code, "OUTPUT_VALIDATION_FAILED");
   });
 
   it("非 Canonical JsonValue 输出（Date、Map、Set 等）返回 OUTPUT_NOT_JSON", async () => {
@@ -134,9 +135,9 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
 
     for (const id of ["test.date", "test.map", "test.set", "test.custom", "test.undef", "test.sparse"]) {
       const res = await runner.execute(id, {});
-      expect(res.ok).toBe(false);
+      assert.strictEqual(res.ok, false);
       if (!res.ok) {
-        expect(res.error.code).toBe("OUTPUT_NOT_JSON");
+        assert.strictEqual(res.error.code, "OUTPUT_NOT_JSON");
       }
     }
   });
@@ -171,18 +172,18 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
     for (const badInput of forbiddenInputs) {
       executed = false;
       const res = await runner.execute("test.policy", badInput);
-      expect(res.ok).toBe(false);
-      expect(executed).toBe(false);
+      assert.strictEqual(res.ok, false);
+      assert.strictEqual(executed, false);
       if (!res.ok) {
-        expect(res.error.code).toBe("INPUT_VALIDATION_FAILED");
-        expect(Array.isArray(res.error.details)).toBe(true);
+        assert.strictEqual(res.error.code, "INPUT_VALIDATION_FAILED");
+        assert.strictEqual(Array.isArray(res.error.details), true);
       }
 
       const runs = storage.listRuns();
       const latestRun = runs[0];
-      expect(latestRun.status).toBe("failed");
-      expect(latestRun.error?.code).toBe("INPUT_VALIDATION_FAILED");
-      expect(latestRun.input).toBeUndefined();
+      assert.strictEqual(latestRun.status, "failed");
+      assert.strictEqual(latestRun.error?.code, "INPUT_VALIDATION_FAILED");
+      assert.strictEqual(latestRun.input, undefined);
     }
   });
 });
@@ -228,7 +229,7 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
     });
 
     // 校验全局 SIGINT 监听器数量无增长
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
 
     // 取消 A，保留 B
     controllerA.abort(new Error("Cancelled A"));
@@ -236,13 +237,13 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
     const [codeA, codeB] = await Promise.all([callA, callB]);
 
     // A 被外部取消，退出码为 1 (FAILURE)，绝不能是 130
-    expect(codeA).toBe(ExitCode.FAILURE);
+    assert.strictEqual(codeA, ExitCode.FAILURE);
     // B 正常运行完成，退出码为 0 (SUCCESS)
-    expect(codeB).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(codeB, ExitCode.SUCCESS);
 
     // 校验全局 process.exitCode 未被可复用 API 写入/污染
-    expect(process.exitCode).toBe(origExitCode);
-    expect(process.listenerCount("SIGINT")).toBe(initialListeners);
+    assert.strictEqual(process.exitCode, origExitCode);
+    assert.strictEqual(process.listenerCount("SIGINT"), initialListeners);
   });
 
   it("外部 abort 与 SIGINT 取消的区分断言", async () => {
@@ -276,7 +277,7 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
     });
     sigintController.abort(new Error("Interrupted by SIGINT"));
     const sigintCode = await sigintPromise;
-    expect(sigintCode).toBe(ExitCode.SIGINT);
+    assert.strictEqual(sigintCode, ExitCode.SIGINT);
 
     // 2. cancellationSource === "external"
     const externalController = new AbortController();
@@ -286,7 +287,7 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
     });
     externalController.abort(new Error("External cancel"));
     const externalCode = await externalPromise;
-    expect(externalCode).toBe(ExitCode.FAILURE);
+    assert.strictEqual(externalCode, ExitCode.FAILURE);
 
     // 3. control.signal.aborted 预设取消状态且 cancellationSource 为 external
     const preAbortedController = new AbortController();
@@ -295,7 +296,7 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
       signal: preAbortedController.signal,
       cancellationSource: "external",
     });
-    expect(preCode).toBe(ExitCode.FAILURE);
+    assert.strictEqual(preCode, ExitCode.FAILURE);
 
     // 4. control.signal.aborted 预设取消状态且 cancellationSource 为 sigint
     const preSigintController = new AbortController();
@@ -304,6 +305,6 @@ describe("Phase 8: 操作系统信号所有权与独立分发器", () => {
       signal: preSigintController.signal,
       cancellationSource: "sigint",
     });
-    expect(preSigCode).toBe(ExitCode.SIGINT);
+    assert.strictEqual(preSigCode, ExitCode.SIGINT);
   });
 });

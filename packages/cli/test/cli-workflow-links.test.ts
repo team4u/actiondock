@@ -1,5 +1,7 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
-setDefaultTimeout(120000);
+import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
+import assert from "node:assert/strict";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
+
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -33,7 +35,7 @@ function flushDeferredCleanup(): void {
 let tempHome: string | undefined;
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return runCommandSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
@@ -50,11 +52,11 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
   let tempDir: string;
   let caseIndex = 0;
 
-  beforeAll(() => {
+  before(() => {
     suiteBaseDir = mkdtempSync(join(tmpdir(), "actiondock-cli-links-suite-"));
   });
 
-  afterAll(() => {
+  after(() => {
     safeCleanDir(suiteBaseDir);
     flushDeferredCleanup();
   });
@@ -83,15 +85,15 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
   it("supports common CLI options before and after subcommands", () => {
     // Before subcommand: ad --json list
     const preJson = runCli(["--json", "list"], tempDir);
-    expect(preJson.exitCode).toBe(0);
+    assert.strictEqual(preJson.exitCode, 0);
     const preJsonList = JSON.parse(preJson.stdout.toString());
-    expect(Array.isArray(preJsonList.items)).toBe(true);
+    assert.strictEqual(Array.isArray(preJsonList.items), true);
 
     // After subcommand: ad list --json
     const postJson = runCli(["list", "--json"], tempDir);
-    expect(postJson.exitCode).toBe(0);
+    assert.strictEqual(postJson.exitCode, 0);
     const postJsonList = JSON.parse(postJson.stdout.toString());
-    expect(Array.isArray(postJsonList.items)).toBe(true);
+    assert.strictEqual(Array.isArray(postJsonList.items), true);
   });
 
   it("links package and discovers/executes actions and playbooks from outside directory", () => {
@@ -99,101 +101,101 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
 
     // 11. link package and execute from outside directory
     const linkProc = runCli(["link"], tempDir);
-    expect(linkProc.exitCode).toBe(0);
-    expect(linkProc.stdout.toString()).toContain("[OK] Linked package");
+    assert.strictEqual(linkProc.exitCode, 0);
+    assert.ok((linkProc.stdout.toString()).includes("[OK] Linked package"));
 
     // Info from outside directory (summary list)
     const outsideInfoList = runCli(["info", "--json"], tmpdir());
-    expect(outsideInfoList.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoList.exitCode, 0);
     const outsideInfoListData = JSON.parse(outsideInfoList.stdout.toString());
-    expect(outsideInfoListData.linkedPackages).toBeDefined();
+    assert.notStrictEqual(outsideInfoListData.linkedPackages, undefined);
     const pkgInInfo = outsideInfoListData.linkedPackages.find((p: any) => p.id === "team.github-ops");
-    expect(pkgInInfo).toBeDefined();
-    expect(pkgInInfo.actionsCount).toBeGreaterThan(0);
+    assert.notStrictEqual(pkgInInfo, undefined);
+    assert.ok((pkgInInfo.actionsCount) > 0);
 
     // Info for specific package from outside directory (exact match)
     const outsideInfoPkg = runCli(["info", "team.github-ops", "--json"], tmpdir());
-    expect(outsideInfoPkg.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoPkg.exitCode, 0);
     const outsideInfoPkgData = JSON.parse(outsideInfoPkg.stdout.toString());
-    expect(outsideInfoPkgData.id).toBe("team.github-ops");
+    assert.strictEqual(outsideInfoPkgData.id, "team.github-ops");
 
     // Info with fuzzy matching (multi-match pattern returns filtered list)
     const outsideInfoFuzzy = runCli(["info", "github", "--json"], tmpdir());
-    expect(outsideInfoFuzzy.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoFuzzy.exitCode, 0);
     const outsideInfoFuzzyData = JSON.parse(outsideInfoFuzzy.stdout.toString());
     if (outsideInfoFuzzyData.linkedPackages) {
-      expect(outsideInfoFuzzyData.linkedPackages.some((p: any) => p.id === "team.github-ops")).toBe(true);
+      assert.strictEqual(outsideInfoFuzzyData.linkedPackages.some((p: any) => p.id === "team.github-ops"), true);
     } else {
-      expect(outsideInfoFuzzyData.id).toBe("team.github-ops");
+      assert.strictEqual(outsideInfoFuzzyData.id, "team.github-ops");
     }
 
     // Info with unique fuzzy matching pattern (returns single package detail)
     const outsideInfoUnique = runCli(["info", "github-ops", "--json"], tmpdir());
-    expect(outsideInfoUnique.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoUnique.exitCode, 0);
     const outsideInfoUniqueData = JSON.parse(outsideInfoUnique.stdout.toString());
-    expect(outsideInfoUniqueData.id).toBe("team.github-ops");
+    assert.strictEqual(outsideInfoUniqueData.id, "team.github-ops");
 
     // Info with explicit intent flag (--intent)
     const outsideInfoIntent = runCli(["info", "-i", "github-ops", "--json"], tmpdir());
-    expect(outsideInfoIntent.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoIntent.exitCode, 0);
     const outsideInfoIntentData = JSON.parse(outsideInfoIntent.stdout.toString());
-    expect(outsideInfoIntentData.linkedPackages).toBeDefined();
-    expect(outsideInfoIntentData.linkedPackages.some((p: any) => p.id === "team.github-ops")).toBe(true);
-    expect(outsideInfoIntentData.matchedCount).toBe(1);
+    assert.notStrictEqual(outsideInfoIntentData.linkedPackages, undefined);
+    assert.strictEqual(outsideInfoIntentData.linkedPackages.some((p: any) => p.id === "team.github-ops"), true);
+    assert.strictEqual(outsideInfoIntentData.matchedCount, 1);
 
     // Info with unmatched intent + fallback (returns linked packages with isFallback)
     const outsideInfoFallback = runCli(["info", "nonexistent-keyword-xyz", "--fallback", "--json"], tmpdir());
-    expect(outsideInfoFallback.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoFallback.exitCode, 0);
     const outsideInfoFallbackData = JSON.parse(outsideInfoFallback.stdout.toString());
-    expect(outsideInfoFallbackData.linkedPackages).toBeDefined();
-    expect(outsideInfoFallbackData.isFallback).toBe(true);
+    assert.notStrictEqual(outsideInfoFallbackData.linkedPackages, undefined);
+    assert.strictEqual(outsideInfoFallbackData.isFallback, true);
 
     // Info with unmatched intent + --no-fallback (returns empty list with exit code 0)
     const outsideInfoNoFallback = runCli(["info", "nonexistent-keyword-xyz", "--no-fallback", "--json"], tmpdir());
-    expect(outsideInfoNoFallback.exitCode).toBe(0);
+    assert.strictEqual(outsideInfoNoFallback.exitCode, 0);
     const outsideInfoNoFallbackData = JSON.parse(outsideInfoNoFallback.stdout.toString());
-    expect(outsideInfoNoFallbackData.linkedPackages).toBeDefined();
-    expect(outsideInfoNoFallbackData.linkedPackages.length).toBe(0);
+    assert.notStrictEqual(outsideInfoNoFallbackData.linkedPackages, undefined);
+    assert.strictEqual(outsideInfoNoFallbackData.linkedPackages.length, 0);
 
     // List actions and playbooks from outside directory
     const outsidePbList = runCli(["playbook", "list", "--json"], tmpdir());
-    expect(outsidePbList.exitCode).toBe(0);
+    assert.strictEqual(outsidePbList.exitCode, 0);
     const outsidePbListData = JSON.parse(outsidePbList.stdout.toString());
     const pkgInList = outsidePbListData.packages.find((p: any) => p.packageId === "team.github-ops");
-    expect(pkgInList).toBeDefined();
-    expect(pkgInList.playbooks.length).toBe(1);
-    expect(pkgInList.playbooks[0].id).toBe("greet-user");
+    assert.notStrictEqual(pkgInList, undefined);
+    assert.strictEqual(pkgInList.playbooks.length, 1);
+    assert.strictEqual(pkgInList.playbooks[0].id, "greet-user");
 
     // Show playbook from outside directory
     const outsidePbShow = runCli(["playbook", "show", "greet-user", "--json"], tmpdir());
-    expect(outsidePbShow.exitCode).toBe(0);
+    assert.strictEqual(outsidePbShow.exitCode, 0);
     const outsidePbShowData = JSON.parse(outsidePbShow.stdout.toString());
-    expect(outsidePbShowData.id).toBe("greet-user");
-    expect(outsidePbShowData.packageId).toBe("team.github-ops");
+    assert.strictEqual(outsidePbShowData.id, "greet-user");
+    assert.strictEqual(outsidePbShowData.packageId, "team.github-ops");
 
     // Validate playbooks from outside directory
     const outsidePbVal = runCli(["playbook", "validate", "--json"], tmpdir());
-    expect(outsidePbVal.exitCode).toBe(0);
+    assert.strictEqual(outsidePbVal.exitCode, 0);
 
     // Runs list from outside directory
     const outsideRunsList = runCli(["runs", "list", "--json"], tmpdir());
-    expect(outsideRunsList.exitCode).toBe(0);
+    assert.strictEqual(outsideRunsList.exitCode, 0);
 
     // State list from outside directory
     const outsideStateList = runCli(["state", "list", "--json"], tmpdir());
-    expect(outsideStateList.exitCode).toBe(0);
+    assert.strictEqual(outsideStateList.exitCode, 0);
 
     // State get with package prefix from outside directory
     runCli(["state", "set", "user:session", "active"], tempDir);
     const outsideStateGet = runCli(["state", "get", "user:session", "-P", "team.github-ops", "--json"], tmpdir());
-    expect(outsideStateGet.exitCode).toBe(0);
+    assert.strictEqual(outsideStateGet.exitCode, 0);
 
     // Build with -P from outside directory
     const outsideBuildOut = mkdtempSync(join(tmpdir(), "actiondock-dist-outside-bin-"));
     try {
       const outsideBuild = runCli(["build", "-P", "team.github-ops", "-o", outsideBuildOut], tmpdir());
-      expect(outsideBuild.exitCode).toBe(0);
-      expect(existsSync(join(outsideBuildOut, "entry.mjs"))).toBe(true);
+      assert.strictEqual(outsideBuild.exitCode, 0);
+      assert.strictEqual(existsSync(join(outsideBuildOut, "entry.mjs")), true);
     } finally {
       safeCleanDir(outsideBuildOut);
     }
@@ -202,8 +204,8 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     const outsideExportDir = mkdtempSync(join(tmpdir(), "actiondock-dist-outside-skill-"));
     try {
       const outsideExport = runCli(["export", "skill", "-P", "team.github-ops", "-o", outsideExportDir], tmpdir());
-      expect(outsideExport.exitCode).toBe(0);
-      expect(existsSync(join(outsideExportDir, "SKILL.md"))).toBe(true);
+      assert.strictEqual(outsideExport.exitCode, 0);
+      assert.strictEqual(existsSync(join(outsideExportDir, "SKILL.md")), true);
     } finally {
       safeCleanDir(outsideExportDir);
     }
@@ -213,10 +215,10 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
       ["run", "sample.greet", "--input", '{"name": "Globetrotter"}', "--json"],
       tmpdir()
     );
-    expect(outsideRun.exitCode).toBe(0);
+    assert.strictEqual(outsideRun.exitCode, 0);
     const outsideRes = JSON.parse(outsideRun.stdout.toString());
-    expect(outsideRes.ok).toBe(true);
-    expect(outsideRes.data.message).toBe("Howdy, Globetrotter!");
+    assert.strictEqual(outsideRes.ok, true);
+    assert.strictEqual(outsideRes.data.message, "Howdy, Globetrotter!");
 
     // 12. Validate cross-package action in playbook
     const pkgBDir = mkdtempSync(join(tmpdir(), "actiondock-test-pkgb-"));
@@ -239,18 +241,18 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
         pkgBDir
       );
       const crossVal = runCli(["playbook", "validate", "cross-playbook", "--json"], pkgBDir);
-      expect(crossVal.exitCode).toBe(0);
+      assert.strictEqual(crossVal.exitCode, 0);
       const crossValData = JSON.parse(crossVal.stdout.toString());
-      expect(crossValData.valid).toBe(true);
-      expect(crossValData.results[0].warnings.length).toBe(0);
+      assert.strictEqual(crossValData.valid, true);
+      assert.strictEqual(crossValData.results[0].warnings.length, 0);
     } finally {
       safeCleanDir(pkgBDir);
     }
 
     // 13. unlink
     const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
-    expect(unlinkProc.exitCode).toBe(0);
-    expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
+    assert.strictEqual(unlinkProc.exitCode, 0);
+    assert.ok((unlinkProc.stdout.toString()).includes("[OK] Unlinked package"));
   });
 
   it("supports linked package discovery when ~/.actiondock is a symlink", () => {
@@ -269,19 +271,19 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
 
     // 3. Link the package under this symlink home
     const linkProc = runCli(["link"], tempDir, customEnv);
-    expect(linkProc.exitCode).toBe(0);
+    assert.strictEqual(linkProc.exitCode, 0);
 
     // 4. Test ad info from an outside directory
     const infoProc = runCli(["info", "symlink-pkg.demo", "--json"], tmpdir(), customEnv);
-    expect(infoProc.exitCode).toBe(0);
+    assert.strictEqual(infoProc.exitCode, 0);
     const infoData = JSON.parse(infoProc.stdout.toString());
-    expect(infoData.id).toBe("symlink-pkg.demo");
+    assert.strictEqual(infoData.id, "symlink-pkg.demo");
 
     // 5. Test ad list from outside directory
     const listProc = runCli(["list", "-P", "symlink-pkg.demo", "--json"], tmpdir(), customEnv);
-    expect(listProc.exitCode).toBe(0);
+    assert.strictEqual(listProc.exitCode, 0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(Array.isArray(listData.items)).toBe(true);
-    expect(listData.items.length).toBeGreaterThan(0);
+    assert.strictEqual(Array.isArray(listData.items), true);
+    assert.ok((listData.items.length) > 0);
   });
 });

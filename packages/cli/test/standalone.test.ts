@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { defineAction } from "@actiondock/sdk";
 import { ExitCode } from "../src/types";
 import { runStandaloneCli } from "../src/index";
@@ -58,8 +59,8 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stdout: (msg) => (out += msg + "\n"),
     });
-    expect(code).toBe(ExitCode.SUCCESS);
-    expect(out.trim()).toBe("test.standalone v1.2.3");
+    assert.strictEqual(code, ExitCode.SUCCESS);
+    assert.strictEqual(out.trim(), "test.standalone v1.2.3");
   });
 
   it("handles --help and lists usage", async () => {
@@ -68,11 +69,11 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stdout: (msg) => (out += msg + "\n"),
     });
-    expect(code).toBe(ExitCode.SUCCESS);
-    expect(out).toContain("test.standalone");
-    expect(out).toContain("Usage:");
-    expect(out).toContain("list");
-    expect(out).toContain("run");
+    assert.strictEqual(code, ExitCode.SUCCESS);
+    assert.ok((out).includes("test.standalone"));
+    assert.ok((out).includes("Usage:"));
+    assert.ok((out).includes("list"));
+    assert.ok((out).includes("run"));
   });
 
   it("lists actions in json format", async () => {
@@ -81,11 +82,11 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stdout: (msg) => (jsonOut += msg),
     });
-    expect(codeJson).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(codeJson, ExitCode.SUCCESS);
     const parsed = JSON.parse(jsonOut);
-    expect(parsed.items.length).toBe(2);
-    expect(parsed.items.some((a: any) => a.id === "greet")).toBe(true);
-    expect(Array.isArray(parsed.hints)).toBe(true);
+    assert.strictEqual(parsed.items.length, 2);
+    assert.strictEqual(parsed.items.some((a: any) => a.id === "greet"), true);
+    assert.strictEqual(Array.isArray(parsed.hints), true);
   });
 
   it("describes action specification and schema", async () => {
@@ -94,11 +95,11 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stdout: (msg) => (out += msg),
     });
-    expect(code).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(code, ExitCode.SUCCESS);
     const parsed = JSON.parse(out);
-    expect(parsed.id).toBe("greet");
-    expect(parsed.description).toBe("Greet someone warmly");
-    expect(parsed.inputSchema.properties.name).toBeDefined();
+    assert.strictEqual(parsed.id, "greet");
+    assert.strictEqual(parsed.description, "Greet someone warmly");
+    assert.notStrictEqual(parsed.inputSchema.properties.name, undefined);
   });
 
   it("executes action successfully and handles config overrides", async () => {
@@ -111,8 +112,8 @@ describe("CLI - Standalone Mode Dispatcher", () => {
         stdout: (msg) => (outRaw += msg),
       }
     );
-    expect(codeRaw).toBe(ExitCode.SUCCESS);
-    expect(outRaw).toBe("Hi, Alice!");
+    assert.strictEqual(codeRaw, ExitCode.SUCCESS);
+    assert.strictEqual(outRaw, "Hi, Alice!");
 
     // 2. Machine JSON mode
     let outJson = "";
@@ -123,10 +124,10 @@ describe("CLI - Standalone Mode Dispatcher", () => {
         stdout: (msg) => (outJson += msg),
       }
     );
-    expect(codeJson).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(codeJson, ExitCode.SUCCESS);
     const parsed = JSON.parse(outJson);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data.message).toBe("Hi, Alice!");
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.message, "Hi, Alice!");
   });
 
   it("handles action execution failures transparently", async () => {
@@ -136,8 +137,8 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stderr: (msg) => (errOut += msg),
     });
-    expect(codeRaw).toBe(ExitCode.FAILURE);
-    expect(errOut).toContain("Intentional failure");
+    assert.strictEqual(codeRaw, ExitCode.FAILURE);
+    assert.ok((errOut).includes("Intentional failure"));
 
     // 2. Machine JSON mode: error in JSON envelope on stdout
     let jsonOut = "";
@@ -145,10 +146,10 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stdout: (msg) => (jsonOut += msg),
     });
-    expect(codeJson).toBe(ExitCode.FAILURE);
+    assert.strictEqual(codeJson, ExitCode.FAILURE);
     const parsed = JSON.parse(jsonOut);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.message).toContain("Intentional failure");
+    assert.strictEqual(parsed.ok, false);
+    assert.ok((parsed.error.message).includes("Intentional failure"));
   });
 
   it("manages state via state subcommands", async () => {
@@ -160,26 +161,26 @@ describe("CLI - Standalone Mode Dispatcher", () => {
 
     // state set
     const setCode = await runStandaloneCli(["state", "set", "user:counter", "10"], opts);
-    expect(setCode).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(setCode, ExitCode.SUCCESS);
 
     // state get
     const getCode = await runStandaloneCli(["state", "get", "user:counter", "--json"], opts);
-    expect(getCode).toBe(ExitCode.SUCCESS);
-    expect(JSON.parse(out).value).toBe(10);
+    assert.strictEqual(getCode, ExitCode.SUCCESS);
+    assert.strictEqual(JSON.parse(out).value, 10);
 
     // state list
     const listCode = await runStandaloneCli(["state", "list"], opts);
-    expect(listCode).toBe(ExitCode.SUCCESS);
-    expect(JSON.parse(out).some((k: string) => k.includes("counter"))).toBe(true);
+    assert.strictEqual(listCode, ExitCode.SUCCESS);
+    assert.strictEqual(JSON.parse(out).some((k: string) => k.includes("counter")), true);
 
     // state delete
     const delCode = await runStandaloneCli(["state", "delete", "user:counter"], opts);
-    expect(delCode).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(delCode, ExitCode.SUCCESS);
 
     // state get after delete
     const getDeletedCode = await runStandaloneCli(["state", "get", "user:counter", "--json"], opts);
-    expect(getDeletedCode).toBe(ExitCode.SUCCESS);
-    expect(JSON.parse(out).value).toBeUndefined();
+    assert.strictEqual(getDeletedCode, ExitCode.SUCCESS);
+    assert.strictEqual(JSON.parse(out).value, undefined);
   });
 
   it("manages config via config subcommands", async () => {
@@ -191,17 +192,17 @@ describe("CLI - Standalone Mode Dispatcher", () => {
 
     // config set
     const setCode = await runStandaloneCli(["config", "set", "GREETING", "Welcome"], opts);
-    expect(setCode).toBe(ExitCode.SUCCESS);
+    assert.strictEqual(setCode, ExitCode.SUCCESS);
 
     // config get
     const getCode = await runStandaloneCli(["config", "get", "GREETING"], opts);
-    expect(getCode).toBe(ExitCode.SUCCESS);
-    expect(JSON.parse(out)).toBe("Welcome");
+    assert.strictEqual(getCode, ExitCode.SUCCESS);
+    assert.strictEqual(JSON.parse(out), "Welcome");
 
     // config list
     const listCode = await runStandaloneCli(["config", "list"], opts);
-    expect(listCode).toBe(ExitCode.SUCCESS);
-    expect(JSON.parse(out).GREETING).toBe("Welcome");
+    assert.strictEqual(listCode, ExitCode.SUCCESS);
+    assert.strictEqual(JSON.parse(out).GREETING, "Welcome");
   });
 
   it("returns INVALID_ARGUMENT on unknown command", async () => {
@@ -210,7 +211,7 @@ describe("CLI - Standalone Mode Dispatcher", () => {
       ...baseOptions,
       stderr: (msg) => (errOut += msg),
     });
-    expect(code).toBe(ExitCode.INVALID_ARGUMENT);
-    expect(errOut).toContain("Unknown command");
+    assert.strictEqual(code, ExitCode.INVALID_ARGUMENT);
+    assert.ok((errOut).includes("Unknown command"));
   });
 });

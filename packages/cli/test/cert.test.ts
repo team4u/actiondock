@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import {
 describe("Certificate Utilities (cert.ts)", () => {
   const tempHome = mkdtempSync(join(tmpdir(), "actiondock-cert-test-"));
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(tempHome, { recursive: true, force: true });
     } catch {
@@ -25,15 +26,15 @@ describe("Certificate Utilities (cert.ts)", () => {
     const dnsNames = sans.filter((s) => s.type === 2).map((s) => s.value);
     const ipAddrs = sans.filter((s) => s.type === 7).map((s) => s.ip);
 
-    expect(dnsNames).toContain("localhost");
-    expect(ipAddrs).toContain("127.0.0.1");
-    expect(ipAddrs).toContain("::1");
-    expect(ipAddrs).toContain("192.168.1.100");
+    assert.ok((dnsNames).includes("localhost"));
+    assert.ok((ipAddrs).includes("127.0.0.1"));
+    assert.ok((ipAddrs).includes("::1"));
+    assert.ok((ipAddrs).includes("192.168.1.100"));
   });
 
   it("isCertificateValid 能够正确识别有效证书与非法内容", () => {
-    expect(isCertificateValid("invalid-cert-content")).toBe(false);
-    expect(isCertificateValid("")).toBe(false);
+    assert.strictEqual(isCertificateValid("invalid-cert-content"), false);
+    assert.strictEqual(isCertificateValid(""), false);
   });
 
   it("ensureSelfSignedCertificate 自动签发并缓存自签名证书文件", async () => {
@@ -42,16 +43,16 @@ describe("Certificate Utilities (cert.ts)", () => {
       host: "127.0.0.1",
     });
 
-    expect(existsSync(pair.certPath)).toBe(true);
-    expect(existsSync(pair.keyPath)).toBe(true);
-    expect(pair.cert).toContain("-----BEGIN CERTIFICATE-----");
-    expect(pair.key).toContain("PRIVATE KEY-----");
-    expect(isCertificateValid(pair.cert)).toBe(true);
+    assert.strictEqual(existsSync(pair.certPath), true);
+    assert.strictEqual(existsSync(pair.keyPath), true);
+    assert.ok((pair.cert).includes("-----BEGIN CERTIFICATE-----"));
+    assert.ok((pair.key).includes("PRIVATE KEY-----"));
+    assert.strictEqual(isCertificateValid(pair.cert), true);
 
     // 检查私钥权限（POSIX 环境下应为 0600）
     if (process.platform !== "win32") {
       const keyStat = statSync(pair.keyPath);
-      expect(keyStat.mode & 0o777).toBe(0o600);
+      assert.strictEqual(keyStat.mode & 0o777, 0o600);
     }
 
     // 第二次调用应命中文件缓存复用
@@ -60,10 +61,10 @@ describe("Certificate Utilities (cert.ts)", () => {
       host: "127.0.0.1",
     });
 
-    expect(cachedPair.cert).toBe(pair.cert);
-    expect(cachedPair.key).toBe(pair.key);
-    expect(cachedPair.certPath).toBe(pair.certPath);
-    expect(cachedPair.keyPath).toBe(pair.keyPath);
+    assert.strictEqual(cachedPair.cert, pair.cert);
+    assert.strictEqual(cachedPair.key, pair.key);
+    assert.strictEqual(cachedPair.certPath, pair.certPath);
+    assert.strictEqual(cachedPair.keyPath, pair.keyPath);
   });
 
   it("certificateCoversHost 校验 SAN 覆盖范围并在主机切换时触发自动重新签发", async () => {
@@ -72,10 +73,10 @@ describe("Certificate Utilities (cert.ts)", () => {
       host: "127.0.0.1",
     });
 
-    expect(certificateCoversHost(initialPair.cert, "127.0.0.1")).toBe(true);
-    expect(certificateCoversHost(initialPair.cert, "localhost")).toBe(true);
-    expect(certificateCoversHost(initialPair.cert, "10.254.254.254")).toBe(false);
-    expect(certificateCoversHost("invalid-cert", "127.0.0.1")).toBe(false);
+    assert.strictEqual(certificateCoversHost(initialPair.cert, "127.0.0.1"), true);
+    assert.strictEqual(certificateCoversHost(initialPair.cert, "localhost"), true);
+    assert.strictEqual(certificateCoversHost(initialPair.cert, "10.254.254.254"), false);
+    assert.strictEqual(certificateCoversHost("invalid-cert", "127.0.0.1"), false);
 
     // 当切换绑定主机至未覆盖的 IP 时，自动重新签发覆盖新地址的证书
     const reissuedPair = await ensureSelfSignedCertificate({
@@ -83,8 +84,8 @@ describe("Certificate Utilities (cert.ts)", () => {
       host: "10.254.254.254",
     });
 
-    expect(reissuedPair.cert).not.toBe(initialPair.cert);
-    expect(certificateCoversHost(reissuedPair.cert, "10.254.254.254")).toBe(true);
-    expect(certificateCoversHost(reissuedPair.cert, "127.0.0.1")).toBe(true);
+    assert.notStrictEqual(reissuedPair.cert, initialPair.cert);
+    assert.strictEqual(certificateCoversHost(reissuedPair.cert, "10.254.254.254"), true);
+    assert.strictEqual(certificateCoversHost(reissuedPair.cert, "127.0.0.1"), true);
   });
 });

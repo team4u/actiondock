@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,11 +22,11 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     writeFileSync(filePath, '{"hello":"world"}', "utf8");
 
     const opened = await openRegularInputFile(filePath);
-    expect(opened.path).toBe(filePath);
-    expect(opened.size).toBe(17);
+    assert.strictEqual(opened.path, filePath);
+    assert.strictEqual(opened.size, 17);
 
     const content = await opened.readBounded(1024);
-    expect(content.toString("utf8")).toBe('{"hello":"world"}');
+    assert.strictEqual(content.toString("utf8"), '{"hello":"world"}');
     await opened.close();
   });
 
@@ -37,10 +38,10 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     symlinkSync(targetFile, linkPath);
 
     const opened = await openRegularInputFile(linkPath);
-    expect(opened.size).toBe(22);
+    assert.strictEqual(opened.size, 22);
 
     const content = await opened.readBounded(1024);
-    expect(content.toString("utf8")).toBe("symlink-target-content");
+    assert.strictEqual(content.toString("utf8"), "symlink-target-content");
     await opened.close();
   });
 
@@ -49,9 +50,9 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
       await openRegularInputFile(tempDir);
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_FILE_READ_FAILED);
-      expect(err.details?.reason).toBe("UNSUPPORTED_FILE_TYPE");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_FILE_READ_FAILED);
+      assert.strictEqual(err.details?.reason, "UNSUPPORTED_FILE_TYPE");
     }
   });
 
@@ -61,9 +62,9 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
       await openRegularInputFile(missing);
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_FILE_NOT_FOUND);
-      expect(err.message).toContain("non-existent-file.json");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_FILE_NOT_FOUND);
+      assert.ok((err.message).includes("non-existent-file.json"));
     }
   });
 
@@ -76,9 +77,9 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
       await opened.readBounded(5); // 限制 5 字节
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
-      expect(err.details?.reason).toBe("MAX_INPUT_BYTES");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
     } finally {
       await opened.close();
     }
@@ -91,9 +92,9 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     const controller = new AbortController();
     controller.abort(new Error("pre-aborted"));
 
-    await expect(
+    await assert.rejects(
       openRegularInputFile(filePath, controller.signal)
-    ).rejects.toThrow("pre-aborted");
+    , /pre\-aborted/);
   });
 
   it("打开期间接收取消信号能够关闭已创建的 handle 防范泄漏", async () => {
@@ -104,9 +105,9 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     // 异步触发 abort
     queueMicrotask(() => controller.abort(new Error("cancelled-during-open")));
 
-    await expect(
+    await assert.rejects(
       openRegularInputFile(filePath, controller.signal)
-    ).rejects.toThrow();
+    );
   });
 
   it("readRegularFileBounded 自动完成打开、有界读取与句柄关闭", async () => {
@@ -114,6 +115,6 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     writeFileSync(filePath, "auto-close-data", "utf8");
 
     const buf = await readRegularFileBounded(filePath, { maxInputBytes: 100 });
-    expect(buf.toString("utf8")).toBe("auto-close-data");
+    assert.strictEqual(buf.toString("utf8"), "auto-close-data");
   });
 });

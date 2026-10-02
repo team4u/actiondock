@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -110,16 +111,16 @@ describe("文件锁时钟源注入与确定性测试", () => {
     while (!clock.hasPendingSleeps() && Date.now() - waitStart < 2000) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    expect(clock.hasPendingSleeps()).toBe(true);
+    assert.strictEqual(clock.hasPendingSleeps(), true);
 
     // 推进时钟超出超时上限，虚拟 sleep 立即唤醒并触发超时判定
     clock.advance(acquireTimeoutMs + retryDelayMs);
 
     await acquirePromise;
 
-    expect(caughtError).toBeInstanceOf(ActionDockError);
-    expect(caughtError.code).toBe(TIMEOUT);
-    expect(caughtError.message).toContain(`Failed to acquire lock '${lockPath}' within ${acquireTimeoutMs}ms`);
+    assert.ok(caughtError instanceof ActionDockError);
+    assert.strictEqual(caughtError.code, TIMEOUT);
+    assert.ok((caughtError.message).includes(`Failed to acquire lock '${lockPath}' within ${acquireTimeoutMs}ms`));
   });
 
   it("当锁被其他活跃进程持有且不满足接管条件时，acquireFileLockSync 抛出 STORAGE_BUSY", () => {
@@ -142,9 +143,9 @@ describe("文件锁时钟源注入与确定性测试", () => {
       caughtError = err;
     }
 
-    expect(caughtError).toBeInstanceOf(ActionDockError);
-    expect(caughtError.code).toBe(STORAGE_BUSY);
-    expect(caughtError.message).toContain(`Lock '${lockPath}' is currently held by another active process`);
+    assert.ok(caughtError instanceof ActionDockError);
+    assert.strictEqual(caughtError.code, STORAGE_BUSY);
+    assert.ok((caughtError.message).includes(`Lock '${lockPath}' is currently held by another active process`));
   });
 
   it("isStaleLock 与 isStaleLockSync 优先通过注入的 Clock 计算 mtime 超龄", async () => {
@@ -158,13 +159,13 @@ describe("文件锁时钟源注入与确定性测试", () => {
     utimesSync(lockPath, new Date(startMs), new Date(startMs));
 
     // 锁刚创建时未超龄
-    expect(await isStaleLock(lockPath, 10000, { clock, mtimeFirst: true })).toBe(false);
-    expect(isStaleLockSync(lockPath, 10000, { clock, mtimeFirst: true })).toBe(false);
+    assert.strictEqual(await isStaleLock(lockPath, 10000, { clock, mtimeFirst: true }), false);
+    assert.strictEqual(isStaleLockSync(lockPath, 10000, { clock, mtimeFirst: true }), false);
 
     // 时钟推进 20 秒后超龄
     clock.advance(20000);
 
-    expect(await isStaleLock(lockPath, 10000, { clock, mtimeFirst: true })).toBe(true);
-    expect(isStaleLockSync(lockPath, 10000, { clock, mtimeFirst: true })).toBe(true);
+    assert.strictEqual(await isStaleLock(lockPath, 10000, { clock, mtimeFirst: true }), true);
+    assert.strictEqual(isStaleLockSync(lockPath, 10000, { clock, mtimeFirst: true }), true);
   });
 });

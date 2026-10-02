@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,16 +56,16 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
     try {
       // 文本输出
       await runtime.dispatch(["list", `--data-dir=${tmpDir}`]);
-      expect(logs.some((l) => l.includes("Actions in pkg.standalone (v1.2.3):"))).toBe(true);
-      expect(logs.some((l) => l.includes("greet") && l.includes("打招呼动作"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("Actions in pkg.standalone (v1.2.3):")), true);
+      assert.strictEqual(logs.some((l) => l.includes("greet") && l.includes("打招呼动作")), true);
 
       // JSON 输出
       logs.length = 0;
       await runtime.dispatch(["list", "--json", `--data-dir=${tmpDir}`]);
       const parsed = JSON.parse(logs.join("\n"));
-      expect(Array.isArray(parsed.items)).toBe(true);
-      expect(parsed.items.some((item: any) => item.id === "greet")).toBe(true);
-      expect(parsed.hints).toEqual([
+      assert.strictEqual(Array.isArray(parsed.items), true);
+      assert.strictEqual(parsed.items.some((item: any) => item.id === "greet"), true);
+      assert.deepStrictEqual(parsed.hints, [
         "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
       ]);
     } finally {
@@ -80,15 +81,15 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
     try {
       // 文本输出
       await runtime.dispatch(["describe", "greet", `--data-dir=${tmpDir}`]);
-      expect(logs.some((l) => l.includes("Action: greet"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("Action: greet")), true);
 
       // JSON 输出
       logs.length = 0;
       await runtime.dispatch(["show", "greet", "--json", `--data-dir=${tmpDir}`]);
       const parsed = JSON.parse(logs.join("\n"));
-      expect(parsed.id).toBe("greet");
-      expect(parsed.description).toBe("打招呼动作");
-      expect(parsed.inputSchema).toBeDefined();
+      assert.strictEqual(parsed.id, "greet");
+      assert.strictEqual(parsed.description, "打招呼动作");
+      assert.notStrictEqual(parsed.inputSchema, undefined);
     } finally {
       console.log = origLog;
     }
@@ -107,7 +108,7 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         '--input={"name":"Alice"}',
         `--data-dir=${tmpDir}`,
       ]);
-      expect(logs.join("\n")).toContain("Hello, Alice!");
+      assert.ok((logs.join("\n")).includes("Hello, Alice!"));
 
       // 2. --json 机器信封输出
       logs.length = 0;
@@ -119,9 +120,9 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         `--data-dir=${tmpDir}`,
       ]);
       const parsed = JSON.parse(logs.join("\n"));
-      expect(parsed.ok).toBe(true);
-      expect(parsed.data).toEqual({ greeting: "Hello, Alice!" });
-      expect(parsed.runId).toBeDefined();
+      assert.strictEqual(parsed.ok, true);
+      assert.deepStrictEqual(parsed.data, { greeting: "Hello, Alice!" });
+      assert.notStrictEqual(parsed.runId, undefined);
     } finally {
       console.log = origLog;
     }
@@ -135,23 +136,23 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
     try {
       // set
       await runtime.dispatch(["config", "set", "theme", '"dark"', `--data-dir=${tmpDir}`]);
-      expect(logs.some((l) => l.includes("Config 'theme' updated"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("Config 'theme' updated")), true);
 
       // get
       logs.length = 0;
       await runtime.dispatch(["config", "get", "theme", `--data-dir=${tmpDir}`]);
-      expect(logs.some((l) => l.includes('"dark"'))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes('"dark"')), true);
 
       // list
       logs.length = 0;
       await runtime.dispatch(["config", "list", `--data-dir=${tmpDir}`]);
       const listParsed = JSON.parse(logs.join("\n"));
-      expect(listParsed.theme).toBe("dark");
+      assert.strictEqual(listParsed.theme, "dark");
 
       // delete
       logs.length = 0;
       await runtime.dispatch(["config", "delete", "theme", `--data-dir=${tmpDir}`]);
-      expect(logs.some((l) => l.includes("Config 'theme' deleted"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("Config 'theme' deleted")), true);
     } finally {
       console.log = origLog;
     }
@@ -172,7 +173,7 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         "--namespace=session",
         `--data-dir=${tmpDir}`,
       ]);
-      expect(logs.some((l) => l.includes("State 'session:count' updated"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("State 'session:count' updated")), true);
 
       // get
       logs.length = 0;
@@ -185,8 +186,8 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         `--data-dir=${tmpDir}`,
       ]);
       const getParsed = JSON.parse(logs.join("\n"));
-      expect(getParsed.key).toBe("count");
-      expect(getParsed.value).toBe(42);
+      assert.strictEqual(getParsed.key, "count");
+      assert.strictEqual(getParsed.value, 42);
 
       // list
       logs.length = 0;
@@ -197,8 +198,8 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         `--data-dir=${tmpDir}`,
       ]);
       const listParsed = JSON.parse(logs.join("\n"));
-      expect(Array.isArray(listParsed)).toBe(true);
-      expect(listParsed).toContain("count");
+      assert.strictEqual(Array.isArray(listParsed), true);
+      assert.ok((listParsed).includes("count"));
 
       // delete
       logs.length = 0;
@@ -209,7 +210,7 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         "--namespace=session",
         `--data-dir=${tmpDir}`,
       ]);
-      expect(logs.some((l) => l.includes("State 'count' deleted"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("State 'count' deleted")), true);
 
       // clear
       logs.length = 0;
@@ -219,7 +220,7 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
         "--namespace=session",
         `--data-dir=${tmpDir}`,
       ]);
-      expect(logs.some((l) => l.includes("Cleared 0 state entry(s)"))).toBe(true);
+      assert.strictEqual(logs.some((l) => l.includes("Cleared 0 state entry(s)")), true);
     } finally {
       console.log = origLog;
       try {
@@ -258,8 +259,8 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "name=Bob",
     ]);
-    expect(code1).toBe(0);
-    expect(stdoutLogs.join("\n")).toContain("Hello, Bob!");
+    assert.strictEqual(code1, 0);
+    assert.ok((stdoutLogs.join("\n")).includes("Hello, Bob!"));
 
     // 2. --json 模式输出标准 JSON
     stdoutLogs.length = 0;
@@ -271,10 +272,10 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "name=Charlie",
     ]);
-    expect(code2).toBe(0);
+    assert.strictEqual(code2, 0);
     const parsed = JSON.parse(stdoutLogs.join("\n"));
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data).toEqual({ greeting: "Hello, Charlie!" });
+    assert.strictEqual(parsed.ok, true);
+    assert.deepStrictEqual(parsed.data, { greeting: "Hello, Charlie!" });
   });
 
   it("确保 -- 后的参数严禁作为控制选项解析", async () => {
@@ -307,10 +308,10 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "name=--data-dir=fake",
     ]);
-    expect(code).toBe(0);
+    assert.strictEqual(code, 0);
     const parsed = JSON.parse(stdoutLogs.join("\n"));
-    expect(parsed.ok).toBe(true);
-    expect(parsed.data).toEqual({ greeting: "Hello, --data-dir=fake!" });
+    assert.strictEqual(parsed.ok, true);
+    assert.deepStrictEqual(parsed.data, { greeting: "Hello, --data-dir=fake!" });
   });
 
   it("当指定 --json 时，参数解析异常以标准 JSON 格式输出至 stdout 并返回退出码 2", async () => {
@@ -339,12 +340,12 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "bad:=invalid_json",
     ]);
-    expect(code1).toBe(2);
-    expect(stdoutLogs.length).toBeGreaterThan(0);
+    assert.strictEqual(code1, 2);
+    assert.ok((stdoutLogs.length) > 0);
     const err1 = JSON.parse(stdoutLogs.join("\n"));
-    expect(err1.ok).toBe(false);
-    expect(err1.error.code).toBe("INVALID_JSON_LITERAL");
-    expect(err1.error.message).toBeDefined();
+    assert.strictEqual(err1.ok, false);
+    assert.strictEqual(err1.error.code, "INVALID_JSON_LITERAL");
+    assert.notStrictEqual(err1.error.message, undefined);
 
     // 2. 输入源冲突（--input 与 -- 同时指定）
     stdoutLogs.length = 0;
@@ -357,10 +358,10 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "name=Bob",
     ]);
-    expect(code2).toBe(2);
+    assert.strictEqual(code2, 2);
     const err2 = JSON.parse(stdoutLogs.join("\n"));
-    expect(err2.ok).toBe(false);
-    expect(err2.error.code).toBe("INPUT_CONFLICT");
+    assert.strictEqual(err2.ok, false);
+    assert.strictEqual(err2.error.code, "INPUT_CONFLICT");
 
     // 3. 缺少 Action ID
     stdoutLogs.length = 0;
@@ -369,10 +370,10 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--json",
       `--data-dir=${tmpDir}`,
     ]);
-    expect(code3).toBe(2);
+    assert.strictEqual(code3, 2);
     const err3 = JSON.parse(stdoutLogs.join("\n"));
-    expect(err3.ok).toBe(false);
-    expect(err3.error.code).toBe("INVALID_ARGUMENT");
+    assert.strictEqual(err3.ok, false);
+    assert.strictEqual(err3.error.code, "INVALID_ARGUMENT");
   });
 
   it("非 --json 模式下参数解析异常输出至 stderr 并返回退出码 2", async () => {
@@ -399,9 +400,9 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--",
       "bad:=invalid_json",
     ]);
-    expect(code).toBe(2);
-    expect(stderrLogs.some((l) => l.includes("Error:"))).toBe(true);
-    expect(stdoutLogs.length).toBe(0);
+    assert.strictEqual(code, 2);
+    assert.strictEqual(stderrLogs.some((l) => l.includes("Error:")), true);
+    assert.strictEqual(stdoutLogs.length, 0);
   });
 
   it("在入参校验失败时仅向 stderr 追加 describe 引导 Tip", async () => {
@@ -432,10 +433,10 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       '--input={"age":25}',
       `--data-dir=${tmpDir}`,
     ]);
-    expect(code).toBe(1);
-    expect(stdoutLogs.length).toBe(0);
-    expect(stderrLogs.some((l) => l.includes("Error [INPUT_VALIDATION_FAILED]"))).toBe(true);
-    expect(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe greet' to inspect schema and syntax examples."))).toBe(true);
+    assert.strictEqual(code, 1);
+    assert.strictEqual(stdoutLogs.length, 0);
+    assert.strictEqual(stderrLogs.some((l) => l.includes("Error [INPUT_VALIDATION_FAILED]")), true);
+    assert.strictEqual(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe greet' to inspect schema and syntax examples.")), true);
 
     // --json 模式向标准输出写入包含根节点 hint 的机器信封，且 stderr 保持纯净
     stdoutLogs.length = 0;
@@ -447,12 +448,12 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--json",
       `--data-dir=${tmpDir}`,
     ]);
-    expect(jsonCode).toBe(1);
-    expect(stderrLogs.length).toBe(0);
+    assert.strictEqual(jsonCode, 1);
+    assert.strictEqual(stderrLogs.length, 0);
     const parsed = JSON.parse(stdoutLogs.join("\n"));
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
-    expect(parsed.hint).toBe("Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "INPUT_VALIDATION_FAILED");
+    assert.strictEqual(parsed.hint, "Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
   });
 
   it("在非 INPUT_VALIDATION_FAILED 错误（如 ACTION_FAILED）时严禁输出 describe 引导 Tip", async () => {
@@ -477,9 +478,9 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "fail",
       `--data-dir=${tmpDir}`,
     ]);
-    expect(code).toBe(1);
-    expect(stderrLogs.some((l) => l.includes("Error [ACTION_FAILED]"))).toBe(true);
-    expect(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe"))).toBe(false);
+    assert.strictEqual(code, 1);
+    assert.strictEqual(stderrLogs.some((l) => l.includes("Error [ACTION_FAILED]")), true);
+    assert.strictEqual(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe")), false);
 
     // --json 模式下同样无 hint 字段
     stdoutLogs.length = 0;
@@ -490,12 +491,12 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--json",
       `--data-dir=${tmpDir}`,
     ]);
-    expect(jsonCode).toBe(1);
-    expect(stderrLogs.length).toBe(0);
+    assert.strictEqual(jsonCode, 1);
+    assert.strictEqual(stderrLogs.length, 0);
     const parsed = JSON.parse(stdoutLogs.join("\n"));
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("ACTION_FAILED");
-    expect(parsed.hint).toBeUndefined();
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "ACTION_FAILED");
+    assert.strictEqual(parsed.hint, undefined);
   });
 
   it("在 ACTION_NOT_FOUND 时在 --json 模式下向根节点写入发现提示", async () => {
@@ -521,11 +522,11 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       "--json",
       `--data-dir=${tmpDir}`,
     ]);
-    expect(jsonCode).toBe(1);
-    expect(stderrLogs.length).toBe(0);
+    assert.strictEqual(jsonCode, 1);
+    assert.strictEqual(stderrLogs.length, 0);
     const parsed = JSON.parse(stdoutLogs.join("\n"));
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("ACTION_NOT_FOUND");
-    expect(parsed.hint).toBe("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "ACTION_NOT_FOUND");
+    assert.strictEqual(parsed.hint, "Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
   });
 });

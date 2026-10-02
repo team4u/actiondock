@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { readStdinBounded } from "../../src/input/stdin-input";
 import {
@@ -14,7 +15,7 @@ describe("标准输入有界读取 readStdinBounded", () => {
       Buffer.from('"alice"}'),
     ]);
     const text = await readStdinBounded(stream);
-    expect(text).toBe('{"name":"alice"}');
+    assert.strictEqual(text, '{"name":"alice"}');
   });
 
   it("当输入数据超过 maxInputBytes 时抛出 INPUT_LIMIT_EXCEEDED", async () => {
@@ -27,9 +28,9 @@ describe("标准输入有界读取 readStdinBounded", () => {
       await readStdinBounded(stream, { maxInputBytes: 8 });
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
-      expect(err.details?.reason).toBe("MAX_INPUT_BYTES");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
     }
   });
 
@@ -40,16 +41,16 @@ describe("标准输入有界读取 readStdinBounded", () => {
       await readStdinBounded(stream, { byteStreamOnly: true });
       expect.unreachable();
     } catch (err: any) {
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_FILE_READ_FAILED);
-      expect(err.details?.reason).toBe("INVALID_STREAM_CHUNK_TYPE");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_FILE_READ_FAILED);
+      assert.strictEqual(err.details?.reason, "INVALID_STREAM_CHUNK_TYPE");
     }
   });
 
   it("在 byteStreamOnly: false 下自动将字符串 chunk 转换为 Buffer", async () => {
     const stream = Readable.from(["hello ", "world"]);
     const text = await readStdinBounded(stream, { byteStreamOnly: false });
-    expect(text).toBe("hello world");
+    assert.strictEqual(text, "hello world");
   });
 
   it("首个观测终态事件获胜（First Observed Terminal Event Wins）：限额超限后迟到的 abort 不篡改结果", async () => {
@@ -66,9 +67,9 @@ describe("标准输入有界读取 readStdinBounded", () => {
       // 随后触发 abort
       controller.abort(new Error("late-abort"));
       // 必须是超限错误，而不是 abort 错误
-      expect(err).toBeInstanceOf(InputError);
-      expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
-      expect(err.details?.reason).toBe("MAX_INPUT_BYTES");
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
+      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
     }
   });
 
@@ -79,7 +80,7 @@ describe("标准输入有界读取 readStdinBounded", () => {
     const result = await readStdinBounded(stream, {
       signal: controller.signal,
     });
-    expect(result).toBe("quick-done");
+    assert.strictEqual(result, "quick-done");
 
     // 随后 abort
     controller.abort(new Error("late-abort"));
@@ -91,8 +92,8 @@ describe("标准输入有界读取 readStdinBounded", () => {
     controller.abort(new Error("manual-abort"));
 
     const stream = Readable.from([Buffer.from("some-data")]);
-    await expect(
+    await assert.rejects(
       readStdinBounded(stream, { signal: controller.signal })
-    ).rejects.toThrow("manual-abort");
+    , /manual\-abort/);
   });
 });

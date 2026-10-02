@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,25 +48,25 @@ describe("ActionDockHost 多包宿主容器", () => {
       autoLoadCurrentProject: false,
     });
 
-    expect(host).toBeInstanceOf(DefaultActionDockHost);
+    assert.ok(host instanceof DefaultActionDockHost);
     const apps = host.listRuntimes();
-    expect(apps.length).toBe(2);
+    assert.strictEqual(apps.length, 2);
 
     const mathApp = host.getRuntime("pkg.math");
-    expect(mathApp).toBeDefined();
-    expect(mathApp?.packageId).toBe("pkg.math");
+    assert.notStrictEqual(mathApp, undefined);
+    assert.strictEqual(mathApp?.packageId, "pkg.math");
 
     const strApp = host.getRuntime("pkg.string");
-    expect(strApp).toBeDefined();
-    expect(strApp?.packageId).toBe("pkg.string");
+    assert.notStrictEqual(strApp, undefined);
+    assert.strictEqual(strApp?.packageId, "pkg.string");
 
     const unknownApp = host.getRuntime("pkg.unknown");
-    expect(unknownApp).toBeUndefined();
+    assert.strictEqual(unknownApp, undefined);
 
     const infoList = await host.info();
-    expect(infoList.length).toBe(2);
+    assert.strictEqual(infoList.length, 2);
     const ids = infoList.map((i) => i.id).sort();
-    expect(ids).toEqual(["pkg.math", "pkg.string"]);
+    assert.deepStrictEqual(ids, ["pkg.math", "pkg.string"]);
 
     await host.close();
   });
@@ -94,8 +95,8 @@ describe("ActionDockHost 多包宿主容器", () => {
       });
 
       const autoApp = host.getRuntime("pkg.auto");
-      expect(autoApp).toBeDefined();
-      expect(autoApp?.packageId).toBe("pkg.auto");
+      assert.notStrictEqual(autoApp, undefined);
+      assert.strictEqual(autoApp?.packageId, "pkg.auto");
 
       // 注册同名冲突包抛出异常
       const duplicateApp = await createPackageRuntime({
@@ -107,8 +108,8 @@ describe("ActionDockHost 多包宿主容器", () => {
         inMemory: true,
       });
 
-      expect(() => host.registerRuntime(duplicateApp)).toThrow(
-        "Package ID conflict: package 'pkg.auto' is already registered in host"
+      assert.throws(() => host.registerRuntime(duplicateApp),
+        /Package ID conflict: package 'pkg\.auto' is already registered in host/
       );
 
       // 重复注册同一实例为幂等无害操作
@@ -167,38 +168,38 @@ describe("ActionDockHost 多包宿主容器", () => {
 
     // 1. 全量列出 Actions 带有完全限定标识
     const allActions = await host.listActions();
-    expect(allActions.length).toBe(3);
+    assert.strictEqual(allActions.length, 3);
     const allIds = allActions.map((a) => a.id).sort();
-    expect(allIds).toEqual(["pkg.items/create", "pkg.items/search", "pkg.users/search"]);
+    assert.deepStrictEqual(allIds, ["pkg.items/create", "pkg.items/search", "pkg.users/search"]);
 
     // 2. 标签过滤
     const queryActions = await host.listActions({ tags: ["query"] });
-    expect(queryActions.length).toBe(2);
+    assert.strictEqual(queryActions.length, 2);
 
     // 3. 关键词过滤
     const userActions = await host.listActions({ query: "用户" });
-    expect(userActions.length).toBe(1);
-    expect(userActions[0].id).toBe("pkg.users/search");
+    assert.strictEqual(userActions.length, 1);
+    assert.strictEqual(userActions[0].id, "pkg.users/search");
 
     // 4. 前缀过滤
     const prefixActions = await host.listActions({ prefix: "pkg.items/" });
-    expect(prefixActions.length).toBe(2);
+    assert.strictEqual(prefixActions.length, 2);
 
     // 5. 完全限定 describeAction
     const specExact = await host.describeAction("pkg.items/search");
-    expect(specExact.id).toBe("search");
-    expect(specExact.description).toBe("搜索资源");
+    assert.strictEqual(specExact.id, "search");
+    assert.strictEqual(specExact.description, "搜索资源");
 
     // 6. 唯一短标识符 describeAction
     const specUnique = await host.describeAction("create");
-    expect(specUnique.id).toBe("create");
+    assert.strictEqual(specUnique.id, "create");
 
     // 7. 冲突短标识符 describeAction 抛出歧义异常
-    await expect(host.describeAction("search")).rejects.toThrow("AMBIGUOUS_ACTION_REF");
+    await assert.rejects(host.describeAction("search"), /AMBIGUOUS_ACTION_REF/);
 
     // 8. 不存在的 Action 抛出异常
-    await expect(host.describeAction("missing")).rejects.toThrow("ACTION_NOT_FOUND");
-    await expect(host.describeAction("pkg.none/action")).rejects.toThrow("Package 'pkg.none' not found in host");
+    await assert.rejects(host.describeAction("missing"), /ACTION_NOT_FOUND/);
+    await assert.rejects(host.describeAction("pkg.none/action"), /Package 'pkg\.none' not found in host/);
 
     await host.close();
   });
@@ -289,19 +290,19 @@ actions:
       });
 
       const playbooks = await host.listPlaybooks();
-      expect(playbooks.length).toBe(2);
+      assert.strictEqual(playbooks.length, 2);
       const pbIds = playbooks.map((p) => p.id).sort();
-      expect(pbIds).toEqual(["ops.backup/backup", "ops.deploy/deploy"]);
+      assert.deepStrictEqual(pbIds, ["ops.backup/backup", "ops.deploy/deploy"]);
 
       const deploySpec = await host.describePlaybook("ops.deploy/deploy");
-      expect(deploySpec.id).toBe("deploy");
-      expect(deploySpec.content).toContain("# 部署规程指南");
+      assert.strictEqual(deploySpec.id, "deploy");
+      assert.ok((deploySpec.content).includes("# 部署规程指南"));
 
       const backupSpec = await host.describePlaybook("backup");
-      expect(backupSpec.id).toBe("backup");
-      expect(backupSpec.content).toContain("# 备份操作指南");
+      assert.strictEqual(backupSpec.id, "backup");
+      assert.ok((backupSpec.content).includes("# 备份操作指南"));
 
-      await expect(host.describePlaybook("nonexistent")).rejects.toThrow("not found in any registered package");
+      await assert.rejects(host.describePlaybook("nonexistent"), /not found in any registered package/);
 
       await host.close();
     } finally {
@@ -328,41 +329,41 @@ actions:
 
     // 1. 同步执行 runAction
     const syncRes = await host.runAction("service.math/multiply", { x: 6, y: 7 });
-    expect(syncRes.ok).toBe(true);
+    assert.strictEqual(syncRes.ok, true);
     if (syncRes.ok) {
-      expect(syncRes.data).toEqual({ val: 42 });
+      assert.deepStrictEqual(syncRes.data, { val: 42 });
     }
 
     // 2. 异步执行 startAction
     const ticket = await host.startAction("service.math/multiply", { x: 8, y: 9 });
-    expect(ticket.runId).toBeDefined();
-    expect(ticket.status).toBe("running");
+    assert.notStrictEqual(ticket.runId, undefined);
+    assert.strictEqual(ticket.status, "running");
 
     const asyncRes = await ticket.result!;
-    expect(asyncRes.ok).toBe(true);
+    assert.strictEqual(asyncRes.ok, true);
     if (asyncRes.ok) {
-      expect(asyncRes.data).toEqual({ val: 72 });
+      assert.deepStrictEqual(asyncRes.data, { val: 72 });
     }
 
     // 3. 通过 getRun 检索运行详情
     const run = await host.getRun(ticket.runId);
-    expect(run).toBeDefined();
-    expect(run?.id).toBe(ticket.runId);
-    expect(run?.status).toBe("success");
-    expect(run?.output).toEqual({ val: 72 });
+    assert.notStrictEqual(run, undefined);
+    assert.strictEqual(run?.id, ticket.runId);
+    assert.strictEqual(run?.status, "success");
+    assert.deepStrictEqual(run?.output, { val: 72 });
 
     // 4. 调用不存在的包返回结构化错误
     const badPkgRes = await host.runAction("unknown.pkg/action", {});
-    expect(badPkgRes.ok).toBe(false);
+    assert.strictEqual(badPkgRes.ok, false);
     if (!badPkgRes.ok) {
-      expect(badPkgRes.error?.code).toBe("PACKAGE_NOT_FOUND");
+      assert.strictEqual(badPkgRes.error?.code, "PACKAGE_NOT_FOUND");
     }
 
     // 5. 调用不存在的动作返回结构化错误
     const badActRes = await host.runAction("service.math/not-exist", {});
-    expect(badActRes.ok).toBe(false);
+    assert.strictEqual(badActRes.ok, false);
     if (!badActRes.ok) {
-      expect(badActRes.error?.code).toBe("ACTION_NOT_FOUND");
+      assert.strictEqual(badActRes.error?.code, "ACTION_NOT_FOUND");
     }
 
     await host.close();
@@ -425,17 +426,17 @@ actions:
 
     // 1. 已声明依赖的动作成功执行
     const successRes = await host.runAction("service.caller/declared-caller", { val: 5 });
-    expect(successRes.ok).toBe(true);
+    assert.strictEqual(successRes.ok, true);
     if (successRes.ok) {
-      expect(successRes.data).toEqual({ callerOutput: { result: 50 } });
+      assert.deepStrictEqual(successRes.data, { callerOutput: { result: 50 } });
     }
 
     // 2. 未声明依赖的动作执行失败并返回 UNDECLARED_ACTION_DEPENDENCY
     const failedRes = await host.runAction("service.caller/undeclared-caller", { val: 5 });
-    expect(failedRes.ok).toBe(false);
+    assert.strictEqual(failedRes.ok, false);
     if (!failedRes.ok) {
-      expect(failedRes.error.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
-      expect(failedRes.error.message).toContain("Undeclared cross-package dependency");
+      assert.strictEqual(failedRes.error.code, "UNDECLARED_ACTION_DEPENDENCY");
+      assert.ok((failedRes.error.message).includes("Undeclared cross-package dependency"));
     }
 
     await host.close();
@@ -513,15 +514,15 @@ actions:
       },
     });
     const res = await ticket.result!;
-    expect(res.ok).toBe(true);
+    assert.strictEqual(res.ok, true);
     const data = (res as any).data;
-    expect(data.callerOwner).toEqual({
+    assert.deepStrictEqual(data.callerOwner, {
       tenantId: "tenant-corp-1",
       principalId: "user-alice",
       packageInstanceId: "custom-caller-inst",
       generationId: "custom-caller-gen",
     });
-    expect(data.workerRes.workerOwner).toEqual({
+    assert.deepStrictEqual(data.workerRes.workerOwner, {
       tenantId: "tenant-corp-1",
       principalId: "user-alice",
       packageInstanceId: "target-worker-inst-9",
@@ -607,17 +608,17 @@ actions:
 
     // 1. 调用深度测试：A -> B -> C -> D 超过 maxCallDepth (3)
     const depthRes = await host.runAction("pkg.depth/stepA", {});
-    expect(depthRes.ok).toBe(false);
+    assert.strictEqual(depthRes.ok, false);
     if (!depthRes.ok) {
-      expect(depthRes.error.code).toBe("ACTION_CALL_CYCLE");
+      assert.strictEqual(depthRes.error.code, "ACTION_CALL_CYCLE");
     }
 
     // 2. 子任务限额测试：maxSubRuns: 2，第 3 个并发子任务被拒
     const quotaRes = await host.runAction("pkg.depth/rootParallel", {});
-    expect(quotaRes.ok).toBe(true);
+    assert.strictEqual(quotaRes.ok, true);
     if (quotaRes.ok) {
       const data = quotaRes.data as any;
-      expect(data.error?.code).toBe("ACTION_SUBRUN_LIMIT");
+      assert.strictEqual(data.error?.code, "ACTION_SUBRUN_LIMIT");
     }
 
     await host.close();
@@ -654,7 +655,7 @@ actions:
     });
 
     const ticket = await host.startAction("pkg.lifecycle/long-task", {});
-    expect(ticket.runId).toBeDefined();
+    assert.notStrictEqual(ticket.runId, undefined);
 
     const receivedEvents: any[] = [];
     const eventPromise = (async () => {
@@ -666,24 +667,24 @@ actions:
 
     await new Promise((r) => setTimeout(r, 30));
     const cancelRes = await host.cancelRun(ticket.runId, "用户终止");
-    expect(cancelRes.outcome).toBe("requested");
+    assert.strictEqual(cancelRes.outcome, "requested");
 
     const res = await ticket.result!;
-    expect(res.ok).toBe(false);
-    expect(cancelled).toBe(true);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(cancelled, true);
 
     await eventPromise;
-    expect(receivedEvents.some((e) => e.type === "status")).toBe(true);
-    expect(receivedEvents.some((e) => e.type === "finish")).toBe(true);
+    assert.strictEqual(receivedEvents.some((e) => e.type === "status"), true);
+    assert.strictEqual(receivedEvents.some((e) => e.type === "finish"), true);
 
     // 取消不存在的任务
     const missingCancel = await host.cancelRun("unknown-run-id");
-    expect(missingCancel.outcome).toBe("not_found");
+    assert.strictEqual(missingCancel.outcome, "not_found");
 
     // 优雅关闭
     await host.close();
-    await expect(host.runAction("pkg.lifecycle/long-task", {})).rejects.toThrow(
-      "ActionDockHost is closed: new tasks rejected"
+    await assert.rejects(host.runAction("pkg.lifecycle/long-task", {}), 
+      /ActionDockHost is closed: new tasks rejected/
     );
   });
 
@@ -745,12 +746,12 @@ actions:
 
       // 验证 Host 成功装载该链接包（未被静默丢弃）
       const app = host.getRuntime("openclaw.test-tool");
-      expect(app).toBeDefined();
-      expect(app?.packageId).toBe("openclaw.test-tool");
+      assert.notStrictEqual(app, undefined);
+      assert.strictEqual(app?.packageId, "openclaw.test-tool");
 
       // 验证 describeAction 能够正常调阅
       const spec = await host.describeAction("openclaw.test-tool/greet");
-      expect(spec.description).toBe("问候 Action");
+      assert.strictEqual(spec.description, "问候 Action");
 
       await host.close();
     } finally {
@@ -799,18 +800,18 @@ actions:
       });
 
       // 应该记录了警告日志
-      expect(warnings.some((w) => w.includes("broken.pkg"))).toBe(true);
+      assert.strictEqual(warnings.some((w) => w.includes("broken.pkg")), true);
 
       // 调用 describeAction 时，错误信息必须携带具体的失败原因与路径
-      await expect(host.describeAction("broken.pkg/any-action")).rejects.toThrow(
+      await assert.rejects(host.describeAction("broken.pkg/any-action"), 
         /broken\.pkg.*failed to load.*does-not-exist/
       );
 
       // 调用 runAction 时，错误信息亦必须透传
       const res = await host.runAction("broken.pkg/any-action", {});
-      expect(res.ok).toBe(false);
+      assert.strictEqual(res.ok, false);
       if (!res.ok) {
-        expect(res.error.message).toMatch(/broken\.pkg.*failed to load.*does-not-exist/);
+        assert.ok(/broken\.pkg.*failed to load.*does-not-exist/.test(res.error.message));
       }
 
       await host.close();
@@ -880,9 +881,9 @@ actions:
         caughtError = err;
       }
 
-      expect(caughtError).toBeDefined();
-      expect(caughtError?.code).toBe("PROJECT_RECOVERY_REQUIRED");
-      expect(caughtError?.message).toContain("PROJECT_RECOVERY_REQUIRED");
+      assert.notStrictEqual(caughtError, undefined);
+      assert.strictEqual(caughtError?.code, "PROJECT_RECOVERY_REQUIRED");
+      assert.ok((caughtError?.message).includes("PROJECT_RECOVERY_REQUIRED"));
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -924,11 +925,11 @@ actions:
         createErr = err;
       }
 
-      expect(createErr).toBeDefined();
-      expect(createErr?.code).toBe("PROJECT_BUSY");
-      expect(createErr?.message).toContain(
+      assert.notStrictEqual(createErr, undefined);
+      assert.strictEqual(createErr?.code, "PROJECT_BUSY");
+      assert.ok((createErr?.message).includes(
         "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-      );
+      ));
 
       // 2. 验证 new DefaultActionDockHost 抛出 PROJECT_BUSY 异常
       let constructErr: any;
@@ -941,11 +942,11 @@ actions:
         constructErr = err;
       }
 
-      expect(constructErr).toBeDefined();
-      expect(constructErr?.code).toBe("PROJECT_BUSY");
-      expect(constructErr?.message).toContain(
+      assert.notStrictEqual(constructErr, undefined);
+      assert.strictEqual(constructErr?.code, "PROJECT_BUSY");
+      assert.ok((constructErr?.message).includes(
         "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-      );
+      ));
     } finally {
       try {
         dummyChild.kill("SIGKILL");
@@ -992,21 +993,21 @@ actions:
         constructErr = err;
       }
 
-      expect(constructErr).toBeDefined();
-      expect(constructErr?.code).toBe("PROJECT_BUSY");
+      assert.notStrictEqual(constructErr, undefined);
+      assert.strictEqual(constructErr?.code, "PROJECT_BUSY");
 
       // 验证 tempDataDir 上的 dataDirLock 已被妥善释放，未在磁盘遗留锁目录
       const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
-      expect(existsSync(dataLockPath)).toBe(false);
+      assert.strictEqual(existsSync(dataLockPath), false);
 
       // 验证后续实例可以立刻获取该数据目录，绝无 DATA_DIR_IN_USE
       const subsequentHost = new DefaultActionDockHost({
         dataDir: tempDataDir,
         autoLoadCurrentProject: false,
       });
-      expect(subsequentHost).toBeDefined();
+      assert.notStrictEqual(subsequentHost, undefined);
       await subsequentHost.close();
-      expect(existsSync(dataLockPath)).toBe(false);
+      assert.strictEqual(existsSync(dataLockPath), false);
     } finally {
       try {
         dummyChild.kill("SIGKILL");
@@ -1048,19 +1049,19 @@ actions:
         constructErr = err;
       }
 
-      expect(constructErr).toBeDefined();
-      expect(constructErr?.message).toContain("Package ID conflict");
+      assert.notStrictEqual(constructErr, undefined);
+      assert.ok((constructErr?.message).includes("Package ID conflict"));
 
       // 验证 dataDirLock 已被妥善释放
       const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
-      expect(existsSync(dataLockPath)).toBe(false);
+      assert.strictEqual(existsSync(dataLockPath), false);
 
       // 后续实例可立刻获取该数据目录
       const hostOk = new DefaultActionDockHost({
         dataDir: tempDataDir,
         autoLoadCurrentProject: false,
       });
-      expect(hostOk).toBeDefined();
+      assert.notStrictEqual(hostOk, undefined);
       await hostOk.close();
     } finally {
       rmSync(tempDataDir, { recursive: true, force: true });
@@ -1113,14 +1114,14 @@ actions:
         syncErr = err;
       }
 
-      expect(syncErr).toBeDefined();
-      expect(syncErr?.code).toBe(PROJECT_RECOVERY_REQUIRED);
-      expect(syncErr?.message).toContain("PROJECT_RECOVERY_REQUIRED");
-      expect(syncErr?.message).toContain("createActionDockHost()");
+      assert.notStrictEqual(syncErr, undefined);
+      assert.strictEqual(syncErr?.code, PROJECT_RECOVERY_REQUIRED);
+      assert.ok((syncErr?.message).includes("PROJECT_RECOVERY_REQUIRED"));
+      assert.ok((syncErr?.message).includes("createActionDockHost()"));
 
       // 验证同步构造失败后 dataDirLock 正常释放，未发生锁泄漏
       const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
-      expect(existsSync(dataLockPath)).toBe(false);
+      assert.strictEqual(existsSync(dataLockPath), false);
 
       // 2. 验证异步工厂 createActionDockHost() 能够自动完成恢复并正常启动
       const host = await createActionDockHost({
@@ -1129,8 +1130,8 @@ actions:
         autoLoadCurrentProject: true,
       });
 
-      expect(host).toBeDefined();
-      expect(host.getRuntime("pkg.pending-tx")).toBeDefined();
+      assert.notStrictEqual(host, undefined);
+      assert.notStrictEqual(host.getRuntime("pkg.pending-tx"), undefined);
       await host.close();
     } finally {
       rmSync(tempProjDir, { recursive: true, force: true });
@@ -1195,15 +1196,15 @@ actions:
       } catch (err) {
         createErr = err;
       }
-      expect(createErr?.code).toBe("PROJECT_BUSY");
-      expect(appClosed).toBe(true);
+      assert.strictEqual(createErr?.code, "PROJECT_BUSY");
+      assert.strictEqual(appClosed, true);
     } finally {
       try {
         dummyChild.kill("SIGKILL");
       } catch {}
       rmSync(tempDir, { recursive: true, force: true });
       await externalApp.close();
-      expect(appClosed).toBe(true);
+      assert.strictEqual(appClosed, true);
     }
   });
 
@@ -1250,7 +1251,7 @@ actions:
       });
 
       const internalApp = host.getRuntime("pkg.internal-app");
-      expect(internalApp).toBeDefined();
+      assert.notStrictEqual(internalApp, undefined);
       if (internalApp) {
         const origInternalClose = internalApp.close.bind(internalApp);
         internalApp.close = async (opts?: any) => {
@@ -1263,11 +1264,11 @@ actions:
       await host.close();
 
       // 验证 Host 统一所有权：内部创建与外部传入的 Runtime 均被安全关闭
-      expect(internalClosed).toBe(true);
-      expect(externalClosed).toBe(true);
+      assert.strictEqual(internalClosed, true);
+      assert.strictEqual(externalClosed, true);
     } finally {
       await externalApp.close();
-      expect(externalClosed).toBe(true);
+      assert.strictEqual(externalClosed, true);
     }
   });
 
@@ -1322,10 +1323,10 @@ actions:
 
     try {
       const res = await host.runAction("pkg.quota-rollback/caller", {});
-      expect(res.ok).toBe(true);
+      assert.strictEqual(res.ok, true);
       if (res.ok) {
-        expect((res.data as any).firstFailed).toBe(true);
-        expect((res.data as any).secondRes).toEqual({ fine: true });
+        assert.strictEqual((res.data as any).firstFailed, true);
+        assert.deepStrictEqual((res.data as any).secondRes, { fine: true });
       }
     } finally {
       await host.close();
@@ -1367,13 +1368,13 @@ actions:
 
     try {
       // 短标识符遍历遇内部错误时必须透传原始错误，而非 ACTION_NOT_FOUND
-      await expect(host.describeAction("fine")).rejects.toThrow("STORAGE_BUSY");
+      await assert.rejects(host.describeAction("fine"), /STORAGE_BUSY/);
 
       // 完全限定引用下同样透传
-      await expect(host.describeAction("pkg.error-app/fine")).rejects.toThrow("STORAGE_BUSY");
+      await assert.rejects(host.describeAction("pkg.error-app/fine"), /STORAGE_BUSY/);
 
       // 真正不存在的 Action 仍返回 ACTION_NOT_FOUND 语义
-      await expect(host.describeAction("missing")).rejects.toThrow("ACTION_NOT_FOUND");
+      await assert.rejects(host.describeAction("missing"), /ACTION_NOT_FOUND/);
     } finally {
       await host.close();
     }
@@ -1408,7 +1409,7 @@ actions:
     };
 
     try {
-      await expect(host.runAction("task", {})).rejects.toThrow("SQLITE_CORRUPT");
+      await assert.rejects(host.runAction("task", {}), /SQLITE_CORRUPT/);
     } finally {
       await host.close();
     }
