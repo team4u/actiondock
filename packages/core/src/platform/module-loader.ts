@@ -1,7 +1,55 @@
+import { register } from "node:module";
 import { existsSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ActionDockError, ACTION_LOAD_FAILED, MODULE_RESOLVE_FAILED } from "../errors";
+
+export { resolve as esmResolveHook } from "./loader-hook";
+
+/**
+ * 进程全局加载钩子防重注册标记 Symbol。
+ */
+const LOADER_HOOK_REGISTERED = Symbol.for("actiondock.esm.loader.hook.registered");
+
+/**
+ * 获取模块加载器解析钩子模块的绝对 URL。
+ * 兼容源码开发态（.ts）、编译分发态（.js）及独立 ES 模块态（.mjs）。
+ */
+export function getLoaderHookUrl(): string {
+  const jsUrl = new URL("./loader-hook.js", import.meta.url);
+  if (existsSync(fileURLToPath(jsUrl))) {
+    return jsUrl.href;
+  }
+  const tsUrl = new URL("./loader-hook.ts", import.meta.url);
+  if (existsSync(fileURLToPath(tsUrl))) {
+    return tsUrl.href;
+  }
+  const mjsUrl = new URL("./loader-hook.mjs", import.meta.url);
+  if (existsSync(fileURLToPath(mjsUrl))) {
+    return mjsUrl.href;
+  }
+  return jsUrl.href;
+}
+
+/**
+ * 注册全链路 ESM 路径重映射加载器钩子。
+ * 依托 Node.js 官方 module.register 标准机制，
+ * 在进程全局生命周期内只注册一次（基于 Symbol.for 保护）。
+ */
+export function registerModuleLoaderHook(): void {
+  const globalRef = globalThis as unknown as { [LOADER_HOOK_REGISTERED]?: boolean };
+  if (globalRef[LOADER_HOOK_REGISTERED]) {
+    return;
+  }
+  globalRef[LOADER_HOOK_REGISTERED] = true;
+
+  try {
+    const hookUrl = getLoaderHookUrl();
+    register(hookUrl);
+  } catch {
+    // 防御保护：环境不支持或受限场景安全降级
+  }
+}
 /**
  * 统一源码模块加载器接口。
  * 解耦 Action 与各类扩展模块的具体加载机制（如 ECMAScript 原生 import、tsx 动态转译加载等）。
@@ -74,6 +122,10 @@ export function unwrapDefaultExport<T = any>(moduleExports: any): T {
  * - 完全移除第三方转译运行时依赖
  */
 export class NodeModuleLoader implements ModuleLoader {
+  constructor() {
+    registerModuleLoaderHook();
+  }
+
   /**
    * 解析模块标识符与路径，严格要求显式扩展名且拒绝目录补全。
    *

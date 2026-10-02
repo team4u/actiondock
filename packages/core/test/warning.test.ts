@@ -73,5 +73,57 @@ describe("ExperimentalWarning 全局静默机制", () => {
       `stderr should retain ExperimentalWarning when disabled, got: ${res.stderr}`
     );
   });
+
+  it("支持通过 @actiondock/core 根导出引入 suppressExperimentalWarnings", () => {
+    const code = `
+      import { suppressExperimentalWarnings } from "./packages/core/dist/index.js";
+      suppressExperimentalWarnings();
+      process.emitWarning("Root export check", "ExperimentalWarning");
+    `;
+
+    const res = spawnSync(process.execPath, ["--input-type=module", "-e", code], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+    });
+
+    assert.strictEqual(res.status, 0);
+    assert.ok(
+      !res.stderr.includes("ExperimentalWarning"),
+      `stderr should not contain ExperimentalWarning, got: ${res.stderr}`
+    );
+  });
+
+  it("CLI 入口 bin/ad.js 启动时基于单一事实源拦截实验性警告", () => {
+    const res = spawnSync(process.execPath, ["packages/cli/bin/ad.js", "--version"], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+    });
+
+    assert.strictEqual(res.status, 0);
+    assert.ok(
+      !res.stderr.includes("ExperimentalWarning"),
+      `ad.js stderr should not contain ExperimentalWarning, got: ${res.stderr}`
+    );
+  });
+
+  it("CLI 入口 bin/ad.js 尊崇 ACTIONDOCK_SILENCE_WARNINGS=0 逃生通道", () => {
+    // 注入并触发警告的临时包装脚本，验证 ad.js 启动链路上的逃生通道
+    const code = `
+      await import("./packages/cli/bin/ad.js");
+      process.emitWarning("Ad escape check", "ExperimentalWarning");
+    `;
+
+    const res = spawnSync(process.execPath, ["--input-type=module", "-e", code], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      env: { ...process.env, ACTIONDOCK_SILENCE_WARNINGS: "0" },
+    });
+
+    assert.ok(
+      res.stderr.includes("ExperimentalWarning"),
+      `ad.js should retain ExperimentalWarning when disabled via escape hatch, got: ${res.stderr}`
+    );
+  });
 });
+
 

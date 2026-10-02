@@ -346,6 +346,7 @@ describe("NodeModuleLoader 单元测试", () => {
       /missing file extension/);
   });
 
+
   it("解包辅助函数 unwrapDefaultExport 支持多层嵌套与 action 属性回退", () => {
     assert.strictEqual(unwrapDefaultExport(null), null);
     assert.strictEqual(unwrapDefaultExport<string>({ default: "val" }), "val");

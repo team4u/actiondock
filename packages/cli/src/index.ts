@@ -1,6 +1,6 @@
 import { CommanderError } from "commander";
 import { StandaloneDispatcher } from "@actiondock/core/server";
-import { createCliProgram, CLI_VERSION } from "./commands";
+import { createCliProgram, CLI_VERSION, isNodeArgv } from "./commands/index";
 import { formatError, SigintError } from "./errors";
 import { renderError } from "./renderer";
 import { ExitCode, type InvocationControl, type CliContext, type StandaloneOptions } from "./types";
@@ -9,9 +9,9 @@ export * from "./types";
 export * from "./errors";
 export * from "./renderer";
 export * from "./prompt";
-export * from "./utils";
-export * from "./services";
-export * from "./commands";
+export * from "./utils/index";
+export * from "./services/index";
+export * from "./commands/index";
 
 /**
  * 运行独立二进制参数解析分发器并返回退出状态码（委托 Core 统一实现）。
@@ -47,17 +47,7 @@ export async function main(
   const program = createCliProgram(context);
 
   const isMachine = argv.includes("--json");
-  const normalizedArgv =
-    argv.length >= 2 &&
-    (argv[0].endsWith("node") ||
-      argv[0].endsWith("bun") ||
-      argv[0].endsWith("tsx") ||
-      argv[1].includes("/") ||
-      argv[1].includes("\\") ||
-      argv[1].endsWith(".js") ||
-      argv[1].endsWith(".ts"))
-      ? argv
-      : ["node", "ad", ...argv];
+  const normalizedArgv = isNodeArgv(argv) ? argv : ["node", "ad", ...argv];
 
   try {
     await program.parseAsync(normalizedArgv);

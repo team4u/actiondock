@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { Logger, ProcessAPI } from "@actiondock/sdk";
 import { ActionDockError, STORAGE_INIT_FAILED } from "../errors";
 import { SystemClock, type Clock } from "../storage/clock";
-import { NodeModuleLoader, type ModuleLoader } from "./module-loader";
+import { NodeModuleLoader, registerModuleLoaderHook, type ModuleLoader } from "./module-loader";
 import { NodeProcessDriver } from "../process/process-driver";
 import { ProcessManager } from "../process/process-manager";
 import type { ProcessDriver } from "../process/driver";
@@ -93,6 +93,7 @@ function ensureDirectoryForDb(dbPath: string): void {
  * @param options 平台配置选项
  */
 export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePlatform {
+  registerModuleLoaderHook();
   const platformName: "node" | "test" = options.name ?? "node";
   const clock: Clock = options.clock ?? new SystemClock();
   const files: FileSystem = options.files ?? new NodeFileSystem({ rootDir: options.rootDir });

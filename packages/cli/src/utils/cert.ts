@@ -6,7 +6,6 @@ import { join } from "node:path";
 import {
   getActionDockHome,
 } from "@actiondock/core/registry";
-import { generate } from "selfsigned";
 
 /**
  * 证书与私钥数据对。
@@ -199,6 +198,7 @@ export async function ensureSelfSignedCertificate(options?: {
 
   const altNames = collectSanEntries(options?.host);
   const notAfterDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  const { generate } = await import("selfsigned");
   const pems = await generate(
     [{ name: "commonName", value: "localhost" }],
     {
