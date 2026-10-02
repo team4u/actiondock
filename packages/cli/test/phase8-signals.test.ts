@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
 import { executeAction } from "../src/commands/run";
-import { main } from "../src/index";
-import { runStandaloneCli } from "../src/standalone";
+import { main, runStandaloneCli } from "../src/index";
 import { ExitCode, type CliContext } from "../src/types";
 
 describe("Phase 8 CLI: 操作系统信号所有权与可复用 API 纯净性", () => {

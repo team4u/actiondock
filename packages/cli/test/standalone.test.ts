@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
 import { ExitCode } from "../src/types";
-import { runStandaloneCli } from "../src/standalone";
+import { runStandaloneCli } from "../src/index";
 
 describe("CLI - Standalone Mode Dispatcher", () => {
   const greetAction = defineAction({

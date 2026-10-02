@@ -67,9 +67,6 @@ export interface ActionDockMcpOptions {
   cascadeServiceClose?: boolean;
 }
 
-/** ActionDock MCP 适配层初始化选项别名 */
-export type ActionDockMcpServerOptions = ActionDockMcpOptions;
-
 /**
  * HTTP 传输协议安全配置项。
  */

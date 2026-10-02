@@ -526,8 +526,3 @@ export class FakeProcessDriver implements ProcessDriver {
     return handle;
   }
 }
-
-/**
- * 兼容原有命名导出。
- */
-export { FakeProcessDriver as MockProcessDriver };

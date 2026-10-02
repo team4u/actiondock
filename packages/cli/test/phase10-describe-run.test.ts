@@ -11,8 +11,7 @@ import {
   buildActionDescribePayload,
 } from "@actiondock/core/project";
 import { executeAction } from "../src/commands/run";
-import { main } from "../src/index";
-import { runStandaloneCli } from "../src/standalone";
+import { main, runStandaloneCli } from "../src/index";
 import type { CliContext } from "../src/types";
 import { runCliAsync } from "./helpers/run-cli";
 
