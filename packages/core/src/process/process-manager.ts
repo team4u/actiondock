@@ -38,6 +38,10 @@ import {
   OUTPUT_UNAVAILABLE,
   ProcessError,
 } from "../errors";
+import { formatProcessScope, checkOwnerAuthorized, hashRequestPayload, toSdkProcessInfo, toStoredProcessRecord, checkPositiveDurationMs } from "./converters";
+import { DiagnosticsSink } from "./diagnostics";
+import { ProcessQuotaTracker } from "./quotas";
+import { ProcessControlManager } from "./control";
 import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
 import { InputDispatcher } from "./input-dispatcher";
@@ -69,6 +73,7 @@ export type {
   QueuedOperation,
   ProcessOwner,
 } from "./managed-record";
+export { formatProcessScope } from "./converters";
 
 /**
  * 宿主与作用域资源配额配置。
@@ -114,158 +119,12 @@ export interface ProcessManagerOptions {
   logger?: Logger;
 }
 
-/**
- * 格式化生成作用域唯一隔离字符串。
- */
-export function formatProcessScope(owner: ProcessOwner): string {
-  return `${owner.tenantId}:${owner.principalId}:${owner.packageInstanceId}:${owner.generationId}`;
-}
 
-/**
- * 校验调用方所有者凭据与目标记录是否完全匹配。
- */
-function checkOwnerAuthorized(
-  owner: ProcessOwner,
-  target: ProcessOwnerFilter | StoredProcessRecord
-): void {
-  if (
-    !owner ||
-    !owner.tenantId ||
-    !owner.principalId ||
-    !owner.packageInstanceId ||
-    !owner.generationId
-  ) {
-    throw new ProcessError(ACCESS_DENIED, "Missing required owner identity fields");
-  }
 
-  if (
-    owner.tenantId !== target.tenantId ||
-    owner.principalId !== target.principalId ||
-    owner.packageInstanceId !== target.packageInstanceId ||
-    owner.generationId !== target.generationId
-  ) {
-    throw new ProcessError(ACCESS_DENIED, "Access denied: owner identity mismatch");
-  }
-}
 
-/**
- * 计算任意 JSON 负载对象的 SHA-256 哈希值。
- */
-function hashRequestPayload(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-}
 
-/**
- * 将持久化记录转换为 SDK 标准 ProcessInfo 快照。
- */
-function toSdkProcessInfo(record: StoredProcessRecord): ProcessInfo {
-  const ctrl = (record.control ?? record.controlState ?? "free") as ProcessInfo["control"];
-  const exitDetails =
-    record.exitCode !== undefined || record.exitSignal !== undefined
-      ? { code: record.exitCode ?? null, signal: record.exitSignal ?? null }
-      : undefined;
 
-  return {
-    id: record.processId,
-    hostEpoch: record.hostEpoch,
-    state: record.state as any,
-    control: ctrl,
-    io: (record.ioConfig ?? { mode: "pipe" }) as any,
-    capabilities: (record.capabilities ?? {
-      pty: false,
-      resize: false,
-      inputEOF: false,
-      interruptForeground: false,
-      terminationScope: "process",
-    }) as any,
-    createdAt: record.createdAt ?? new Date().toISOString(),
-    exit: exitDetails,
-    endReason: record.endReason as any,
-    outputClosed: Boolean(record.outputClosed),
-    outputEndReason: record.outputEndReason as any,
-    effectiveLimits: (record.effectiveLimits ?? {
-      idleMs: 60000,
-      lifetimeMs: 3600000,
-      outputBufferBytes: 4 * 1024 * 1024,
-    }) as any,
-  };
-}
 
-/**
- * 将内部模型转换为持久化记录。
- */
-function toStoredProcessRecord(
-  owner: ProcessOwner,
-  info: ProcessInfo,
-  startRequestId?: string
-): StoredProcessRecord {
-  return {
-    processId: info.id,
-    tenantId: owner.tenantId,
-    principalId: owner.principalId,
-    packageInstanceId: owner.packageInstanceId,
-    generationId: owner.generationId,
-    hostEpoch: info.hostEpoch,
-    state: info.state,
-    controlState: info.control,
-    control: info.control,
-    ioConfig: info.io as any,
-    capabilities: info.capabilities as any,
-    createdAt: info.createdAt,
-    exitCode: info.exit ? info.exit.code : null,
-    exitSignal: info.exit ? info.exit.signal : null,
-    endReason: info.endReason ?? null,
-    outputClosed: info.outputClosed,
-    outputEndReason: info.outputEndReason ?? null,
-    inputClosed: false,
-    effectiveLimits: info.effectiveLimits as any,
-    startRequestId,
-  };
-}
-
-/**
- * 校验正整数毫秒时长参数，非法时抛出参数错误。
- */
-function checkPositiveDurationMs(value: number, field: string): void {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new ProcessError(INPUT_VALIDATION_FAILED, `Invalid ${field}: must be a positive integer (milliseconds)`, {
-      [field]: value,
-    });
-  }
-}
-
-/**
- * 内部诊断日志汇聚器（私有实现）。
- *
- * 持有最近的持久化失败与驱动终止失败等诊断信息：优先写入注入的 logger，
- * 缺失时保留在内存环形缓冲区，避免静默吞没异常。
- */
-class DiagnosticsSink {
-  static readonly DEFAULT_BUFFER_LIMIT = 100;
-
-  private readonly logger?: Logger;
-  private readonly bufferLimit: number;
-  private readonly diagnostics: string[] = [];
-
-  constructor(options?: { logger?: Logger; bufferLimit?: number }) {
-    this.logger = options?.logger;
-    this.bufferLimit = options?.bufferLimit ?? DiagnosticsSink.DEFAULT_BUFFER_LIMIT;
-  }
-
-  record(message: string, err?: unknown): void {
-    const detail = err instanceof Error ? `${err.name}: ${err.message}` : err !== undefined ? String(err) : "";
-    const line = detail ? `${message} (${detail})` : message;
-    this.diagnostics.push(`${new Date().toISOString()} ${line}`);
-    if (this.diagnostics.length > this.bufferLimit) {
-      this.diagnostics.shift();
-    }
-    this.logger?.warn("[ProcessManager] " + line);
-  }
-
-  recent(): string[] {
-    return [...this.diagnostics].reverse();
-  }
-}
 
 /**
  * 受管进程核心管理器。
@@ -298,6 +157,8 @@ export class ProcessManager {
   /** 控制权仲裁器：独占控制权状态机全部推进路径的唯一持有者 */
   /** 输入调度器：输入队列入队、串行调度与接管原语的唯一持有者 */
   private readonly inputDispatcher: InputDispatcher;
+  private readonly quotaTracker: ProcessQuotaTracker;
+  private readonly controlManager: ProcessControlManager;
   private initPromise: Promise<number> | undefined;
   private isShutdown = false;
 
@@ -346,6 +207,17 @@ export class ProcessManager {
         maxPendingQueueBytesPerHost: this.quotas.maxPendingQueueBytesPerHost,
       }
     );
+    this.quotaTracker = new ProcessQuotaTracker({
+      processes: this.processes,
+      quotas: this.quotas,
+      defaultLimits: this.defaultLimits,
+      countRetainedOutputBufferBytes: () => this.countRetainedOutputBufferBytes(),
+      evictLRUUntil: (targetBytes) => this.terminalOutputCache.evictLRUUntil(targetBytes)
+    });
+    this.controlManager = new ProcessControlManager({
+      persistState: (processId, patch) => this.persistState(processId, patch),
+      takeoverQueue: (proc, reason) => this.inputDispatcher.takeoverQueue(proc, reason)
+    });
   }
 
   /**
@@ -535,7 +407,7 @@ export class ProcessManager {
       }
 
       // 宿主与作用域配额检查
-      this.checkSpawnQuotas(scope, input.limits?.outputBufferBytes);
+      this.quotaTracker.checkSpawnQuotas(scope, input.limits?.outputBufferBytes);
 
       // 驱动能力校验
       const caps = this.driver.getCapabilities();
@@ -1053,22 +925,7 @@ export class ProcessManager {
     if (!proc) {
       return;
     }
-
-    checkOwnerAuthorized(owner, proc.owner);
-
-    if (proc.info.control === "quarantined" || proc.info.control === "closed") {
-      return;
-    }
-
-    proc.info.control = "quarantined";
-
-    // 调度器同步原子接管输入队列：纪元递增、标记失败、登记落盘、清空与字节归零
-    this.inputDispatcher.takeoverQueue(proc, CONTROL_REVOKED);
-
-    await this.persistState(processId, {
-      control: "quarantined",
-      controlState: "quarantined",
-    });
+    await this.controlManager.quarantine(proc, owner, reason);
   }
 
   /**
@@ -1412,69 +1269,6 @@ export class ProcessManager {
     }
   }
 
-  /**
-   * 启动受管进程时的配额容量校验。
-   */
-  private checkSpawnQuotas(scope: string, requestedBufferBytes?: number): void {
-    let scopeActive = 0;
-    let hostActive = 0;
-    let totalBuffer = 0;
-
-    for (const p of this.processes.values()) {
-      if (
-        p.info.state === "starting" ||
-        p.info.state === "running" ||
-        p.info.state === "stopping"
-      ) {
-        hostActive += 1;
-        totalBuffer += p.effectiveLimits.outputBufferBytes;
-        if (p.scope === scope) {
-          scopeActive += 1;
-        }
-      }
-    }
-
-    if (scopeActive >= this.quotas.maxActiveProcessesPerScope) {
-      throw new ProcessError(QUOTA_EXCEEDED, "Scope active process quota exceeded", {
-        scope,
-        limit: this.quotas.maxActiveProcessesPerScope,
-      });
-    }
-
-    if (hostActive >= this.quotas.maxActiveProcessesPerHost) {
-      throw new ProcessError(QUOTA_EXCEEDED, "Host active process quota exceeded", {
-        limit: this.quotas.maxActiveProcessesPerHost,
-      });
-    }
-
-    const perProcBuf = requestedBufferBytes ?? this.defaultLimits.outputBufferBytes;
-    if (perProcBuf > this.quotas.maxOutputBufferBytesPerProcess) {
-      throw new ProcessError(QUOTA_EXCEEDED, "Output buffer per process quota exceeded", {
-        requested: perProcBuf,
-        limit: this.quotas.maxOutputBufferBytesPerProcess,
-      });
-    }
-
-    // 终态保留输出日志实际占用字节数纳入宿主预算
-    const retainedBefore = this.countRetainedOutputBufferBytes();
-    totalBuffer += retainedBefore;
-
-    // 若新进程申请的缓冲使总预算超限，优先淘汰已有的终态保留日志（LRU 策略）
-    // 淘汰门槛为宿主预算扣除活跃进程已占字节与新申请字节，淘汰释放的字节数同步回扣宿主预算
-    if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
-      const activeBufferBytes = totalBuffer - retainedBefore;
-      const evictedBytes = this.terminalOutputCache.evictLRUUntil(
-        this.quotas.maxOutputBufferBytesPerHost - perProcBuf - activeBufferBytes
-      );
-      totalBuffer -= evictedBytes;
-    }
-
-    if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
-      throw new ProcessError(QUOTA_EXCEEDED, "Host output buffer quota exceeded", {
-        limit: this.quotas.maxOutputBufferBytesPerHost,
-      });
-    }
-  }
 
   /**
    * 统计当前宿主所有活跃进程累计输入队列待写入字节总数。

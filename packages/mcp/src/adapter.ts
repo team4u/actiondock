@@ -1,29 +1,6 @@
-import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import {
-  ACTIONDOCK_VERSION,
-  ActionDockError,
-  createActionDock,
-  createNodePlatform,
-  findProjectRoot,
-  MCP_TOOL_NAME_COLLISION,
-  PACKAGE_NOT_FOUND,
-  PROJECT_ROOT_NOT_FOUND,
-  type ActionDockService,
-} from "@actiondock/core";
-import {
-  createActionDockHost,
-  isActionAllowed,
-  type ActionDockHost,
-} from "@actiondock/core/server";
-import { resolvePackageRoot } from "@actiondock/core/registry";
-import type {
-  PackageRuntime,
-  PackageRuntimeOptions,
-} from "@actiondock/core/package";
-import { createNonClosingStorageView } from "@actiondock/core/package";
-import { parseActionRef } from "@actiondock/core/graph";
+import { ACTIONDOCK_VERSION, type ActionDockService } from "@actiondock/core";
+import type { ActionDockHost } from "@actiondock/core/server";
+import type { PackageRuntime } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { registerTasksExtension } from "./register-tasks-extension";
@@ -34,6 +11,9 @@ import {
   isAsyncExecutionRequested,
   stripExecutionWrapper,
 } from "./execution-mode";
+import { resolveService } from "./service-resolver";
+import { mapAndFilterActions } from "./tool-mapper";
+export { resolveService };
 
 /**
  * MCP 工具回调上下文中携带的请求级取消信号字段。
@@ -64,21 +44,6 @@ function extractCancelSignal(ctx: ToolCallbackContext | undefined): AbortSignal 
     );
   }
   return signal;
-}
-
-/**
- * 解析 Action 引用字符串为包标识与动作标识（容错语义）。
- *
- * 委派 core 的 parseActionRef 单一事实源完成解析；非法形态（如尾部斜杠、
- * 含冒号等）回退为整体短名处理，与适配层既有的注册容错行为保持一致，
- * 不让目录聚合阶段的脏数据中断服务启动。
- */
-function splitActionRef(ref: string): { packageId?: string; actionId: string } {
-  try {
-    return parseActionRef(ref);
-  } catch {
-    return { actionId: ref };
-  }
 }
 
 /**
@@ -128,190 +93,7 @@ export function toMcpResult(result: ExecutionResult) {
 }
 
 
-/**
- * 构造携带结构化错误码的工具名冲突异常。
- *
- * @param toolName 冲突的工具名
- */
-function toolNameCollisionError(toolName: string): Error & { code: string } {
-  const err = new Error(`MCP tool name collision detected for tool '${toolName}'`) as Error & {
-    code: string;
-  };
-  err.code = MCP_TOOL_NAME_COLLISION;
-  return err;
-}
 
-/**
- * 解析或基于选项创建底层 ActionDockService 统一门面。
- */
-export async function resolveService(
-  options: ActionDockMcpOptions
-): Promise<{ service: ActionDockService; ownsService: boolean }> {
-  if (options.service) {
-    return { service: options.service, ownsService: false };
-  }
-
-  if (options.host) {
-    return { service: options.host, ownsService: false };
-  }
-
-  if (options.runtime) {
-    const host = await createActionDockHost({
-      autoLoadCurrentProject: false,
-      scanLinkedPackages: false,
-    });
-    host.registerRuntime(options.runtime);
-    return { service: host, ownsService: false };
-  }
-
-  const packages: PackageRuntimeOptions[] = [];
-
-  // 外部注入的 storage 生命周期默认由注入方管理，适配层仅委托读写不接管关闭
-  // （非接管视图复用 core 单一事实源）；显式声明 ownStorageLifecycle 时透传
-  // 原始实例，随 target.close() 级联关闭
-  const appStorage = options.storage
-    ? options.ownStorageLifecycle
-      ? options.storage
-      : createNonClosingStorageView(options.storage)
-    : undefined;
-
-  // 多分支共享的包选项基底单点构造：storage 视图、家目录与配置覆写
-  // 在此收敛一次，各 push 分支仅叠加自身特有字段
-  const basePkgOpts = {
-    ...(appStorage ? { storage: appStorage } : {}),
-    customHome: options.customHome,
-    configOverrides: options.configOverrides,
-  };
-
-  if (options.actions) {
-    packages.push({
-      ...basePkgOpts,
-      projectConfig: {
-        id: options.packageId || "default",
-        name: options.packageId || "default",
-        version: ACTIONDOCK_VERSION,
-      },
-      actions: options.actions,
-      inMemory: true,
-    } as PackageRuntimeOptions);
-  }
-
-  if (options.projectRoots && options.projectRoots.length > 0) {
-    for (const root of options.projectRoots) {
-      const abs = resolve(root);
-      const detected = findProjectRoot(abs);
-      if (!detected) {
-        throw new ActionDockError(
-          PROJECT_ROOT_NOT_FOUND,
-          `Project root '${root}' is not a valid ActionDock package (actiondock.json not found)`
-        );
-      }
-      packages.push({
-        ...basePkgOpts,
-        packageRoot: detected,
-      } as PackageRuntimeOptions);
-    }
-  }
-
-  const targetPackageIds = options.packageIds || options.packageAllowlist;
-  if (targetPackageIds && targetPackageIds.length > 0) {
-    for (const pkgId of targetPackageIds) {
-      const root = resolvePackageRoot(pkgId, undefined, options.customHome);
-      if (!root || !existsSync(root)) {
-        throw new ActionDockError(
-          PACKAGE_NOT_FOUND,
-          `Package '${pkgId}' not found in registry`
-        );
-      }
-      packages.push({
-        ...basePkgOpts,
-        packageRoot: root,
-      } as PackageRuntimeOptions);
-    }
-  }
-
-  let projectRoot = options.projectRoot;
-  if (options.projectRoot) {
-    const abs = resolve(options.projectRoot);
-    const detected = findProjectRoot(abs);
-    if (!detected) {
-      throw new ActionDockError(
-        PROJECT_ROOT_NOT_FOUND,
-        `Project root '${options.projectRoot}' is not a valid ActionDock package (actiondock.json not found)`
-      );
-    }
-    projectRoot = detected;
-  }
-
-  if (
-    !projectRoot &&
-    packages.length === 0 &&
-    !options.all &&
-    !options.packageId
-  ) {
-    const currentRoot = findProjectRoot(process.cwd());
-    if (!currentRoot) {
-      throw new ActionDockError(
-        PROJECT_ROOT_NOT_FOUND,
-        "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
-      );
-    }
-    projectRoot = currentRoot;
-  }
-
-  if (options.packageId && !options.actions && packages.length === 0) {
-    const root = resolvePackageRoot(options.packageId, undefined, options.customHome);
-    if (!root || !existsSync(root)) {
-      throw new ActionDockError(
-        PACKAGE_NOT_FOUND,
-        `Package '${options.packageId}' not found in registry`
-      );
-    }
-    packages.push({
-      ...basePkgOpts,
-      packageRoot: root,
-      dataDir: options.dataDir,
-    } as PackageRuntimeOptions);
-  }
-
-  let platform = options.platform;
-  if (!platform && typeof process !== "undefined" && process.versions?.node) {
-    platform = createNodePlatform({
-      customHome: options.customHome,
-      dataDir: options.dataDir,
-      rootDir: projectRoot,
-    });
-  }
-
-  for (const pkg of packages) {
-    if (typeof pkg === "object" && pkg !== null && !("info" in pkg)) {
-      if (platform && !pkg.platform) {
-        pkg.platform = platform;
-      }
-      if (!pkg.dataDir && options.dataDir) {
-        pkg.dataDir = options.dataDir;
-      }
-    }
-  }
-
-  const service = await createActionDock({
-    type: "local",
-    projectRoot,
-    packages: packages.length > 0 ? packages : undefined,
-    scanLinkedPackages: Boolean(options.all),
-    hostOptions: {
-      autoLoadCurrentProject: packages.length === 0,
-    },
-    // MCP 服务进程是长驻执行宿主，声明数据目录持有者身份，
-    // 打开时收割遗留孤儿运行记录
-    recoverOrphans: true,
-    customHome: options.customHome,
-    dataDir: options.dataDir,
-    platform,
-  });
-
-  return { service, ownsService: true };
-}
 
 export type ActionDockMcpServer = McpServer & {
   close: () => Promise<void>;
@@ -364,107 +146,9 @@ export async function createActionDockMcpServer(
 
   // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
   let rawActions = await service.discovery.listActions();
-  // 引用解析单点归一：每项仅解析一次，后续各轮（白名单过滤、去重、频次统计、
-  // 工具命名）复用同一结果，避免同一列表对 splitActionRef 的三轮重复调用；
-  // 显式 packageId 与解析所得 packageId 分别留存，各轮按既有优先级消费
-  const parsedRefs = new Map<
-    (typeof rawActions)[number],
-    { explicitPkgId: string; parsedPkgId?: string; baseId: string }
-  >();
-  for (const act of rawActions) {
-    if (act.id.includes("/")) {
-      const parsed = splitActionRef(act.id);
-      parsedRefs.set(act, {
-        explicitPkgId: act.packageId || "",
-        parsedPkgId: parsed.packageId,
-        baseId: parsed.actionId,
-      });
-    } else {
-      parsedRefs.set(act, { explicitPkgId: act.packageId || "", baseId: act.id });
-    }
-  }
-  if (allowedPackageIds && allowedPackageIds.length > 0) {
-    // 白名单轮：显式 packageId 优先，缺失时回退解析所得
-    rawActions = rawActions.filter((act) => {
-      const ref = parsedRefs.get(act)!;
-      const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
-      return pkgId ? allowedPackageIds.includes(pkgId) : false;
-    });
-  }
-  if (options.actionAllowlist && options.actionAllowlist.length > 0) {
-    rawActions = rawActions.filter((act) => {
-      const ref = parsedRefs.get(act)!;
-      const pkgId = ref.explicitPkgId || ref.parsedPkgId || undefined;
-      return isActionAllowed({ packageId: pkgId, actionId: ref.baseId }, options.actionAllowlist);
-    });
-  }
-  const seenActionKeys = new Map<string, (typeof rawActions)[number]>();
-  for (const act of rawActions) {
-    const ref = parsedRefs.get(act)!;
-    const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
-    const key = `${pkgId}:${ref.baseId}`;
-    const existing = seenActionKeys.get(key);
-    if (existing) {
-      // 若已存在的项是全限定名（含 /），而当前项是短名（不含 /），优先保留短名项
-      if (existing.id.includes("/") && !act.id.includes("/")) {
-        seenActionKeys.set(key, act);
-      }
-    } else {
-      seenActionKeys.set(key, act);
-    }
-  }
-  const actions = Array.from(seenActionKeys.values());
+  const mappedActions = mapAndFilterActions(rawActions, allowedPackageIds, options.actionAllowlist);
 
-  // 统计 Action 基础 ID 出现频次，用于同名冲突命名空间隔离
-  const baseCounts = new Map<string, number>();
-  for (const act of actions) {
-    const baseId = parsedRefs.get(act)!.baseId;
-    baseCounts.set(baseId, (baseCounts.get(baseId) || 0) + 1);
-  }
-
-  const registeredToolNames = new Set<string>();
-
-  // 多包判定（循环外一次算清）：不同 packageId 去重计数大于 1，
-  // 或任一 id 含斜杠（跨包限定名形态），则工具描述需附全限定 id 锚点；
-  // 本轮与工具命名轮一致：解析所得 packageId 优先，缺失时回退显式声明
-  const distinctPackageIds = new Set(
-    actions
-      .map((a) => {
-        const ref = parsedRefs.get(a)!;
-        return ref.parsedPkgId || a.packageId;
-      })
-      .filter((pkg): pkg is string => Boolean(pkg))
-  );
-  const isMultiPackage = distinctPackageIds.size > 1 || actions.some((a) => a.id.includes("/"));
-
-  for (const action of actions) {
-    const ref = parsedRefs.get(action)!;
-    const baseId = ref.baseId;
-    const packageId = ref.parsedPkgId || action.packageId;
-
-    const count = baseCounts.get(baseId) || 1;
-    let toolName = baseId;
-    if (count > 1 && packageId) {
-      const cleanPkgId = packageId.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
-      toolName = `${cleanPkgId}_${baseId}`;
-    } else if (toolName.includes("/") && packageId) {
-      const cleanPkgId = packageId.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
-      toolName = `${cleanPkgId}_${baseId}`;
-    }
-
-    if (toolName.length > 64) {
-      const hash = createHash("sha256").update(toolName).digest("hex").slice(0, 8);
-      toolName = `${toolName.slice(0, 55)}_${hash}`;
-    }
-
-    if (registeredToolNames.has(toolName)) {
-      throw toolNameCollisionError(toolName);
-    }
-    registeredToolNames.add(toolName);
-
-    const description = isMultiPackage
-      ? `[${action.id}] ${action.description || ""}`.trim()
-      : action.description;
+  for (const { toolName, action, description } of mappedActions) {
 
     // 工具执行：tools/call 委托 service.execution.run() 或 service.execution.start()
     server.registerTool(

@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import {
   loadProjectConfig,
@@ -33,6 +32,8 @@ import type {
   SelectionPlannerOptions,
 } from "./types";
 import type { ProjectConfigWithDeclarations } from "./types";
+import { computeLockfileInfo } from "./lockfile-resolver";
+import { extractExternalDependencies, isIgnoredPath } from "./dependency-resolver";
 
 /**
  * 递归扫描指定目录下的文件，返回绝对路径列表。
@@ -43,95 +44,6 @@ function walkDirectory(dir: string): string[] {
   return traverseDirectory(dir).map((entry) => entry.fullPath);
 }
 
-/**
- * 测试与类型声明文件后缀常量（供 fallback 清单过滤与 isIgnoredPath 共享同一口径）。
- */
-const TEST_FILE_SUFFIXES = [
-  ".test.ts",
-  ".test.js",
-  ".test.tsx",
-  ".test.jsx",
-  ".spec.ts",
-  ".spec.js",
-  ".spec.tsx",
-  ".spec.jsx",
-  ".d.ts",
-];
-
-/**
- * 忽略的文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
- */
-function isIgnoredPath(relPath: string): boolean {
-  const normalized = relPath.replace(/\\/g, "/");
-  return (
-    normalized.startsWith("node_modules/") ||
-    normalized.includes("/node_modules/") ||
-    normalized.startsWith(".git/") ||
-    normalized.startsWith("dist/") ||
-    normalized.startsWith(".actiondock/") ||
-    TEST_FILE_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
-  );
-}
-
-/**
- * 支持的包管理器锁文件候选列表。
- */
-const KNOWN_LOCKFILES = [
-  "package-lock.json",
-  "npm-shrinkwrap.json",
-  "bun.lockb",
-  "bun.lock",
-  "pnpm-lock.yaml",
-  "yarn.lock",
-];
-
-/**
- * 读取并计算项目锁文件元数据及 SHA-256 摘要。
- */
-function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): LockfileInfo | undefined {
-  if (preferredLockfile) {
-    const lockPath = resolve(projectRoot, preferredLockfile);
-    assertPathWithinRoot(projectRoot, lockPath, "lockfile");
-    if (existsSync(lockPath) && statSync(lockPath).isFile()) {
-      const content = readFileSync(lockPath);
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      return {
-        name: basename(lockPath),
-        path: lockPath,
-        sha256,
-      };
-    }
-    throw new PlannerError(
-      `Specified lockfile not found on disk: ${preferredLockfile}`,
-      "LOCKFILE_NOT_FOUND"
-    );
-  }
-
-  for (const lockFileName of KNOWN_LOCKFILES) {
-    const lockPath = join(projectRoot, lockFileName);
-    if (existsSync(lockPath)) {
-      try {
-        if (statSync(lockPath).isFile()) {
-          const content = readFileSync(lockPath);
-          const sha256 = createHash("sha256").update(content).digest("hex");
-          return {
-            name: lockFileName,
-            path: lockPath,
-            sha256,
-          };
-        }
-      } catch (err: any) {
-        // 存在但不可读：显式报错而非静默跳过，否则构建在无锁文件摘要状态下继续，可复现性校验形同虚设
-        throw new PlannerError(
-          `Lockfile '${lockFileName}' exists but could not be read in ${projectRoot}: ${err?.message || String(err)}`,
-          "LOCKFILE_READ_ERROR"
-        );
-      }
-    }
-  }
-
-  return undefined;
-}
 
 /**
  * 构造备用清单映射，仅读取文件系统条目与配置声明，杜绝 AST 源码分析与动态代码执行。
@@ -192,53 +104,6 @@ function generateFallbackManifest(
     id: config?.id || basename(projectRoot),
     actions,
   };
-}
-
-/**
- * 收集项目根目录 package.json 中声明的外部 npm 依赖。
- *
- * 防御与透明原则：文件不存在返回空集合（合法的无依赖工程）；
- * 文件存在但不可读或 JSON 损坏时抛 PlannerError 并携带路径与原因，
- * 严禁静默吞掉导致后续 build 的生产依赖、pack 的产物依赖与 vendorDeps 全部无声缺失。
- */
-function extractExternalDependencies(projectRoot: string): ExternalDependency[] {
-  const pkgPath = join(projectRoot, "package.json");
-  if (!existsSync(pkgPath)) return [];
-
-  let parsed: Record<string, unknown>;
-  try {
-    const raw = readFileSync(pkgPath, "utf-8");
-    parsed = JSON.parse(raw);
-  } catch (err: any) {
-    throw new PlannerError(
-      `Failed to read or parse package.json at ${pkgPath}: ${err?.message || String(err)}`,
-      "EXTRACT_DEPS_ERROR"
-    );
-  }
-
-  const deps: ExternalDependency[] = [];
-
-  if (parsed.dependencies && typeof parsed.dependencies === "object") {
-    for (const [name, versionRange] of Object.entries(parsed.dependencies as Record<string, unknown>)) {
-      deps.push({
-        name,
-        versionRange: String(versionRange),
-        isDev: false,
-      });
-    }
-  }
-
-  if (parsed.devDependencies && typeof parsed.devDependencies === "object") {
-    for (const [name, versionRange] of Object.entries(parsed.devDependencies as Record<string, unknown>)) {
-      deps.push({
-        name,
-        versionRange: String(versionRange),
-        isDev: true,
-      });
-    }
-  }
-
-  return deps;
 }
 
 /**

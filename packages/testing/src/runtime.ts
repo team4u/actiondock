@@ -475,6 +475,10 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   let anonCounter = 0;
   const anonymousActions = new WeakMap<object, string>();
 
+  let sharedServicePromise: Promise<ActionDockService> | undefined;
+
+  let lastActionsSize = -1;
+
   const execute = async <I = unknown, O = unknown>(
     action: ActionDefinition<I, O> | string,
     input: I = {} as I,
@@ -506,105 +510,107 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
     const targetRef = actionRef.includes("/") ? actionRef : `${packageId}/${actionRef}`;
 
-    const packageActionsMap = new Map<string, Record<string, ActionDefinition>>();
-    packageActionsMap.set(packageId, {});
+    if (sharedServicePromise && lastActionsSize !== actionsMap.size) {
+      const oldService = await sharedServicePromise;
+      await oldService.close();
+      sharedServicePromise = undefined;
+    }
 
-    for (const [k, v] of actionsMap) {
-      if (k.includes("/")) {
-        const slashIdx = k.indexOf("/");
-        const pkg = k.slice(0, slashIdx);
-        const actId = k.slice(slashIdx + 1);
-        if (pkg === packageId) {
-          packageActionsMap.get(packageId)![actId] = v;
-        } else {
-          if (!packageActionsMap.has(pkg)) {
-            packageActionsMap.set(pkg, {});
+    if (!sharedServicePromise) {
+      lastActionsSize = actionsMap.size;
+      const packageActionsMap = new Map<string, Record<string, ActionDefinition>>();
+      packageActionsMap.set(packageId, {});
+
+      for (const [k, v] of actionsMap) {
+        if (k.includes("/")) {
+          const slashIdx = k.indexOf("/");
+          const pkg = k.slice(0, slashIdx);
+          const actId = k.slice(slashIdx + 1);
+          if (pkg === packageId) {
+            packageActionsMap.get(packageId)![actId] = v;
+          } else {
+            if (!packageActionsMap.has(pkg)) {
+              packageActionsMap.set(pkg, {});
+            }
+            packageActionsMap.get(pkg)![actId] = v;
           }
-          packageActionsMap.get(pkg)![actId] = v;
+        } else {
+          packageActionsMap.get(packageId)![k] = v;
         }
-      } else {
-        packageActionsMap.get(packageId)![k] = v;
       }
-    }
 
-    const depPackages = Array.from(packageActionsMap.keys()).filter((p) => p !== packageId);
-    const rootDeps: Record<string, string> = {};
-    for (const dep of depPackages) {
-      rootDeps[dep] = "*";
-    }
-
-    const packageActionSpecs: Record<string, { entry: string; uses?: string[] }> = {
-      ...(options.projectConfig?.actions as any),
-    };
-    for (const [actId, actDef] of Object.entries(packageActionsMap.get(packageId) || {})) {
-      const existing = packageActionSpecs[actId] || { entry: actId };
-      const explicitUses = (actDef as any)?.uses || (actDef as any)?.contract?.uses || [];
-      const uses = existing.uses ? [...existing.uses] : [...explicitUses];
+      const depPackages = Array.from(packageActionsMap.keys()).filter((p) => p !== packageId);
+      const rootDeps: Record<string, string> = {};
       for (const dep of depPackages) {
-        if (!uses.includes(`${dep}/*`)) {
-          uses.push(`${dep}/*`);
-        }
+        rootDeps[dep] = "*";
       }
-      packageActionSpecs[actId] = {
-        ...existing,
-        uses,
+
+      const packageActionSpecs: Record<string, { entry: string; uses?: string[] }> = {
+        ...(options.projectConfig?.actions as any),
       };
-    }
+      for (const [actId, actDef] of Object.entries(packageActionsMap.get(packageId) || {})) {
+        const existing = packageActionSpecs[actId] || { entry: actId };
+        const explicitUses = (actDef as any)?.uses || (actDef as any)?.contract?.uses || [];
+        const uses = existing.uses ? [...existing.uses] : [...explicitUses];
+        packageActionSpecs[actId] = {
+          ...existing,
+          uses,
+        };
+      }
 
-    const packagesList: any[] = [
-      {
-        projectConfig: {
-          id: packageId,
-          name: options.projectConfig?.name || packageId,
-          version: options.projectConfig?.version || "1.0.0",
-          description: options.projectConfig?.description || "",
-          actions: packageActionSpecs,
-          config: options.projectConfig?.config,
-          dependencies: {
-            ...options.projectConfig?.dependencies,
-            ...rootDeps,
+      const packagesList: any[] = [
+        {
+          projectConfig: {
+            id: packageId,
+            name: options.projectConfig?.name || packageId,
+            version: options.projectConfig?.version || "1.0.0",
+            description: options.projectConfig?.description || "",
+            actions: packageActionSpecs,
+            config: options.projectConfig?.config,
+            dependencies: {
+              ...options.projectConfig?.dependencies,
+              ...rootDeps,
+            },
           },
+          actions: packageActionsMap.get(packageId) || {},
+          storage: safeStorage,
+          inMemory: true,
+          configOverrides: options.configOverrides,
+          logger: memoryLogger,
         },
-        actions: packageActionsMap.get(packageId) || {},
-        storage: safeStorage,
-        inMemory: true,
-        configOverrides: options.configOverrides,
-        logger: memoryLogger,
-      },
-    ];
+      ];
 
-    for (const depPkg of depPackages) {
-      packagesList.push({
-        projectConfig: {
-          id: depPkg,
-          name: depPkg,
-          version: "1.0.0",
-        },
-        actions: packageActionsMap.get(depPkg) || {},
-        storage: safeStorage,
+      for (const depPkg of depPackages) {
+        packagesList.push({
+          projectConfig: {
+            id: depPkg,
+            name: depPkg,
+            version: "1.0.0",
+          },
+          actions: packageActionsMap.get(depPkg) || {},
+          storage: safeStorage,
+          inMemory: true,
+          logger: memoryLogger,
+        });
+      }
+
+      sharedServicePromise = createActionDock({
+        packages: packagesList,
+        platform: testPlatform,
         inMemory: true,
-        logger: memoryLogger,
+        autoLoadCurrentProject: false,
+        scanLinkedPackages: false,
       });
     }
 
-    const service = await createActionDock({
-      packages: packagesList,
-      platform: testPlatform,
-      inMemory: true,
-      autoLoadCurrentProject: false,
-      scanLinkedPackages: false,
-    });
+    const service = await sharedServicePromise;
 
-    try {
-      const ticket = await service.execution.start(targetRef, input as JsonValue, execOptions);
-      if (!ticket.result) {
-        throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
-      }
-      const res = (await ticket.result) as ExecutionResult<O>;
-      return res;
-    } finally {
-      await service.close();
+    const ticket = await service.execution.start(targetRef, input as JsonValue, execOptions);
+    if (!ticket.result) {
+      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
+    const res = (await ticket.result) as ExecutionResult<O>;
+    return res;
   };
 
   const run = async <I = unknown, O = unknown>(

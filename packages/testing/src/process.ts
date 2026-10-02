@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import {
   PROCESS_TIMEOUT,
   PROCESS_CANCELLED,
@@ -124,161 +123,6 @@ export interface MockProcessExecutorOptions {
   clock?: Clock;
 }
 
-/**
- * 基于 node:child_process spawn 的原生真实命令执行回退。
- */
-async function executeRealProcess(
-  input: ProcessRunInput,
-  call?: CallOptions
-): Promise<ProcessRunResult> {
-  const executable = input.spec.executable;
-  const args = input.spec.args ?? [];
-  const maxOutputBytes = input.maxOutputBytes ?? 10 * 1024 * 1024;
-  const timeoutMs = input.timeoutMs ?? 0;
-
-  if (call?.signal?.aborted) {
-    throw call.signal.reason instanceof ProcessError
-      ? call.signal.reason
-      : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
-  }
-
-  const env: Record<string, string | undefined> =
-    input.spec.env?.inherit === "none"
-      ? { ...(input.spec.env?.set ?? {}) }
-      : { ...process.env, ...(input.spec.env?.set ?? {}) };
-  if (input.spec.env?.unset) {
-    for (const key of input.spec.env.unset) {
-      delete env[key];
-    }
-  }
-
-  return new Promise<ProcessRunResult>((resolve, reject) => {
-    let settled = false;
-    let timedOut = false;
-    let cancelled = false;
-    let truncated = false;
-    let totalBytes = 0;
-    const chunks: OutputChunk[] = [];
-
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(executable, args, {
-        cwd: input.spec.cwd,
-        env: env as Record<string, string>,
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-      });
-    } catch (err: any) {
-      reject(new ProcessError(PROCESS_FAILED, err?.message || String(err)));
-      return;
-    }
-
-    const terminateChild = () => {
-      if (child.pid && process.platform !== "win32") {
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-        }
-      } else {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }
-    };
-
-    let timeoutTimer: NodeJS.Timeout | undefined;
-    if (timeoutMs > 0) {
-      timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        terminateChild();
-      }, timeoutMs);
-      if (typeof (timeoutTimer as any)?.unref === "function") {
-        (timeoutTimer as any).unref();
-      }
-    }
-
-    let onAbort: (() => void) | undefined;
-    if (call?.signal) {
-      onAbort = () => {
-        cancelled = true;
-        terminateChild();
-      };
-      call.signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    const cleanup = () => {
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-        timeoutTimer = undefined;
-      }
-      if (call?.signal && onAbort) {
-        call.signal.removeEventListener("abort", onAbort);
-        onAbort = undefined;
-      }
-    };
-
-    const appendChunk = (stream: "stdout" | "stderr", buf: Buffer) => {
-      if (truncated) return;
-      const len = buf.byteLength;
-      if (totalBytes + len > maxOutputBytes) {
-        const remaining = Math.max(0, maxOutputBytes - totalBytes);
-        if (remaining > 0) {
-          chunks.push({
-            stream,
-            data: encodeBytes(new Uint8Array(buf.buffer, buf.byteOffset, remaining)),
-          });
-        }
-        totalBytes = maxOutputBytes;
-        truncated = true;
-        terminateChild();
-      } else {
-        chunks.push({
-          stream,
-          data: encodeBytes(new Uint8Array(buf.buffer, buf.byteOffset, len)),
-        });
-        totalBytes += len;
-      }
-    };
-
-    child.stdout?.on("data", (data: Buffer) => appendChunk("stdout", data));
-    child.stderr?.on("data", (data: Buffer) => appendChunk("stderr", data));
-
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new ProcessError(PROCESS_FAILED, err.message));
-    });
-
-    child.on("close", (code, signal) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-
-      if (timedOut) {
-        reject(new ProcessError(PROCESS_TIMEOUT, `Process exceeded timeout of ${timeoutMs}ms`));
-        return;
-      }
-      if (cancelled || call?.signal?.aborted) {
-        reject(
-          call?.signal?.reason instanceof ProcessError
-            ? call.signal.reason
-            : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled")
-        );
-        return;
-      }
-
-      resolve({
-        exit: { code, signal: signal ?? null },
-        chunks,
-        truncated,
-      });
-    });
-  });
-}
 
 /**
  * 模拟进程执行器实现。
@@ -420,7 +264,8 @@ export class MockProcessExecutor implements ProcessExecutor {
     }
 
     if (this.fallbackToReal) {
-      return executeRealProcess(input, call);
+      const { createNodePlatform } = await import("@actiondock/core");
+      return createNodePlatform().process.run(input, call);
     }
 
     return this.processManager.run(owner, input, call);

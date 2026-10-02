@@ -265,6 +265,10 @@ export interface RuntimeStorage {
   checkAndRecordIdempotency?(record: IdempotencyRecord): IdempotencyCheckResult;
   getIdempotencyRecord?(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined;
 
+  // --- Events 审计事件仓储 ---
+  appendEvent?(eventType: string, payload: unknown): void;
+  queryEvents?(eventType?: string): any[];
+
   /** 关闭底层 SQLite 数据库连接并释放句柄 */
   close(): void | Promise<void>;
 }
