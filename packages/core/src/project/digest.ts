@@ -132,7 +132,7 @@ export function canonicalizeJson(value: unknown): string {
 
   if (type === "number") {
     if (!Number.isFinite(value)) {
-      throw new TypeError("RFC 8785 JSON 规范化拒绝非有限数值 (NaN 或 Infinity)");
+      throw new TypeError("RFC 8785 JSON canonicalization rejects non-finite numbers (NaN or Infinity)");
     }
     if (Object.is(value, -0) || value === 0) {
       return "0";

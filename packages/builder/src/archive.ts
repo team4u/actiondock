@@ -316,7 +316,7 @@ function tarHeader(
     prefix = cleanPath.slice(0, split);
     name = cleanPath.slice(split + 1) + (trailingSlash ? "/" : "");
     if (split <= 0 || Buffer.byteLength(prefix, "utf8") > 155 || Buffer.byteLength(name, "utf8") > 100) {
-      throw new BuilderError(`归档路径超出 USTAR 字段容量: ${path}`, "ARCHIVE_PATH_TOO_LONG");
+      throw new BuilderError(`Archive path exceeds USTAR field capacity: ${path}`, "ARCHIVE_PATH_TOO_LONG");
     }
   }
 

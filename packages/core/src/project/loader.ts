@@ -280,7 +280,7 @@ export async function loadActions(
             actionId,
             entry: item.entry,
             entryPath,
-            hint: `请检查 actiondock.json 中 action '${actionId}' 的 entry 配置 '${item.entry}' 是否正确。`,
+            hint: `Check whether the entry configuration '${item.entry}' for action '${actionId}' in actiondock.json is correct.`,
           }
         );
       }
@@ -323,7 +323,7 @@ export async function loadActions(
             actionId,
             entry: item.entry,
             entryPath,
-            hint: `确保 '${item.entry}' 使用 export default defineAction(...) 导出了可执行处理函数。`,
+            hint: `Ensure that '${item.entry}' exports a runnable handler using export default defineAction(...).`,
           }
         );
       }

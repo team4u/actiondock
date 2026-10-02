@@ -411,7 +411,7 @@ export class MockProcessExecutor implements ProcessExecutor {
    */
   private describeMatchers(): string {
     if (this.mocks.length === 0) {
-      return "（无任何已注册匹配器）";
+      return "(no registered matchers)";
     }
     return this.mocks
       .map((m) => {

@@ -63,10 +63,10 @@ export class ActionPackageVersionConflictError extends ActionDockError {
   readonly conflicts: Array<{ requester: string; rangeOrVersion: string }>;
 
   constructor(packageId: string, conflicts: Array<{ requester: string; rangeOrVersion: string }>) {
-    const details = conflicts.map((c) => `'${c.requester}' 要求 '${c.rangeOrVersion}'`).join(", ");
+    const details = conflicts.map((c) => `'${c.requester}' requires '${c.rangeOrVersion}'`).join(", ");
     super(
       ACTION_PACKAGE_VERSION_CONFLICT,
-      `ACTION_PACKAGE_VERSION_CONFLICT: 逻辑包 '${packageId}' 存在不可收敛的版本冲突: ${details}`
+      `ACTION_PACKAGE_VERSION_CONFLICT: Package '${packageId}' has irreconcilable version conflicts: ${details}`
     );
     this.name = "ActionPackageVersionConflictError";
     this.packageId = packageId;
@@ -87,8 +87,8 @@ export class UndeclaredActionDependencyError extends ActionDockError {
       ? `Hint: Add '${targetRef}' to the 'uses' array of action '${caller}' in actiondock.json, then run 'ad validate'.`
       : undefined;
     const msg = caller
-      ? `UNDECLARED_ACTION_DEPENDENCY: Action '${caller}' 未在 'uses' 中声明对 '${targetRef}' 的跨包依赖${hint ? `\n${hint}` : ""}`
-      : `UNDECLARED_ACTION_DEPENDENCY: 根调用 Action '${targetRef}' 被拒绝: 目标包既非 actiondock.json 直接依赖，亦未被可见 Playbook 委托${reason ? ` (${reason})` : ""}`;
+      ? `UNDECLARED_ACTION_DEPENDENCY: Action '${caller}' has not declared cross-package dependency on '${targetRef}' in 'uses'${hint ? `\n${hint}` : ""}`
+      : `UNDECLARED_ACTION_DEPENDENCY: Root invocation of action '${targetRef}' was rejected: target package is neither a direct dependency in actiondock.json nor delegated by a visible Playbook${reason ? ` (${reason})` : ""}`;
     super(UNDECLARED_ACTION_DEPENDENCY, msg, hint ? { hint } : undefined, undefined, hint);
     this.name = "UndeclaredActionDependencyError";
     this.targetRef = targetRef;

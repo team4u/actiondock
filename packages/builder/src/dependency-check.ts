@@ -206,10 +206,10 @@ export function assertRelativeDependenciesIntegrity(
         const relToParent = relative(resolvedParent, resolvedTarget);
         const isSiblingPackage = !isPathOutsideBoundary(relToParent);
         const detail = isSiblingPackage
-          ? `它位于项目根的父目录内，疑似 monorepo 相邻包。若确需依赖，请将其纳入本项目或改用包管理器依赖声明；若为本地辅助模块，请调整目录结构或将其声明进 files`
-          : `它完全位于项目外部。导出的 Skill 产物不允许携带项目外部的相对路径依赖，请将所需模块移入项目内并声明进 files`;
+          ? `It is located in the parent directory of the project root, likely a neighboring package in a monorepo. If this dependency is required, please include it in this project or declare it as a package manager dependency; if it is a local helper module, please adjust the directory structure or declare it in 'files'`
+          : `It is completely outside the project. Exported Skill assets must not contain relative path dependencies outside the project. Please move the required module into the project and declare it in 'files'`;
         throw new BuilderError(
-          `Action '${actionId}' 通过相对路径 '${specifier}' 引用了项目根之外的模块（解析到 '${resolvedTarget}'）。${detail}`,
+          `Action '${actionId}' imports a module outside the project root via relative path '${specifier}' (resolved to '${resolvedTarget}'). ${detail}`,
           "EXTERNAL_LOCAL_DEPENDENCY"
         );
       }

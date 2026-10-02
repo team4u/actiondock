@@ -435,7 +435,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     if (typeof idOrAction === "string") {
       if (!maybeAction) {
         throw new Error(
-          `registerAction(id, action) 调用缺少 action 定义：id=${idOrAction}`
+          `registerAction(id, action) requires action definition: id=${idOrAction}`
         );
       }
       actionsMap.set(idOrAction, maybeAction);

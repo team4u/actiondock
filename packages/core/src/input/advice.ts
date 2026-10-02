@@ -599,12 +599,12 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
         array: {
           encoding: "json-array",
           assignmentTemplate: `${key}:=JSON`,
-          hint: "建议使用 --input-file 或标准输入传递数组结构",
+          hint: "Using --input-file or stdin is recommended for arrays",
         },
         object: {
           encoding: "json-object",
           assignmentTemplate: `${key}:=JSON`,
-          hint: "大型结构建议使用 --input-file",
+          hint: "Using --input-file is recommended for large structures",
         },
       };
       const flatSafeEntry = flatSafeTypeTable[propType];
@@ -733,10 +733,10 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
  * 禁止在本文件另建独立正则分叉。
  */
 export const FLAT_ENCODING_GUIDELINES: readonly string[] = [
-  "字符串: path=TEXT",
-  "JSON 标量与结构: path:=JSON (例如 count:=1, enabled:=true)",
-  "数组元素: path.INDEX=... (例如 items.0=first)",
-  "提示: 复杂嵌套或大段文本建议使用 --input 或 --input-file",
+  "Strings: path=TEXT",
+  "JSON scalars and structures: path:=JSON (e.g. count:=1, enabled:=true)",
+  "Array elements: path.INDEX=... (e.g. items.0=first)",
+  "Tip: For complex nested data or long text, using --input or --input-file is recommended",
 ];
 
 

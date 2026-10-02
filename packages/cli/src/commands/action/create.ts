@@ -239,11 +239,11 @@ ${returnBody}
     writeActionTypes(root, manifest);
 
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
-    writeStdout(`\n查阅参数契约:`, context);
+    writeStdout(`\nParameter contract:`, context);
     writeStdout(`  ad describe ${id}`, context);
-    writeStdout(`\n调用方式:`, context);
-    writeStdout(`  根据 describe 输出的赋值模板传递参数：ad run ${id} --json -- ASSIGNMENT...`, context);
-    writeStdout(`  复杂输入或大段文本：ad run ${id} --json --input-file input.json`, context);
+    writeStdout(`\nUsage:`, context);
+    writeStdout(`  Pass parameters according to describe assignment template: ad run ${id} --json -- ASSIGNMENT...`, context);
+    writeStdout(`  Complex input or large text: ad run ${id} --json --input-file input.json`, context);
   } catch (err: any) {
     throw wrapAsExecutionError(err);
   }

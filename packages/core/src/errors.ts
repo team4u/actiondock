@@ -279,7 +279,7 @@ export function describeActionLoadFailure(
   const rootCause = err instanceof Error ? err.message : String(err ?? "");
   const isMissingModule = isMissingModuleError(rootCause);
   const hint = isMissingModule
-    ? `项目依赖缺失，请在 '${context.projectRoot}' 目录下运行 'npm install --omit=dev' 安装依赖后再试。`
+    ? `Project dependencies are missing. Run 'npm install --omit=dev' in '${context.projectRoot}' and try again.`
     : undefined;
 
   return {

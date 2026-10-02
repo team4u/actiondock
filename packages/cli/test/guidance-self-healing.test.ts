@@ -24,7 +24,7 @@ describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
       });
 
       assert.strictEqual(failure.details.hint, 
-        "项目依赖缺失，请在 '/workspace/my-pkg' 目录下运行 'npm install --omit=dev' 安装依赖后再试。"
+        "Project dependencies are missing. Run 'npm install --omit=dev' in '/workspace/my-pkg' and try again."
       );
     });
 
