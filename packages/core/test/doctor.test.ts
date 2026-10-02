@@ -87,7 +87,7 @@ export default defineAction({
     assert.notStrictEqual(manifestCheck, undefined);
     assert.strictEqual(manifestCheck?.status, "warn");
     assert.ok((manifestCheck?.message).includes("doctor-act.ts"));
-    assert.ok((manifestCheck?.fix).includes("actiondock.json"));
+    assert.ok(manifestCheck!.fix!.includes("actiondock.json"));
 
     const storageProjectCheck = report.checks.find((c) => c.id === "project.storage");
     assert.notStrictEqual(storageProjectCheck, undefined);
@@ -135,8 +135,8 @@ export default defineAction({
     assert.strictEqual(depCheck?.status, "warn");
     assert.ok((depCheck?.message).includes("team.missing-deps"));
     assert.ok((depCheck?.message).includes("miss node_modules"));
-    assert.ok((depCheck?.fix).includes("npm install"));
-    assert.ok(!(depCheck?.fix).includes("bun install"));
+    assert.ok(depCheck!.fix!.includes("npm install"));
+    assert.ok(!depCheck!.fix!.includes("bun install"));
 
     rmSync(depPkg, { recursive: true, force: true });
   });
@@ -184,7 +184,7 @@ export default defineAction(async () => ({ ok }));`
     assert.notStrictEqual(filesCheckError, undefined);
     assert.strictEqual(filesCheckError?.status, "error");
     assert.ok((filesCheckError?.message).includes("Actions import modules from 'src/'"));
-    assert.ok((filesCheckError?.fix).includes('"files": ["src"]'));
+    assert.ok(filesCheckError!.fix!.includes('"files": ["src"]'));
 
     // 声明 files: ["src"] 后变为 ok
     const configPath = join(pkgDir, "actiondock.json");

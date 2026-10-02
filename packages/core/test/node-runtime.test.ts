@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type * as cp from "node:child_process";
 import {
@@ -253,7 +253,7 @@ describe("NodeModuleLoader 单元测试", () => {
   // 夹具统一落在系统临时目录（mkdtemp 随机子目录），避免污染仓库工作区
   const testDir = mkdtempSync(join(tmpdir(), "test-loader-"));
 
-  beforeAll(() => {
+  before(() => {
     // mkdtempSync 已在声明处创建目录，此处无需重复创建
     writeFileSync(
       join(testDir, "service.ts"),
@@ -286,7 +286,7 @@ describe("NodeModuleLoader 单元测试", () => {
     );
   });
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(testDir, { recursive: true, force: true });
     } catch {

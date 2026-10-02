@@ -48,11 +48,11 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
   it("拒绝目录路径并抛出 UNSUPPORTED_FILE_TYPE", async () => {
     try {
       await openRegularInputFile(tempDir);
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_FILE_READ_FAILED);
-      assert.strictEqual(err.details?.reason, "UNSUPPORTED_FILE_TYPE");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "UNSUPPORTED_FILE_TYPE");
     }
   });
 
@@ -60,7 +60,7 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     const missing = join(tempDir, "non-existent-file.json");
     try {
       await openRegularInputFile(missing);
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_FILE_NOT_FOUND);
@@ -75,11 +75,11 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     const opened = await openRegularInputFile(largeFile);
     try {
       await opened.readBounded(5); // 限制 5 字节
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
-      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MAX_INPUT_BYTES");
     } finally {
       await opened.close();
     }

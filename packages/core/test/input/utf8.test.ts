@@ -24,8 +24,8 @@ describe("Strict UTF-8 与 BOM 工具套件", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "INVALID_UTF8");
-        assert.strictEqual(err.details?.source, "inline-json");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "INVALID_UTF8");
+        assert.strictEqual((err.details as Record<string, unknown>)?.source, "inline-json");
       }
     });
 

@@ -1,4 +1,4 @@
-import { afterAll, describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -602,7 +602,7 @@ describe("@actiondock/mcp Adapter", () => {
     }
   });
 
-  afterAll(() => {
+  after(() => {
     try {
       rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
@@ -1191,8 +1191,9 @@ describe("@actiondock/mcp Adapter", () => {
     assert.notStrictEqual(callResult, undefined);
     assert.ok(!(callResult.isError));
     assert.deepStrictEqual(receivedInput, { query: "test" });
-    assert.strictEqual(receivedInput.execution, undefined);
-    assert.strictEqual(receivedInput.__async, undefined);
+    const receivedRecord = receivedInput as Record<string, unknown>;
+    assert.strictEqual(receivedRecord.execution, undefined);
+    assert.strictEqual(receivedRecord.__async, undefined);
 
     await server.close();
   });

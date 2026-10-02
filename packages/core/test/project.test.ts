@@ -72,7 +72,7 @@ describe("Project Loader & Init", () => {
     assert.strictEqual(playbooks.size, 1);
     assert.strictEqual(playbooks.has("greet-user"), true);
     assert.deepStrictEqual(playbooks.get("greet-user")?.actions, ["sample.greet"]);
-    assert.ok((playbooks.get("greet-user")?.content).includes("# Greeting SOP"));
+    assert.ok(playbooks.get("greet-user")!.content.includes("# Greeting SOP"));
   });
 
   it("parses pure markdown playbook correctly without YAML frontmatter", () => {

@@ -411,7 +411,7 @@ describe("SqliteRuntimeStorage", () => {
       assert.strictEqual(updated?.status, "success");
       assert.deepStrictEqual(updated?.output, { y: 2 });
       assert.strictEqual(typeof updated?.durationMs, "number");
-      assert.ok((updated?.durationMs) >= 0);
+      assert.ok(updated!.durationMs! >= 0);
 
       const list = storage.listRuns();
       assert.strictEqual(list.length, 1);

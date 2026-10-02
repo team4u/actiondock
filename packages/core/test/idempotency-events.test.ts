@@ -516,7 +516,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       });
 
       assert.strictEqual(eventsRes.status, 200);
-      assert.ok((eventsRes.headers.get("content-type")).includes("text/event-stream"));
+      assert.ok(eventsRes.headers.get("content-type")!.includes("text/event-stream"));
 
       const bodyText = await eventsRes.text();
       assert.ok((bodyText).includes("id: "));
@@ -536,7 +536,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       });
 
       assert.strictEqual(eventsRes.status, 200);
-      assert.ok((eventsRes.headers.get("content-type")).includes("text/event-stream"));
+      assert.ok(eventsRes.headers.get("content-type")!.includes("text/event-stream"));
       const bodyText = await eventsRes.text();
       assert.ok((bodyText).includes("id: "));
       assert.ok((bodyText).includes("event: "));

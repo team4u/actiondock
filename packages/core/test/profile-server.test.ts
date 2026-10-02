@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, test, it } from "node:test";
+import { after, before, describe, test, it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -53,7 +53,7 @@ describe("Profile Management & Remote Server", () => {
   let serverUrl: string;
   const SECRET_TOKEN = "test-secret-token-12345";
 
-  beforeAll(async () => {
+  before(async () => {
     // 1. Scaffold a test project with an action
     initProject(projectDir, {
       id: "test.profile-app",
@@ -146,7 +146,7 @@ Follow these steps to greet a user.
   });
 
 
-  afterAll(async () => {
+  after(async () => {
     if (serverInstance) {
       serverInstance.stop();
     }
@@ -311,7 +311,7 @@ Follow these steps to greet a user.
     assert.strictEqual(t4.type, "local");
   });
 
-  test("Security > Loopback host detection and non-loopback auth requirement", async () => {
+  test("Security > Loopback host detection and non-loopback auth requirement", { timeout: 30000 }, async () => {
     assert.strictEqual(isLoopbackHost("127.0.0.1"), true);
     assert.strictEqual(isLoopbackHost("localhost"), true);
     assert.strictEqual(isLoopbackHost("::1"), true);
@@ -343,7 +343,7 @@ Follow these steps to greet a user.
     });
     assert.ok((secureServer.port) > 0);
     await secureServer.stop();
-  }, 30000);
+  });
 
   test("Security > constant-time string comparison and token verification", () => {
     assert.strictEqual(safeEqual("abc", "abc"), true);
@@ -395,7 +395,7 @@ Follow these steps to greet a user.
     // checkRemoteHealth catches it inside try and returns ok: false safely
     const insecureResult = await checkRemoteHealth("http://remote.example.com:5177", "some-token");
     assert.strictEqual(insecureResult.ok, false);
-    assert.ok((insecureResult.error).includes("Insecure HTTP connection with authentication token"));
+    assert.ok(insecureResult.error!.includes("Insecure HTTP connection with authentication token"));
     assert.ok((insecureResult.latencyMs) >= 0);
 
     // 2. Allow insecure HTTP override explicitly
@@ -406,7 +406,7 @@ Follow these steps to greet a user.
       { allowInsecureHttp: true }
     );
     assert.strictEqual(allowedInsecure.ok, false);
-    assert.ok(!(allowedInsecure.error).includes("Insecure HTTP connection"));
+    assert.ok(!allowedInsecure.error!.includes("Insecure HTTP connection"));
 
     // 3. Verify timer cleanup via finally block on both success and failure
     let clearTimeoutCount = 0;
@@ -733,7 +733,7 @@ Follow these steps to greet a user.
       assert.ok((pbs.length) >= 1);
       const sop = pbs.find((p: any) => p.id === "sample.sample-sop");
       assert.notStrictEqual(sop, undefined);
-      assert.ok((sop?.description).includes("SOP for greeting"));
+      assert.ok(sop!.description!.includes("SOP for greeting"));
 
       // Show playbook
       const pbDetail = await fetchRemotePlaybookShow(serverUrl, "sample.sample-sop", SECRET_TOKEN);
@@ -911,7 +911,7 @@ Follow these steps to greet a user.
         },
       });
       assert.strictEqual(sseRes.status, 200);
-      assert.ok((sseRes.headers.get("content-type")).includes("text/event-stream"));
+      assert.ok(sseRes.headers.get("content-type")!.includes("text/event-stream"));
 
       // Read at least one chunk
       const reader = sseRes.body?.getReader();

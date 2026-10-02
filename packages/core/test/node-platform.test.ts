@@ -75,7 +75,9 @@ describe("createNodePlatform 平台工厂测试", () => {
       assert.strictEqual(stat.isDirectory(), false);
 
       const outsidePath = join(tempDir, "..", "outside-escape.txt");
-      await assert.rejects(platform.files.writeFile(outsidePath, "escape"));
+      await assert.rejects(async () => {
+        await platform.files.writeFile(outsidePath, "escape");
+      });
     });
 
     it("进程执行驱动能够基于 ProcessManager 与 NodeProcessDriver 执行命令并捕获输出", async () => {

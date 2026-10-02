@@ -220,7 +220,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     // 进程退出后再次写入，预期抛出 INPUT_CLOSED
     try {
       await driver.write(handle, new TextEncoder().encode("late-write"));
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof ProcessError);
       assert.strictEqual(err.code, INPUT_CLOSED);
@@ -332,7 +332,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
           outputClosed() {},
         }
       );
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof ProcessError);
       assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
@@ -364,7 +364,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     try {
       await driver.resize(handle, 100, 40);
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof ProcessError);
       assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
@@ -394,7 +394,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       );
       try {
         await driver.interruptForeground(handle);
-        expect.unreachable();
+        assert.fail("不应到达此分支");
       } catch (err: any) {
         assert.ok(err instanceof ProcessError);
         assert.strictEqual(err.code, UNSUPPORTED_CAPABILITY);
@@ -534,7 +534,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     // dispose 后实例已从受管表移除，写入按输入管道已关闭语义抛出 INPUT_CLOSED 结构化异常
     try {
       await driver.write(handle, new Uint8Array([1]));
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof ProcessError);
       assert.strictEqual(err.code, INPUT_CLOSED);

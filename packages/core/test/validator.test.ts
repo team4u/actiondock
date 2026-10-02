@@ -99,7 +99,7 @@ describe("JSON Schema Validator 测试套件", () => {
   it("支持布尔 Schema 校验：false 拒绝所有数据，true 允许合法数据", () => {
     const resFalse = validateSchema(false, { any: "data" });
     assert.strictEqual(resFalse.valid, false);
-    assert.ok((resFalse.errors?.[0]).includes("Schema is false"));
+    assert.ok(resFalse.errors![0]!.includes("Schema is false"));
 
     const resTrue = validateSchema(true, { key: 42 });
     assert.strictEqual(resTrue.valid, true);
@@ -189,7 +189,7 @@ describe("JSON Schema Validator 测试套件", () => {
     // false Schema 拒绝所有输入
     const resFalse = validateSchemaOnly(false, { a: 1 });
     assert.strictEqual(resFalse.valid, false);
-    assert.ok((resFalse.errors?.[0]).includes("Schema is false"));
+    assert.ok(resFalse.errors![0]!.includes("Schema is false"));
 
     // true, undefined, 空对象均通过
     assert.strictEqual(validateSchemaOnly(true, { a: 1 }).valid, true);

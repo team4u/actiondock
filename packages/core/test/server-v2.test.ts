@@ -299,7 +299,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(sseRes.status, 200);
-      assert.ok((sseRes.headers.get("content-type")).includes("text/event-stream"));
+      assert.ok(sseRes.headers.get("content-type")!.includes("text/event-stream"));
 
       const reader = sseRes.body?.getReader();
       if (reader) {
@@ -973,7 +973,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       assert.strictEqual(res.headers.get("access-control-allow-origin"), "http://localhost:3000");
       const allowMethods = res.headers.get("access-control-allow-methods");
       assert.notStrictEqual(allowMethods, undefined);
-      assert.ok((allowMethods).includes("PUT"));
+      assert.ok(allowMethods!.includes("PUT"));
       assert.strictEqual(allowMethods, "GET, POST, PUT, DELETE, OPTIONS");
     });
 
@@ -990,7 +990,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       assert.strictEqual(res.headers.get("access-control-allow-origin"), "https://app.actiondock.com");
       const allowMethods = res.headers.get("access-control-allow-methods");
       assert.notStrictEqual(allowMethods, undefined);
-      assert.ok((allowMethods).includes("DELETE"));
+      assert.ok(allowMethods!.includes("DELETE"));
       assert.strictEqual(allowMethods, "GET, POST, PUT, DELETE, OPTIONS");
     });
 
@@ -1008,9 +1008,9 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       assert.strictEqual(res.headers.get("access-control-allow-origin"), "http://localhost:3000");
       const allowHeaders = res.headers.get("access-control-allow-headers");
       assert.notStrictEqual(allowHeaders, undefined);
-      assert.ok((allowHeaders).includes("Idempotency-Key"));
-      assert.ok((allowHeaders).includes("X-Request-Id"));
-      assert.ok((allowHeaders).includes("Last-Event-ID"));
+      assert.ok(allowHeaders!.includes("Idempotency-Key"));
+      assert.ok(allowHeaders!.includes("X-Request-Id"));
+      assert.ok(allowHeaders!.includes("Last-Event-ID"));
       assert.strictEqual(allowHeaders, 
         "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID"
       );

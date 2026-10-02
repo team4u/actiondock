@@ -26,11 +26,11 @@ describe("标准输入有界读取 readStdinBounded", () => {
 
     try {
       await readStdinBounded(stream, { maxInputBytes: 8 });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
-      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MAX_INPUT_BYTES");
     }
   });
 
@@ -39,11 +39,11 @@ describe("标准输入有界读取 readStdinBounded", () => {
 
     try {
       await readStdinBounded(stream, { byteStreamOnly: true });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_FILE_READ_FAILED);
-      assert.strictEqual(err.details?.reason, "INVALID_STREAM_CHUNK_TYPE");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "INVALID_STREAM_CHUNK_TYPE");
     }
   });
 
@@ -62,14 +62,14 @@ describe("标准输入有界读取 readStdinBounded", () => {
         maxInputBytes: 5,
         signal: controller.signal,
       });
-      expect.unreachable();
+      assert.fail("不应到达此分支");
     } catch (err: any) {
       // 随后触发 abort
       controller.abort(new Error("late-abort"));
       // 必须是超限错误，而不是 abort 错误
       assert.ok(err instanceof InputError);
       assert.strictEqual(err.code, INPUT_LIMIT_EXCEEDED);
-      assert.strictEqual(err.details?.reason, "MAX_INPUT_BYTES");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MAX_INPUT_BYTES");
     }
   });
 

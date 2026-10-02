@@ -38,7 +38,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INPUT_CONFLICT);
-        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MULTIPLE_INPUT_MODES");
         assert.ok((err.message).includes("mutually exclusive"));
       }
 
@@ -52,7 +52,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INPUT_CONFLICT);
-        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MULTIPLE_INPUT_MODES");
       }
 
       // input + inputFile
@@ -65,7 +65,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INPUT_CONFLICT);
-        assert.strictEqual(err.details?.reason, "MULTIPLE_INPUT_MODES");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "MULTIPLE_INPUT_MODES");
       }
     });
   });
@@ -78,7 +78,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -90,7 +90,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "SYNTAX_ERROR");
       }
 
       // 纯 BOM
@@ -100,7 +100,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -114,7 +114,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "SYNTAX_ERROR");
       }
     });
 
@@ -127,7 +127,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       } catch (err: any) {
         assert.ok(err instanceof InputError);
         assert.strictEqual(err.code, INVALID_JSON);
-        assert.strictEqual(err.details?.reason, "SYNTAX_ERROR");
+        assert.strictEqual((err.details as Record<string, unknown>)?.reason, "SYNTAX_ERROR");
       }
     });
   });

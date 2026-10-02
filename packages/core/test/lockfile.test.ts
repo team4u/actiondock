@@ -78,7 +78,7 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
     const invalidVersion = { ...validLock, lockfileVersion: 99 as any };
     const resInvalid = validateLockfile(invalidVersion);
     assert.strictEqual(resInvalid.valid, false);
-    assert.ok((resInvalid.errors?.[0]).includes("lockfileVersion"));
+    assert.ok(resInvalid.errors![0]!.includes("lockfileVersion"));
   });
 
   it("validateLockfile 严格校验非对象根结构与 packages 字段", () => {
@@ -236,7 +236,7 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
 
     const check2 = validateLockfile(lockfile, { projectRoot: tempDir });
     assert.strictEqual(check2.valid, false);
-    assert.ok((check2.errors?.[0]).includes("Manifest digest mismatch"));
-    assert.ok((check2.errors?.[0]).includes("Re-resolution required"));
+    assert.ok(check2.errors![0]!.includes("Manifest digest mismatch"));
+    assert.ok(check2.errors![0]!.includes("Re-resolution required"));
   });
 });
