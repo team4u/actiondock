@@ -232,6 +232,7 @@ describe("@actiondock/sdk", () => {
 
     // 验证以结构化 ActionRef 指定 packageId 调用以完全限定键名注册的 Action
     const scopedCaller = defineAction({
+      uses: ["shared-pkg/worker"],
       async run(_input, ctx) {
         return ctx.actions.invoke({ packageId: "shared-pkg", actionId: "worker" }, { msg: "hello" });
       },
@@ -303,6 +304,7 @@ describe("@actiondock/sdk", () => {
     });
 
     const caller = defineAction({
+      uses: ["ext-pkg/calc"],
       async run(input: { x: number }, ctx) {
         const local = await ctx.actions.invoke("calc", { x: input.x });
         const ext = await ctx.actions.invoke({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
