@@ -38,7 +38,6 @@ import {
   BuilderError,
   PlannerError,
   exportSkill,
-  exportSkillBatch,
   exportCompositeSkill,
   SelectionPlanner,
 } from "../src";
@@ -905,38 +904,17 @@ export default defineAction({
       assert.ok(/^[a-f0-9]{64}$/.test(packResult.sha256));
     });
 
-    it("tsconfig 声明 paths 路径别名时 pack 显式拒绝而非静默编译出不可解析产物", async () => {
-      const tsconfigPath = join(tempDir, "tsconfig.json");
-      writeFileSync(
-        tsconfigPath,
-        JSON.stringify(
-          {
-            compilerOptions: {
-              target: "ES2022",
-              module: "NodeNext",
-              moduleResolution: "NodeNext",
-              baseUrl: ".",
-              paths: {
-                "@/*": ["./lib/*"],
-              },
-            },
-          },
-          null,
-          2
-        ),
-        "utf-8"
-      );
+    it("依托 Node 24 原生类型擦除直接收集并打包 TypeScript 源码与资产", async () => {
+      const dryResult = await packProject({
+        projectRoot: tempDir,
+        dryRun: true,
+      });
 
-      let caught: any;
-      try {
-        await packProject({ projectRoot: tempDir });
-      } catch (err) {
-        caught = err;
-      }
-
-      assert.ok(caught instanceof BuilderError);
-      assert.strictEqual(caught.code, "PATHS_ALIAS_UNSUPPORTED");
-      assert.ok((caught.message).includes("paths"));
+      // 验证直接打包 TypeScript 源码入口，不生成中间编译的 .d.ts
+      assert.ok(dryResult.files.includes("actions/greet.ts"));
+      assert.ok(!dryResult.files.some((f) => f.endsWith(".d.ts")));
+      assert.ok(dryResult.files.includes("actiondock.json"));
+      assert.ok(dryResult.files.includes("package.json"));
     });
 
     it("将 TypeScript Action 项目打包为标准 tgz 压缩包且不修改源工程", async () => {
@@ -1842,34 +1820,7 @@ export default defineAction({
       }
     });
 
-    it("支持批量导出多个 Skill 包 (exportSkillBatch)", async () => {
-      const pkg2Dir = mkdtempSync(join(tmpdir(), "ad-builder-test-pkg2-"));
-      try {
-        initProject(pkg2Dir, {
-          id: "test.second-package",
-          name: "Second Package",
-          description: "Second test package",
-        });
-
-        const batchRes = await exportSkillBatch({
-          projectRoots: [tempDir, pkg2Dir],
-          outDir: join(tempDir, "dist", "batch-skills"),
-        });
-
-        assert.strictEqual(batchRes.results.length, 2);
-        assert.strictEqual(batchRes.results[0].packageId, "test.builder-fixture");
-        assert.strictEqual(batchRes.results[1].packageId, "test.second-package");
-
-        assert.strictEqual(existsSync(join(batchRes.outDir, "builder-fixture-skill", "SKILL.md")), true);
-        assert.strictEqual(existsSync(join(batchRes.outDir, "second-package-skill", "SKILL.md")), true);
-        assert.strictEqual(existsSync(join(batchRes.outDir, "builder-fixture-skill", "actiondock.skill.json")), false);
-      } finally {
-        safeCleanDir(pkg2Dir);
-      }
-    });
-
-    it("批量与复合导出拒绝空项目列表", async () => {
-      await assert.rejects(exportSkillBatch({ projectRoots: [] }), BuilderError);
+    it("复合导出拒绝空项目列表", async () => {
       await assert.rejects(exportCompositeSkill({ bundleName: "empty-suite", projectRoots: [] }), BuilderError);
     });
 
@@ -2574,18 +2525,7 @@ export default defineAction({
         initProject(join(clashBase, "a"), { id: "alpha.shared", name: "Alpha Shared" });
         initProject(join(clashBase, "b"), { id: "beta.shared", name: "Beta Shared" });
 
-        const batchRes = await exportSkillBatch({
-          projectRoots: [join(clashBase, "a"), join(clashBase, "b")],
-          outDir: join(clashBase, "dist", "batch"),
-        });
-        assert.strictEqual(batchRes.results.length, 2);
-
-        // 两个导出目录必须同时存在（互不覆盖）
-        assert.strictEqual(existsSync(join(batchRes.results[0].skillDir, "SKILL.md")), true);
-        assert.strictEqual(existsSync(join(batchRes.results[1].skillDir, "SKILL.md")), true);
-        assert.notStrictEqual(batchRes.results[0].skillDir, batchRes.results[1].skillDir);
-
-        // 复合导出同样保证子包目录互不覆盖
+        // 复合导出保证子包目录互不覆盖
         const compositeRes = await exportCompositeSkill({
           bundleName: "clash-bundle",
           projectRoots: [join(clashBase, "a"), join(clashBase, "b")],
@@ -2613,22 +2553,6 @@ export default defineAction({
       assert.ok(err instanceof PlannerError);
       assert.strictEqual(err.code, "EXTRACT_DEPS_ERROR");
       assert.ok((err.message).includes("package.json"));
-    });
-
-    it("tsconfig.json 解析失败时回退默认编译选项但输出显著告警", async () => {
-      writeFileSync(
-        join(tempDir, "tsconfig.json"),
-        "{ invalid tsconfig content !!!"
-      );
-      const captured = await captureConsoleWarn(async () => {
-        const res = await packProject({
-          projectRoot: tempDir,
-          dryRun: true,
-        });
-        return res;
-      });
-      assert.ok((captured.output).includes("Failed to parse tsconfig.json"));
-      assert.ok((captured.result.files.length) > 0);
     });
   });
 

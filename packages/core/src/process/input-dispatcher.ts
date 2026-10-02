@@ -6,7 +6,6 @@ import {
   INPUT_OUTCOME_UNKNOWN,
   INVALID_STATE,
   PROCESS_QUARANTINED,
-  QUEUE_FULL,
   ProcessError,
 } from "../errors";
 import type {
@@ -39,11 +38,6 @@ export interface InputDispatcherHost {
   refreshIdleTimer(proc: ManagedProcessRecord): void;
   /** 内部诊断记录 */
   recordDiagnostic(message: string, err?: unknown): void;
-  /** 宿主级输入队列待写字节统计 */
-  countHostPendingInputBytes(): number;
-  /** 输入队列容量配额 */
-  readonly maxPendingQueueBytesPerProcess: number;
-  readonly maxPendingQueueBytesPerHost: number;
 }
 
 /**
@@ -104,11 +98,11 @@ export class InputDispatcher {
   }
 
   /**
-   * 入队写入操作：同步阶段完成授权校验、输入通道校验、队列容量检查与字节预扣；
+   * 入队写入操作：同步阶段完成授权校验与输入通道校验；
    * 异步阶段落盘排队收据并推送队列，随后触发串行调度。
    *
    * 返回的 Promise 在收据成功入队后 resolve（state 为 queued）；
-   * 落盘或推送失败时回滚字节预扣并原样抛出。
+   * 落盘或推送失败时原样抛出。
    */
   async enqueueWrite(proc: ManagedProcessRecord, input: EnqueueWriteInput): Promise<OperationReceipt> {
     // 入队前校验进程仍处于可交互状态
@@ -119,54 +113,28 @@ export class InputDispatcher {
     }
 
     const rawBytes = input.data;
-    const dataSize = rawBytes.byteLength;
 
-    // 待写入队列容量检查：在任何 await 前同步原子校验并预占配额
-    if (proc.pendingInputBytes + dataSize > this.host.maxPendingQueueBytesPerProcess) {
-      throw new ProcessError(QUEUE_FULL, "Process pending input queue limit exceeded", {
-        limit: this.host.maxPendingQueueBytesPerProcess,
-      });
-    }
+    const receipt: OperationReceipt = {
+      requestId: input.requestId,
+      state: "queued",
+    };
 
-    const totalHostPending = this.host.countHostPendingInputBytes();
-    if (totalHostPending + dataSize > this.host.maxPendingQueueBytesPerHost) {
-      throw new ProcessError(QUEUE_FULL, "Host pending input queue limit exceeded", {
-        limit: this.host.maxPendingQueueBytesPerHost,
-      });
-    }
+    await this.host.persistReceipt(input.key, receipt, input.payloadHash);
 
-    // 同步占位预扣队列配额，杜绝并发 await 窗口穿透
-    proc.pendingInputBytes += dataSize;
-    let pendingBytesCommitted = false;
+    proc.inputQueue.push({
+      type: "write",
+      requestId: input.requestId,
+      bytes: rawBytes,
+      receipt,
+      key: input.key,
+      payloadHash: input.payloadHash,
+      cancelEpoch: proc.cancelEpoch,
+    });
 
-    try {
-      const receipt: OperationReceipt = {
-        requestId: input.requestId,
-        state: "queued",
-      };
+    // 异步调度推进
+    queueMicrotask(() => void this.dispatchNext(proc));
 
-      await this.host.persistReceipt(input.key, receipt, input.payloadHash);
-
-      proc.inputQueue.push({
-        type: "write",
-        requestId: input.requestId,
-        bytes: rawBytes,
-        receipt,
-        key: input.key,
-        payloadHash: input.payloadHash,
-        cancelEpoch: proc.cancelEpoch,
-      });
-      pendingBytesCommitted = true;
-
-      // 异步调度推进
-      queueMicrotask(() => void this.dispatchNext(proc));
-
-      return { ...receipt };
-    } finally {
-      if (!pendingBytesCommitted) {
-        proc.pendingInputBytes = Math.max(0, proc.pendingInputBytes - dataSize);
-      }
-    }
+    return { ...receipt };
   }
 
   /**
@@ -216,7 +184,6 @@ export class InputDispatcher {
       void this.host.persistReceipt(op.key, op.receipt, op.payloadHash);
     }
     proc.inputQueue = [];
-    proc.pendingInputBytes = 0;
   }
 
   /**
@@ -247,9 +214,6 @@ export class InputDispatcher {
             await this.host.persistReceipt(op.key, op.receipt, op.payloadHash);
           }
           proc.inputQueue.shift();
-          if (op.bytes && op.cancelEpoch === proc.cancelEpoch) {
-            proc.pendingInputBytes -= op.bytes.byteLength;
-          }
           continue;
         }
 
@@ -281,7 +245,6 @@ export class InputDispatcher {
             op.receipt.errorCode = INPUT_OUTCOME_UNKNOWN;
             await this.host.persistReceipt(op.key, op.receipt, op.payloadHash);
             proc.inputQueue.shift();
-            proc.pendingInputBytes -= op.bytes.byteLength;
             await this.host.quarantineProcess(
               proc.owner,
               proc.info.id,
@@ -340,9 +303,6 @@ export class InputDispatcher {
 
         await this.host.persistReceipt(op.key, op.receipt, op.payloadHash);
         proc.inputQueue.shift();
-        if (op.bytes) {
-          proc.pendingInputBytes -= op.bytes.byteLength;
-        }
       }
     } finally {
       proc.isDispatching = false;

@@ -166,7 +166,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad remove <package>` | 卸载并更新锁定依赖，提供原子回滚保护 |
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
-| `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引与建议赋值（别名 `ad show`） |
+| `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引与建议赋值 |
 | `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |

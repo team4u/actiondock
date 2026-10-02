@@ -6,7 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer } from "../src/adapter";
 
 describe("@actiondock/mcp Host Integration", () => {
-  it("connects ActionDockService directly, handling tools/list, sync/async tools/call, tasks/get, tasks/cancel, and close", async () => {
+  it("connects ActionDockService directly, handling tools/list, tools/call, cancellation, and close", async () => {
     let slowTaskCancelled = false;
 
     // 1. 定义测试用 Action
@@ -64,7 +64,7 @@ describe("@actiondock/mcp Host Integration", () => {
               },
               "task.slow": {
                 entry: "",
-                description: "慢速动作用于异步与取消测试",
+                description: "慢速动作用于取消测试",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -93,11 +93,6 @@ describe("@actiondock/mcp Host Integration", () => {
 
     let toolsListResult: any = null;
     let syncCallResult: any = null;
-    let asyncCallResult: any = null;
-    let taskGetResult: any = null;
-    let cancelCallResult: any = null;
-    let taskCancelResult: any = null;
-    let taskGetCancelledResult: any = null;
 
     let resolveAllDone: () => void;
     const allDonePromise = new Promise<void>((r) => {
@@ -139,7 +134,7 @@ describe("@actiondock/mcp Host Integration", () => {
       } else if (msg.id === 3) {
         syncCallResult = msg.result;
 
-        // 验证 tools/call 异步任务启动
+        // 验证标准 MCP 取消流程
         const slowToolName = toolsListResult.tools.find((t: any) =>
           t.name.includes("task.slow")
         )?.name;
@@ -150,62 +145,20 @@ describe("@actiondock/mcp Host Integration", () => {
           method: "tools/call",
           params: {
             name: slowToolName,
-            arguments: { durationMs: 1500, execution: { mode: "async" } },
+            arguments: { durationMs: 2000 },
           },
         });
-      } else if (msg.id === 4) {
-        asyncCallResult = JSON.parse(msg.result.content[0].text);
-        const taskId = asyncCallResult.taskId || asyncCallResult.runId;
 
-        // 验证 tasks/get 查询正在执行的任务
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 5,
-          method: "tasks/get",
-          params: { taskId },
-        });
-      } else if (msg.id === 5) {
-        taskGetResult = msg.result;
-
-        // 启动另一个慢任务以测试 tasks/cancel 取消流程
-        const slowToolName = toolsListResult.tools.find((t: any) =>
-          t.name.includes("task.slow")
-        )?.name;
-
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 6,
-          method: "tools/call",
-          params: {
-            name: slowToolName,
-            arguments: { durationMs: 3000, execution: { mode: "async" } },
-          },
-        });
-      } else if (msg.id === 6) {
-        cancelCallResult = JSON.parse(msg.result.content[0].text);
-        const cancelTaskId = cancelCallResult.taskId || cancelCallResult.runId;
-
-        // 验证 tasks/cancel
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 7,
-          method: "tasks/cancel",
-          params: { taskId: cancelTaskId, reason: "Testing MCP host cancel" },
-        });
-      } else if (msg.id === 7) {
-        taskCancelResult = msg.result;
-        const cancelTaskId = cancelCallResult.taskId || cancelCallResult.runId;
-
-        // 验证取消后 tasks/get 返回 cancelled 状态
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 8,
-          method: "tasks/get",
-          params: { taskId: cancelTaskId },
-        });
-      } else if (msg.id === 8) {
-        taskGetCancelledResult = msg.result;
-        resolveAllDone();
+        setTimeout(() => {
+          clientTransport.send({
+            jsonrpc: "2.0",
+            method: "notifications/cancelled",
+            params: { requestId: 4, reason: "Testing MCP host cancel" },
+          });
+          setTimeout(() => {
+            resolveAllDone();
+          }, 100);
+        }, 50);
       }
     };
 
@@ -241,32 +194,17 @@ describe("@actiondock/mcp Host Integration", () => {
     assert.strictEqual(syncParsed.ok, true);
     assert.deepStrictEqual(syncParsed.data, { sum: 42 });
 
-    // 6. 断言 tools/call 异步执行返回票据
-    assert.notStrictEqual(asyncCallResult, undefined);
-    assert.strictEqual(asyncCallResult.ok, true);
-    assert.strictEqual(asyncCallResult.status, "running");
-    assert.notStrictEqual(asyncCallResult.taskId, undefined);
-
-    // 7. 断言 tasks/get 查得运行记录
-    assert.notStrictEqual(taskGetResult, undefined);
-    assert.strictEqual(taskGetResult.task.taskId, asyncCallResult.taskId);
-    assert.ok((["working", "completed"]).includes(taskGetResult.task.status));
-
-    // 8. 断言 tasks/cancel 成功取消
-    assert.notStrictEqual(taskCancelResult, undefined);
-    assert.strictEqual(taskCancelResult.status, "cancelled");
-    assert.notStrictEqual(taskGetCancelledResult, undefined);
-    assert.strictEqual(taskGetCancelledResult.task.status, "cancelled");
+    // 6. 断言取消信号成功向下传播触发 Action 中止
     assert.strictEqual(slowTaskCancelled, true);
 
-    // 9. 断言 server.close() 优雅关闭 host 资源
+    // 7. 断言 server.close() 优雅关闭 host 资源
     await server.close();
     await assert.rejects(
       service.execution.run("test.mcp-host-app/calc.add", { a: 1, b: 2 })
     );
   });
 
-  it("injects ActionDockService directly, verifying tools list discovery, sync call, async task, and cancellation", async () => {
+  it("injects ActionDockService directly, verifying tools list discovery, sync call, and cancellation", async () => {
     let slowTaskCancelled = false;
 
     const addAction = defineAction({
@@ -349,8 +287,6 @@ describe("@actiondock/mcp Host Integration", () => {
 
     let toolsListResult: any = null;
     let syncCallResult: any = null;
-    let asyncCallResult: any = null;
-    let cancelResult: any = null;
 
     let resolveDone: () => void;
     const donePromise = new Promise<void>((r) => {
@@ -375,20 +311,18 @@ describe("@actiondock/mcp Host Integration", () => {
           jsonrpc: "2.0",
           id: 4,
           method: "tools/call",
-          params: { name: "task.slow", arguments: { durationMs: 2000, execution: { mode: "async" } } },
+          params: { name: "task.slow", arguments: { durationMs: 2000 } },
         });
-      } else if (msg.id === 4) {
-        asyncCallResult = JSON.parse(msg.result.content[0].text);
-        const taskId = asyncCallResult.taskId || asyncCallResult.runId;
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 5,
-          method: "tasks/cancel",
-          params: { taskId, reason: "Cancel target task" },
-        });
-      } else if (msg.id === 5) {
-        cancelResult = msg.result;
-        resolveDone();
+        setTimeout(() => {
+          clientTransport.send({
+            jsonrpc: "2.0",
+            method: "notifications/cancelled",
+            params: { requestId: 4, reason: "Cancel target task" },
+          });
+          setTimeout(() => {
+            resolveDone();
+          }, 100);
+        }, 50);
       }
     };
 
@@ -407,12 +341,9 @@ describe("@actiondock/mcp Host Integration", () => {
 
     assert.strictEqual(toolsListResult.tools.length, 2);
     assert.deepStrictEqual(syncCallResult.structuredContent, { sum: 30 });
-    assert.strictEqual(asyncCallResult.status, "running");
-    assert.strictEqual(cancelResult.status, "cancelled");
     assert.strictEqual(slowTaskCancelled, true);
 
     await server.close();
     await assert.rejects(service.execution.run("calc.add", { a: 1, b: 2 }));
   });
 });
-

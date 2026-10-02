@@ -166,31 +166,21 @@ export default defineAction({
     rmSync(usesPkg, { recursive: true, force: true });
   });
 
-  it("diagnoses undeclared src module references and missing declared files", async () => {
-    const srcDir = join(pkgDir, "src");
-    mkdirSync(srcDir, { recursive: true });
-    writeFileSync(join(srcDir, "lib.ts"), "export const ok = 1;");
-
-    // Action 引用了 src 但 actiondock.json 未配置 files
-    writeFileSync(
-      join(pkgDir, "actions", "doctor-act.ts"),
-      `import { defineAction } from "@actiondock/sdk";
-import { ok } from "../src/lib.js";
-export default defineAction(async () => ({ ok }));`
-    );
+  it("diagnoses missing and verified declared files", async () => {
+    const configPath = join(pkgDir, "actiondock.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+    raw.files = ["src", "missing-dir"];
+    writeFileSync(configPath, JSON.stringify(raw, null, 2));
 
     const reportError = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
     const filesCheckError = reportError.checks.find((c) => c.id === "project.files");
     assert.notStrictEqual(filesCheckError, undefined);
     assert.strictEqual(filesCheckError?.status, "error");
-    assert.ok((filesCheckError?.message).includes("Actions import modules from 'src/'"));
-    assert.ok(filesCheckError!.fix!.includes('"files": ["src"]'));
+    assert.ok((filesCheckError?.message).includes("missing-dir"));
 
-    // 声明 files: ["src"] 后变为 ok
-    const configPath = join(pkgDir, "actiondock.json");
-    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
-    raw.files = ["src"];
-    writeFileSync(configPath, JSON.stringify(raw, null, 2));
+    // 补齐缺失目录后变为 ok
+    mkdirSync(join(pkgDir, "src"), { recursive: true });
+    mkdirSync(join(pkgDir, "missing-dir"), { recursive: true });
 
     const reportOk = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
     const filesCheckOk = reportOk.checks.find((c) => c.id === "project.files");

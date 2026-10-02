@@ -78,38 +78,50 @@ describe("CLI Review - Commands & Arguments Regression", () => {
     assert.strictEqual(fullVProc.stdout.toString().trim(), pkg.version);
   });
 
-  it("supports full action resource subcommands and strictly rejects legacy new/create commands", async () => {
+  it("supports top-level commands, rejects removed duplicate action subcommands and show alias", async () => {
     await runCliAsync(["init", "--id", "test.action-subcommands", "."], tempDir);
 
-    // 1. ad action list
-    const listProc = await runCliAsync(["action", "list", "--json"], tempDir);
+    // 1. 顶层 ad list
+    const listProc = await runCliAsync(["list", "--json"], tempDir);
     assert.strictEqual(listProc.exitCode, 0);
     const listData = JSON.parse(listProc.stdout.toString());
     assert.strictEqual(listData.items.some((a: any) => a.id === "sample.greet"), true);
 
-    // 2. ad action describe / show
-    const descProc = await runCliAsync(["action", "describe", "sample.greet", "--json"], tempDir);
+    // 2. 顶层 ad describe 正常工作，且废弃的 show 别名被移除
+    const descProc = await runCliAsync(["describe", "sample.greet", "--json"], tempDir);
     assert.strictEqual(descProc.exitCode, 0);
     const descData = JSON.parse(descProc.stdout.toString());
     assert.strictEqual(descData.id, "sample.greet");
 
-    const showProc = await runCliAsync(["action", "show", "sample.greet", "--json"], tempDir);
-    assert.strictEqual(showProc.exitCode, 0);
-    assert.strictEqual(JSON.parse(showProc.stdout.toString()).id, "sample.greet");
+    const showProc = await runCliAsync(["show", "sample.greet", "--json"], tempDir);
+    assert.notStrictEqual(showProc.exitCode, 0, "顶层 show 别名已被移除，应报错拒绝");
 
-    // 3. ad action validate
-    const valProc = await runCliAsync(["action", "validate", "sample.greet", "--json"], tempDir);
+    // 3. 顶层 ad validate
+    const valProc = await runCliAsync(["validate", "sample.greet", "--json"], tempDir);
     assert.strictEqual(valProc.exitCode, 0);
     assert.strictEqual(JSON.parse(valProc.stdout.toString()).valid, true);
 
-    // 4. ad action run
-    const runProc = await runCliAsync(["action", "run", "sample.greet", "--input", '{"name":"Tester"}', "--json"], tempDir);
+    // 4. 顶层 ad run
+    const runProc = await runCliAsync(["run", "sample.greet", "--input", '{"name":"Tester"}', "--json"], tempDir);
     assert.strictEqual(runProc.exitCode, 0);
     const runRes = JSON.parse(runProc.stdout.toString());
     assert.strictEqual(runRes.ok, true);
     assert.strictEqual(runRes.data.message, "Hello, Tester!");
 
-    // 5. 验证彻底移除历史包袱：ad new、ad create 与 ad playbook new 均被拒绝
+    // 5. 验证 action 下重复套壳命令已被彻底删除，仅保留 action create
+    const actListProc = await runCliAsync(["action", "list", "--json"], tempDir);
+    assert.notStrictEqual(actListProc.exitCode, 0, "action list 套壳命令应被拒绝");
+
+    const actDescProc = await runCliAsync(["action", "describe", "sample.greet", "--json"], tempDir);
+    assert.notStrictEqual(actDescProc.exitCode, 0, "action describe 套壳命令应被拒绝");
+
+    const actValProc = await runCliAsync(["action", "validate", "sample.greet", "--json"], tempDir);
+    assert.notStrictEqual(actValProc.exitCode, 0, "action validate 套壳命令应被拒绝");
+
+    const actRunProc = await runCliAsync(["action", "run", "sample.greet", "--input", '{"name":"Tester"}', "--json"], tempDir);
+    assert.notStrictEqual(actRunProc.exitCode, 0, "action run 套壳命令应被拒绝");
+
+    // 6. 验证彻底移除历史包袱：ad new、ad create 与 ad playbook new 均被拒绝
     const newActProc = await runCliAsync(["new", "action", "another-action"], tempDir);
     assert.notStrictEqual(newActProc.exitCode, 0);
 
@@ -248,19 +260,20 @@ describe("CLI Review - Commands & Arguments Regression", () => {
     assert.strictEqual(pbShowJson.error.code, "INVALID_ARGUMENT");
   });
 
-  it("supports ad action run defaulting to raw mode and machine format with --json", async () => {
-    // 默认 raw 纯文本输出
+  it("supports ad run defaulting to raw mode and machine format with --json", async () => {
+    // 默认 raw 纯文本输出（结构化对象按标准规范呈现）
     const rawProc = await runCliAsync(
-      ["action", "run", "sample.greet", "--input", '{"name":"Tester"}'],
+      ["run", "sample.greet", "--input", '{"name":"Tester"}'],
       tempDir,
       env
     );
     assert.strictEqual(rawProc.exitCode, 0);
-    assert.strictEqual(rawProc.stdout.toString().trim(), "Hello, Tester!");
+    const parsedRaw = JSON.parse(rawProc.stdout.toString());
+    assert.strictEqual(parsedRaw.message, "Hello, Tester!");
 
     // --json 模式输出标准机器信封
     const jsonProc = await runCliAsync(
-      ["action", "run", "sample.greet", "--input", '{"name":"Tester"}', "--json"],
+      ["run", "sample.greet", "--input", '{"name":"Tester"}', "--json"],
       tempDir,
       env
     );
@@ -270,21 +283,19 @@ describe("CLI Review - Commands & Arguments Regression", () => {
     assert.strictEqual(runRes.data.message, "Hello, Tester!");
   });
 
-  it("displays introspection guidance and flat input syntax in ad run and action run help", async () => {
-    for (const cmdArgs of [["run", "--help"], ["action", "run", "--help"]]) {
-      const res = await runCliAsync(cmdArgs, tempDir, env);
-      assert.strictEqual(res.exitCode, 0);
-      const output = res.stdout.toString();
-      assert.ok((output).includes("Introspection & Guidance:"));
-      assert.ok((output).includes("ad describe <id>"));
-      assert.ok((output).includes("ad playbook list"));
-      assert.ok((output).includes("ad playbook show <id>"));
-      assert.ok((output).includes("Flat Input Syntax & Examples:"));
-      assert.ok((output).includes("key=\"value\""));
-      assert.ok((output).includes("count:=10"));
-      assert.ok((output).includes("paths.0=\"src\""));
-      assert.ok((output).includes("--input-file"));
-    }
+  it("displays introspection guidance and flat input syntax in ad run help", async () => {
+    const res = await runCliAsync(["run", "--help"], tempDir, env);
+    assert.strictEqual(res.exitCode, 0);
+    const output = res.stdout.toString();
+    assert.ok((output).includes("Introspection & Guidance:"));
+    assert.ok((output).includes("ad describe <id>"));
+    assert.ok((output).includes("ad playbook list"));
+    assert.ok((output).includes("ad playbook show <id>"));
+    assert.ok((output).includes("Flat Input Syntax & Examples:"));
+    assert.ok((output).includes("key=\"value\""));
+    assert.ok((output).includes("count:=10"));
+    assert.ok((output).includes("paths.0=\"src\""));
+    assert.ok((output).includes("--input-file"));
   });
 });
 

@@ -1,6 +1,4 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { compileProjectTypescript, isTypeScriptSource } from "./ts-compiler";
 import { runNpmPack } from "./npm-pack";
 import {
   copyFileSync,
@@ -13,9 +11,8 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { loadProjectConfig } from "@actiondock/core";
 import { getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
@@ -30,14 +27,14 @@ import { collectRelativeFiles } from "./fs-utils";
 import { SelectionPlanner } from "./planner";
 import { isOwnAction } from "./types";
 import { copyPlanEntries } from "./stage-sources";
-import type { ActionDependency, PackOptions, PackResult, SelectionPlan } from "./types";
+import type { PackOptions, PackResult, SelectionPlan } from "./types";
 
 /**
  * 对 Action Package 执行打包并生成标准 npm Action 压缩包（.tgz）。
  *
  * 职责：
- * - 调用项目本地 TypeScript 编译（Node 执行），输出声明文件（.d.ts）与纯 JavaScript ESM 产物到临时暂存目录。
- * - 严格校验导出的 Manifest（入口全部指向编译后的 .js/.mjs，不得包含 actionsDir 或 playbooksDir 等废弃目录字段）。
+ * - 依托 Node 24 原生类型擦除特性，直接按规范收集并打包源码（.ts / .js 等）及资产文件到临时暂存目录。
+ * - 严格校验导出的 Manifest（不得包含 actionsDir 或 playbooksDir 等废弃目录字段）。
  * - 在暂存目录调用带有 --ignore-scripts 的 npm pack 生成标准 npm 压缩包（.tgz），严禁使用正则替换与自建 tar 压缩。
  *
  * @param options 打包参数选项
@@ -73,7 +70,6 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
   mkdirSync(stagingPkgDir, { recursive: true });
 
   try {
-    await compileProjectTypescript({ root, stagingPkgDir, plan });
     stageSources(root, stagingPkgDir, plan);
     writeManifestAndPkgJson(stagingPkgDir, plan, sourcePkgJson);
 
@@ -153,18 +149,13 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
   }
 }
 
-
-
 /**
- * 拷贝声明的非 TypeScript 模块、静态资产、原生 JavaScript 入口、Playbook 与基础文档到暂存目录。
- * 拷贝内核统一复用 stage-sources 的 copyPlanEntries，仅通过谓词分化编译排除差异。
+ * 拷贝声明的 Action 源码、模块、静态资产、Playbook 与基础文档到暂存目录。
+ * 依托 Node 24 原生类型擦除，完整保留 TypeScript 源码与声明资产。
  */
 function stageSources(root: string, stagingPkgDir: string, plan: SelectionPlan): void {
   copyPlanEntries(stagingPkgDir, plan, {
-    // TypeScript 入口已由编译阶段生成 .js 与 .d.ts，不重复物化源文件
-    copyAction: (act) => !isTypeScriptSource(act.entry),
-    copyModule: (dep) => !isTypeScriptSource(dep.path),
-    // pack 产物保留源工程相对路径（与编译输出的目录结构一致）
+    // pack 产物保留源工程相对路径
     playbookRelPath: (pb) => relative(root, pb.filePath),
   });
 
@@ -178,19 +169,6 @@ function stageSources(root: string, stagingPkgDir: string, plan: SelectionPlan):
 }
 
 /**
- * 计算编译后的 Action 入口相对路径（.ts 转 .js、.mts 转 .mjs）。
- */
-function compiledEntryFor(action: ActionDependency): string {
-  if (action.entry.endsWith(".ts")) {
-    return action.entry.slice(0, -3) + ".js";
-  }
-  if (action.entry.endsWith(".mts")) {
-    return action.entry.slice(0, -4) + ".mjs";
-  }
-  return action.entry;
-}
-
-/**
  * 生成并写入严格校验后的 actiondock.json 与规范化 package.json。
  */
 function writeManifestAndPkgJson(
@@ -198,20 +176,11 @@ function writeManifestAndPkgJson(
   plan: SelectionPlan,
   sourcePkgJson: Record<string, any>
 ): void {
-  // 构建编译后的 Action 清单字典并严格校验入口扩展名
-  const compiledEntries = new Map<string, string>();
   for (const act of plan.actions) {
     if (!isOwnAction(act)) continue;
-    const destEntry = compiledEntryFor(act);
-    if (!destEntry.endsWith(".js") && !destEntry.endsWith(".mjs")) {
-      throw new BuilderError(
-        `Action '${act.id}' entry '${destEntry}' must point to compiled .js or .mjs`
-      );
+    if (!existsSync(join(stagingPkgDir, act.entry))) {
+      throw new BuilderError(`Action entry file not found: ${act.entry}`);
     }
-    if (!existsSync(join(stagingPkgDir, destEntry))) {
-      throw new BuilderError(`Compiled action entry file not found: ${destEntry}`);
-    }
-    compiledEntries.set(act.id, destEntry);
   }
 
   // 严格生成与校验 actiondock.json（严禁包含废弃 actionsDir 或 playbooksDir 字段）
@@ -219,7 +188,6 @@ function writeManifestAndPkgJson(
     includeSchema: true,
     configBeforeActions: true,
     includePlaybooks: false,
-    actionEntryOverride: (act) => compiledEntries.get(act.id)!,
   });
 
   if ("actionsDir" in packedConfig || "playbooksDir" in packedConfig) {
@@ -246,5 +214,3 @@ function writeManifestAndPkgJson(
     "utf-8"
   );
 }
-
-

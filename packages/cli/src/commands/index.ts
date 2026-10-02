@@ -89,7 +89,7 @@ const COMMAND_DECLARATIONS: CommandDeclaration[] = [
   {
     name: "action",
     spec: "action",
-    description: "Manage Action definitions and lifecycle (create, list, describe, run, validate)",
+    description: "Manage Action definitions and scaffolding (create)",
     loader: "./action/create",
     registerFn: "registerActionCommands",
   },
@@ -117,7 +117,6 @@ const COMMAND_DECLARATIONS: CommandDeclaration[] = [
   {
     name: "describe",
     spec: "describe <id>",
-    alias: "show",
     description: "Show action definition, schema, and description",
     loader: "./describe",
     registerFn: "registerDescribeCommand",

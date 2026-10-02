@@ -456,7 +456,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
   it("元数据、去重或资源配额耗尽：明确拒绝新请求，保留终止通道", async () => {
     const { manager } = createManager({
       quotas: {
-        maxActiveProcessesPerScope: 2,
+        maxActiveProcessesPerHost: 2,
       },
     });
 

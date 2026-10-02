@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { discoverActionFiles, loadActions, loadPlaybooks, loadProjectConfig } from "../../project/loader";
 import { loadManifest, MANIFEST_FILE_NAME } from "../../project/manifest";
@@ -62,23 +62,23 @@ function checkProjectSdk(scope: ProjectCheckScope): void {
 }
 
 /**
- * 检查工程运行时数据库可写性。
- *
- * 探测写入独立临时数据库文件，避免对生产运行库产生写副作用：
- * 体检是诊断行为，不得在真实库上执行写加删事务引入额外写竞争。
+ * 检查工程运行时数据库可写性（纯只读检查，无写副作用）。
  */
-async function checkProjectStorage(scope: ProjectCheckScope): Promise<void> {
+function checkProjectStorage(scope: ProjectCheckScope): void {
   const { ctx, config } = scope;
 
   const dbPath = resolveDatabasePath(config.id, { customHome: ctx.customHome });
   const probeDir = dirname(dbPath);
-  // 探测库：与生产库同目录但独立命名，结束后整体删除，不留探测残留
-  const probeId = `doctor.probe.${Date.now()}`;
-  const probePkgDir = dirname(resolveDatabasePath(probeId, { customHome: ctx.customHome }));
-  const probeStorage = createStorage(probeId, { customHome: ctx.customHome });
+
   try {
-    await probeStorage.setConfig("probe", "ok");
-    probeStorage.close();
+    let checkDir = probeDir;
+    while (!existsSync(checkDir)) {
+      const parent = dirname(checkDir);
+      if (parent === checkDir) break;
+      checkDir = parent;
+    }
+
+    accessSync(checkDir, constants.W_OK);
 
     ctx.checks.push({
       id: "project.storage",
@@ -88,9 +88,6 @@ async function checkProjectStorage(scope: ProjectCheckScope): Promise<void> {
       message: `Database directory writable at ${probeDir}`,
     });
   } catch (err: any) {
-    try {
-      probeStorage.close();
-    } catch {}
     ctx.checks.push({
       id: "project.storage",
       category: "project",
@@ -99,13 +96,6 @@ async function checkProjectStorage(scope: ProjectCheckScope): Promise<void> {
       message: `Failed to write project runtime database directory: ${err.message}`,
       fix: `Check write permissions for '${probeDir}'`,
     });
-  } finally {
-    // 清理探测库目录（含 WAL/SHM 侧车文件）
-    try {
-      if (existsSync(probePkgDir)) {
-        rmSync(probePkgDir, { recursive: true, force: true });
-      }
-    } catch {}
   }
 }
 
@@ -207,27 +197,13 @@ function checkProjectManifest(scope: ProjectCheckScope): void {
           fix: "Update actiondock.json or use 'ad action create <id>'",
         });
       } else {
-        const manifestStat = statSync(manifestPath);
-        const newerFiles = actionFiles.filter(
-          (f) => statSync(f).mtimeMs > manifestStat.mtimeMs + 2000
-        );
-        if (newerFiles.length > 0) {
-          ctx.checks.push({
-            id: "project.manifest",
-            category: "project",
-            name: "Action Manifest",
-            status: "ok",
-            message: `Manifest valid (Note: ${newerFiles.length} action file(s) modified after manifest; run 'ad validate' if definitions changed)`,
-          });
-        } else {
-          ctx.checks.push({
-            id: "project.manifest",
-            category: "project",
-            name: "Action Manifest",
-            status: "ok",
-            message: "Manifest synchronized with action files",
-          });
-        }
+        ctx.checks.push({
+          id: "project.manifest",
+          category: "project",
+          name: "Action Manifest",
+          status: "ok",
+          message: "Manifest synchronized with action files",
+        });
       }
     }
   } catch (err: any) {
@@ -242,15 +218,13 @@ function checkProjectManifest(scope: ProjectCheckScope): void {
 }
 
 /**
- * 检查 files 声明边界与源码目录未声明引用。
+ * 检查 files 声明边界。
  */
 function checkProjectFiles(scope: ProjectCheckScope): void {
   const { ctx, projectRoot, config } = scope;
 
   try {
     const declaredFiles = config.files || [];
-    const hasSrc = existsSync(join(projectRoot, "src"));
-    const hasLib = existsSync(join(projectRoot, "lib"));
 
     if (declaredFiles.length > 0) {
       const missingDeclared = declaredFiles.filter((f) => !existsSync(join(projectRoot, f)));
@@ -272,44 +246,6 @@ function checkProjectFiles(scope: ProjectCheckScope): void {
           message: `All ${declaredFiles.length} declared file/directory boundaries verified`,
         });
       }
-    } else if (hasSrc || hasLib) {
-      const actionFiles = discoverActionFiles(projectRoot, config.actionsDir || "actions");
-      let hasReferenceToSrcOrLib = false;
-      const unreadableFiles: string[] = [];
-      for (const actFile of actionFiles) {
-        try {
-          const src = readFileSync(actFile, "utf-8");
-          if (/['"](?:\.\.\/(?:src|lib)|\.\/(?:src|lib))[^'"]*['"]/.test(src)) {
-            hasReferenceToSrcOrLib = true;
-            break;
-          }
-        } catch (err: any) {
-          // 单文件读取失败：计入告警名单，边界检测结论不再基于无声缺失的数据
-          unreadableFiles.push(`${actFile} (${err?.message || String(err)})`);
-        }
-      }
-
-      if (hasReferenceToSrcOrLib) {
-        ctx.checks.push({
-          id: "project.files",
-          category: "project",
-          name: "Declared Files",
-          status: "error",
-          message: `Actions import modules from ${hasSrc ? "'src/'" : ""}${hasSrc && hasLib ? " and " : ""}${hasLib ? "'lib/'" : ""}, but 'files' is not declared in ${MANIFEST_FILE_NAME}`,
-          fix: `Add "files": [${hasSrc ? '"src"' : ""}${hasSrc && hasLib ? ', "lib"' : hasLib && !hasSrc ? '"lib"' : ""}] to ${MANIFEST_FILE_NAME}`,
-        });
-      } else {
-        ctx.checks.push({
-          id: "project.files",
-          category: "project",
-          name: "Declared Files",
-          status: unreadableFiles.length > 0 ? "warn" : "ok",
-          message:
-            unreadableFiles.length > 0
-              ? `Project source directories clean, but ${unreadableFiles.length} action file(s) unreadable during boundary scan: ${unreadableFiles.join(", ")}`
-              : `Project source directories clean (no undeclared references to ${hasSrc ? "src/" : "lib/"})`,
-        });
-      }
     }
   } catch (err: any) {
     // 文件边界检测整体失败：转为 error 检查项呈现在报告中，而非无声跳过
@@ -318,7 +254,7 @@ function checkProjectFiles(scope: ProjectCheckScope): void {
       category: "project",
       name: "Declared Files",
       status: "error",
-      message: `Failed to inspect declared files and source boundaries: ${err?.message || String(err)}`,
+      message: `Failed to inspect declared files: ${err?.message || String(err)}`,
     });
   }
 }

@@ -3,14 +3,9 @@ import type { ActionDockHost } from "@actiondock/core/server";
 import type { PackageRuntime } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
-import { registerTasksExtension } from "./register-tasks-extension";
 import { toMcpSchema } from "./schemas";
 import type { ActionDockMcpOptions } from "./types";
-import {
-  extractExecutionTimeoutMs,
-  isAsyncExecutionRequested,
-  stripExecutionWrapper,
-} from "./execution-mode";
+import { resolveExecutionTimeout } from "./execution-mode";
 import { resolveService } from "./service-resolver";
 import { mapAndFilterActions } from "./tool-mapper";
 export { resolveService };
@@ -24,6 +19,7 @@ export { resolveService };
  */
 interface ToolCallbackContext {
   mcpReq?: { signal?: AbortSignal };
+  timeoutMs?: number;
 }
 
 /** 形状缺失告警是否已输出过（每个进程仅告警一次，避免逐请求噪声） */
@@ -141,64 +137,26 @@ export async function createActionDockMcpServer(
     version: serverVersion,
   });
 
-  // 任务规范扩展注册集中隔离在独立模块，本层不再直接操作 SDK 内层实例
-  registerTasksExtension(server, service, allowedPackageIds, options.actionAllowlist);
-
   // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
   let rawActions = await service.discovery.listActions();
   const mappedActions = mapAndFilterActions(rawActions, allowedPackageIds, options.actionAllowlist);
 
   for (const { toolName, action, description } of mappedActions) {
-
-    // 工具执行：tools/call 委托 service.execution.run() 或 service.execution.start()
+    // 工具执行：tools/call 委托 service.execution.run()
     server.registerTool(
       toolName,
       {
         description,
         inputSchema: toMcpSchema(action.inputSchema),
-        // 出参 schema 不注入 execution 包装字段：实际 structuredContent 不含该字段，注入会与真实返回结构不符
         outputSchema: action.outputSchema
-          ? toMcpSchema(action.outputSchema, false)
+          ? toMcpSchema(action.outputSchema)
           : undefined,
       },
       async (input: unknown, ctx: ToolCallbackContext) => {
-        // 异步执行模式只认显式约定字段 execution.mode，旧版 __async 仅作只读兼容探测
-        const isAsync = isAsyncExecutionRequested(input);
         const signal = extractCancelSignal(ctx);
+        const effectiveTimeoutMs = resolveExecutionTimeout(options, ctx);
 
-        // 分发前仅剥离适配层注入的包装字段，业务自有字段（含名为 async 的入参）原样透传
-        const cleanInput = stripExecutionWrapper(input) as JsonValue;
-
-        // 超时组合策略：客户端声明与服务端配置同时存在时取较小值（更防御），
-        // 任一方单独存在则直接生效，双方均缺省时不设置超时
-        const clientTimeoutMs = extractExecutionTimeoutMs(input);
-        const effectiveTimeoutMs =
-          typeof options.timeoutMs === "number" && typeof clientTimeoutMs === "number"
-            ? Math.min(options.timeoutMs, clientTimeoutMs)
-            : clientTimeoutMs ?? options.timeoutMs;
-
-        if (isAsync) {
-          const ticket = await service.execution.start(action.id, cleanInput, {
-            signal,
-            timeoutMs: effectiveTimeoutMs,
-          });
-
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  ok: true,
-                  runId: ticket.runId,
-                  taskId: ticket.runId,
-                  status: "running",
-                }),
-              },
-            ],
-          };
-        }
-
-        const result = await service.execution.run(action.id, cleanInput, {
+        const result = await service.execution.run(action.id, input as JsonValue, {
           signal,
           timeoutMs: effectiveTimeoutMs,
         });
@@ -206,8 +164,6 @@ export async function createActionDockMcpServer(
       }
     );
   }
-
-  // 任务规范映射（tasks/get、tasks/cancel、tasks/list）已收敛至 registerTasksExtension 隔离模块
 
   // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
   try {

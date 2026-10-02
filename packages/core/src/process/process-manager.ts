@@ -76,25 +76,13 @@ export type {
 export { formatProcessScope } from "./converters";
 
 /**
- * 宿主与作用域资源配额配置。
+ * 宿主资源配额配置。
  */
 export interface ProcessManagerQuotas {
-  /** 每个作用域允许并发存在的活跃进程上限，默认 8 */
-  maxActiveProcessesPerScope: number;
   /** 每个宿主允许并发存在的活跃进程上限，默认 64 */
   maxActiveProcessesPerHost: number;
   /** 单个进程输出缓冲区保留字节数上限，默认 4MB */
   maxOutputBufferBytesPerProcess: number;
-  /** 宿主所有活跃进程累计输出缓冲区字节数总上限，默认 128MB */
-  maxOutputBufferBytesPerHost: number;
-  /** 单个进程待写入输入队列保留字节数上限，默认 1MB */
-  maxPendingQueueBytesPerProcess: number;
-  /** 宿主所有进程待写入输入队列累计字节数总上限，默认 16MB */
-  maxPendingQueueBytesPerHost: number;
-  /** 单个进程并发等待独占控制权或输出日志的长轮询等待者上限，默认 8 */
-  maxWaitersPerProcess: number;
-  /** 宿主所有长轮询等待者累计上限，默认 256 */
-  maxWaitersPerHost: number;
 }
 
 /**
@@ -130,7 +118,7 @@ export interface ProcessManagerOptions {
  * 受管进程核心管理器。
  *
  * 职责范畴：
- * - 宿主身份与配额检查（每作用域活跃进程、每宿主进程、输出缓冲预算、等待者上限、输入队列容量）。
+ * - 宿主身份与配额检查（每宿主进程、单进程输出缓冲上限）。
  * - 严格归属所有者鉴权校验（基于 tenantId, principalId, packageInstanceId, generationId）。
  * - 控制权状态机推进（free -> held -> quarantined -> closed）。
  * - 输入队列去重与串行调度执行。
@@ -168,14 +156,9 @@ export class ProcessManager {
     this.metadataStore = options.metadataStore ?? new MemoryProcessMetadataStore();
 
     this.quotas = {
-      maxActiveProcessesPerScope: options.quotas?.maxActiveProcessesPerScope ?? 8,
       maxActiveProcessesPerHost: options.quotas?.maxActiveProcessesPerHost ?? 64,
-      maxOutputBufferBytesPerProcess: options.quotas?.maxOutputBufferBytesPerProcess ?? 4 * 1024 * 1024,
-      maxOutputBufferBytesPerHost: options.quotas?.maxOutputBufferBytesPerHost ?? 128 * 1024 * 1024,
-      maxPendingQueueBytesPerProcess: options.quotas?.maxPendingQueueBytesPerProcess ?? 1 * 1024 * 1024,
-      maxPendingQueueBytesPerHost: options.quotas?.maxPendingQueueBytesPerHost ?? 16 * 1024 * 1024,
-      maxWaitersPerProcess: options.quotas?.maxWaitersPerProcess ?? 8,
-      maxWaitersPerHost: options.quotas?.maxWaitersPerHost ?? 256,
+      maxOutputBufferBytesPerProcess:
+        options.quotas?.maxOutputBufferBytesPerProcess ?? 4 * 1024 * 1024,
     };
 
     this.defaultLimits = {
@@ -190,7 +173,6 @@ export class ProcessManager {
     this.reservationTable = new ReservationTable();
     this.terminalOutputCache = new TerminalOutputCache({
       retentionMs: this.terminalLogRetentionMs,
-      maxHostBufferBytes: this.quotas.maxOutputBufferBytesPerHost,
     });
     this.runExecutor = new RunExecutor(this.driver);
     this.inputDispatcher = new InputDispatcher(
@@ -202,17 +184,12 @@ export class ProcessManager {
           this.quarantineProcess(owner, processId, reason),
         refreshIdleTimer: (proc) => this.refreshIdleTimer(proc),
         recordDiagnostic: (message, err) => this.recordDiagnostic(message, err),
-        countHostPendingInputBytes: () => this.countHostPendingInputBytes(),
-        maxPendingQueueBytesPerProcess: this.quotas.maxPendingQueueBytesPerProcess,
-        maxPendingQueueBytesPerHost: this.quotas.maxPendingQueueBytesPerHost,
       }
     );
     this.quotaTracker = new ProcessQuotaTracker({
       processes: this.processes,
       quotas: this.quotas,
       defaultLimits: this.defaultLimits,
-      countRetainedOutputBufferBytes: () => this.countRetainedOutputBufferBytes(),
-      evictLRUUntil: (targetBytes) => this.terminalOutputCache.evictLRUUntil(targetBytes)
     });
     this.controlManager = new ProcessControlManager({
       persistState: (processId, patch) => this.persistState(processId, patch),
@@ -424,7 +401,6 @@ export class ProcessManager {
 
       const outputLog = new ProcessOutputLog(this.hostEpoch, processId, {
         maxBufferBytes: effectiveLimits.outputBufferBytes,
-        maxWaiters: this.quotas.maxWaitersPerProcess,
       });
 
       const info: ProcessInfo = {
@@ -446,7 +422,6 @@ export class ProcessManager {
         outputLog,
         cancelEpoch: 0,
         inputQueue: [],
-        pendingInputBytes: 0,
         inputClosed: false,
         isDispatching: false,
         effectiveLimits,
@@ -1193,7 +1168,6 @@ export class ProcessManager {
       retainedLog ??
       new ProcessOutputLog(record.hostEpoch, processId, {
         maxBufferBytes: info.effectiveLimits.outputBufferBytes,
-        maxWaiters: this.quotas.maxWaitersPerProcess,
       });
     if (record.outputClosed && !outputLog.outputClosed) {
       outputLog.closeOutput(record.outputEndReason as any ?? "natural");
@@ -1212,7 +1186,6 @@ export class ProcessManager {
       outputUnavailable: isOutputUnavailable,
       cancelEpoch: 0,
       inputQueue: [],
-      pendingInputBytes: 0,
       inputClosed: Boolean(record.inputClosed),
       isDispatching: false,
       effectiveLimits: info.effectiveLimits,
@@ -1225,13 +1198,6 @@ export class ProcessManager {
 
     this.processes.set(processId, loaded);
     return loaded;
-  }
-
-  /**
-   * 统计终态保留日志当前在内存中实际占用的输出缓冲字节总数。
-   */
-  private countRetainedOutputBufferBytes(): number {
-    return this.terminalOutputCache.retainedBytes();
   }
 
   /**
@@ -1267,17 +1233,5 @@ export class ProcessManager {
         this.recordDiagnostic(`Driver dispose failed for process '${proc.info.id}'`, err);
       }
     }
-  }
-
-
-  /**
-   * 统计当前宿主所有活跃进程累计输入队列待写入字节总数。
-   */
-  private countHostPendingInputBytes(): number {
-    let total = 0;
-    for (const p of this.processes.values()) {
-      total += p.pendingInputBytes;
-    }
-    return total;
   }
 }

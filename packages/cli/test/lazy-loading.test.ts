@@ -133,17 +133,17 @@ describe("CLI 动态按需懒加载与子命令解析边缘情况测试", () => 
       }
     }
 
-    it("action 二级命令族挂载校验（list、describe、run）", async () => {
+    it("action 二级命令族挂载校验（仅保留 create，移除重复的 list/describe/run/validate）", async () => {
       const program = createCliProgram();
       await parseIgnoringHelp(program, ["node", "ad", "action", "--help"]);
       const actionCmd = program.commands.find((c) => c.name() === "action");
       assert.ok(actionCmd, "action 命令应被真实挂载");
       const subNames = actionCmd.commands.map((c) => c.name());
-      assert.ok(subNames.includes("list"), "应包含 action list");
-      assert.ok(subNames.includes("describe"), "应包含 action describe");
-      assert.ok(subNames.includes("run"), "应包含 action run");
       assert.ok(subNames.includes("create"), "应包含 action create");
-      assert.ok(subNames.includes("validate"), "应包含 action validate");
+      assert.strictEqual(subNames.includes("list"), false, "不应包含重复的 action list");
+      assert.strictEqual(subNames.includes("describe"), false, "不应包含重复的 action describe");
+      assert.strictEqual(subNames.includes("run"), false, "不应包含重复的 action run");
+      assert.strictEqual(subNames.includes("validate"), false, "不应包含重复的 action validate");
     });
 
     it("config 二级命令族挂载校验（list、get）", async () => {

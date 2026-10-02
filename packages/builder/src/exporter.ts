@@ -8,12 +8,9 @@ import { SelectionPlanner } from "./planner";
 import { isOwnAction } from "./types";
 import { createArchive, resolveArchiveFormat } from "./export-archive";
 import { stageSourceSkill } from "./export-source";
-import { exportNodeSkill } from "./export-node";
+import { exportNodeSkill } from "./build";
 import { exportCompositeImpl } from "./export-composite";
-import { exportBatchImpl } from "./export-batch";
 import type {
-  BatchSkillExportOptions,
-  BatchSkillExportResult,
   CompositeSkillExportOptions,
   CompositeSkillExportResult,
   SelectionPlan,
@@ -161,13 +158,6 @@ export class SkillExporter {
   }
 
   /**
-   * 批量导出多个 Skill。
-   */
-  public async exportBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
-    return exportBatchImpl(options, (opts) => this.export(opts));
-  }
-
-  /**
    * 复合模式导出：将多个包聚合为一个统一的复合技能目录。
    */
   public async exportComposite(
@@ -185,17 +175,6 @@ export class SkillExporter {
 export async function exportSkill(options: SkillExporterOptions): Promise<SkillExportResult> {
   const exporter = new SkillExporter();
   return exporter.export(options);
-}
-
-/**
- * 批量导出多个 Skill 产物的顶层公共入口函数。
- * 内部创建 SkillExporter 实例并委托其实例批量导出方法。
- */
-export async function exportSkillBatch(
-  options: BatchSkillExportOptions
-): Promise<BatchSkillExportResult> {
-  const exporter = new SkillExporter();
-  return exporter.exportBatch(options);
 }
 
 /**

@@ -149,7 +149,7 @@ function checkNeedsTsx(rawArgv) {
   }
 
   if (mainCommand === "action") {
-    if (!actionTarget || actionTarget === "list" || actionTarget === "describe" || actionTarget === "validate" || actionTarget === "create") {
+    if (!actionTarget || actionTarget === "create") {
       return { needsTsx: false, projectRoot: targetDir };
     }
   } else if (mainCommand === "playbook") {

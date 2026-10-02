@@ -33,7 +33,8 @@ import {
  * 以原始纯文本形式渲染 Action 执行终态结果（默认纯文本模式）。
  *
  * 设计契约：
- * 1. stdout: 仅承载业务有效载荷（payload）。保持原生排版、未转义多行与真实换行，供用户阅读或下游管道直接消费。
+ * - 通用纯文本透传：标量直接输出，结构化对象按标准规范呈现，杜绝私有业务字段嗅探。
+ * - 标准输出仅承载业务有效载荷，保持原生排版与真实换行，供用户调阅或下游管道消费。
  */
 export function renderRawExecutionResult(
   targetRef: string,
@@ -43,69 +44,15 @@ export function renderRawExecutionResult(
   if (result.ok) {
     const data: any = result.data;
     let rawText: string;
-    let metaInfo: Record<string, unknown> | undefined;
 
     if (typeof data === "string") {
       rawText = data;
     } else if (data !== null && typeof data === "object") {
-      if ("content" in data && data.content !== undefined) {
-        rawText =
-          typeof data.content === "object" && data.content !== null
-            ? JSON.stringify(data.content, null, 2)
-            : String(data.content);
-        const { content, ...rest } = data;
-        if (Object.keys(rest).length > 0) {
-          metaInfo = rest;
-        }
-      } else if ("text" in data && typeof data.text === "string") {
-        rawText = data.text;
-        const { text, ...rest } = data;
-        if (Object.keys(rest).length > 0) {
-          metaInfo = rest;
-        }
-      } else if ("message" in data && typeof data.message === "string") {
-        rawText = data.message;
-        const { message, ...rest } = data;
-        if (Object.keys(rest).length > 0) {
-          metaInfo = rest;
-        }
-      } else {
-        rawText = JSON.stringify(data, null, 2);
-      }
+      rawText = JSON.stringify(data, null, 2);
     } else if (data !== undefined) {
       rawText = String(data);
     } else {
       rawText = "";
-    }
-
-    if (metaInfo) {
-      const parts: string[] = [];
-      const title = metaInfo.path ? String(metaInfo.path) : targetRef;
-      parts.push(title);
-
-      if (metaInfo.startLine !== undefined && metaInfo.endLine !== undefined) {
-        parts.push(`lines ${metaInfo.startLine}-${metaInfo.endLine}`);
-      } else if (metaInfo.line !== undefined) {
-        parts.push(`line ${metaInfo.line}`);
-      }
-
-      if (metaInfo.hasMore !== undefined) {
-        parts.push(`hasMore: ${metaInfo.hasMore}`);
-      }
-      if (metaInfo.truncated) {
-        parts.push("truncated: true");
-      }
-
-      const handled = new Set(["path", "startLine", "endLine", "line", "hasMore", "truncated"]);
-      for (const [k, v] of Object.entries(metaInfo)) {
-        if (!handled.has(k) && v !== undefined) {
-          parts.push(`${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
-        }
-      }
-
-      if (parts.length > 0) {
-        writeStderr(`[${parts.join(" | ")}]`, context);
-      }
     }
 
     writeStdout(rawText, context);

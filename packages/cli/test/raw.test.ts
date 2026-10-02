@@ -23,7 +23,52 @@ async function runCli(
 }
 
 describe("CLI Action Raw Output Mode - Unit Tests", () => {
-  it("renders content to stdout and metadata to stderr when result has content and range info", () => {
+  it("renders pure string data directly to stdout without metadata", () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const mockResult: ExecutionResult = {
+      ok: true,
+      runId: "test-run-3",
+      data: "pure string output",
+    };
+
+    renderRawExecutionResult("test.echo", mockResult, {
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    assert.strictEqual(stdoutLogs.join("\n"), "pure string output");
+    assert.strictEqual(stderrLogs.length, 0);
+  });
+
+  it("renders scalar numbers and booleans directly to stdout without metadata", () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    renderRawExecutionResult(
+      "test.num",
+      { ok: true, runId: "test-run-num", data: 42 },
+      {
+        stdout: (msg) => stdoutLogs.push(msg),
+        stderr: (msg) => stderrLogs.push(msg),
+      }
+    );
+    renderRawExecutionResult(
+      "test.bool",
+      { ok: true, runId: "test-run-bool", data: true },
+      {
+        stdout: (msg) => stdoutLogs.push(msg),
+        stderr: (msg) => stderrLogs.push(msg),
+      }
+    );
+
+    assert.strictEqual(stdoutLogs[0], "42");
+    assert.strictEqual(stdoutLogs[1], "true");
+    assert.strictEqual(stderrLogs.length, 0);
+  });
+
+  it("renders structured object as standard formatted JSON without private metadata sniffing", () => {
     const stdoutLogs: string[] = [];
     const stderrLogs: string[] = [];
 
@@ -44,119 +89,30 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    assert.strictEqual(stdoutLogs.join("\n"), "# Database Map\nLine 2\nLine 3");
-    assert.ok((stderrLogs.join("\n")).includes("[system-knowledge/db-map.md | lines 1-17 | hasMore: false]"));
+    assert.strictEqual(
+      stdoutLogs.join("\n"),
+      JSON.stringify(mockResult.data, null, 2)
+    );
+    assert.strictEqual(stderrLogs.length, 0, "通用纯文本输出不应嗅探业务字段写入 stderr 元数据");
   });
 
-  it("renders truncated metadata flag when truncated is true", () => {
+  it("renders empty string for undefined data", () => {
     const stdoutLogs: string[] = [];
     const stderrLogs: string[] = [];
 
     const mockResult: ExecutionResult = {
       ok: true,
-      runId: "test-run-2",
-      data: {
-        path: "large-file.log",
-        startLine: 1,
-        endLine: 200,
-        content: "Log content...",
-        hasMore: true,
-        truncated: true,
-      },
+      runId: "test-run-empty",
+      data: undefined as any,
     };
 
-    renderRawExecutionResult("files.read", mockResult, {
+    renderRawExecutionResult("test.noop", mockResult, {
       stdout: (msg) => stdoutLogs.push(msg),
       stderr: (msg) => stderrLogs.push(msg),
     });
 
-    assert.strictEqual(stdoutLogs.join("\n"), "Log content...");
-    assert.ok((stderrLogs.join("\n")).includes("truncated: true"));
-    assert.ok((stderrLogs.join("\n")).includes("hasMore: true"));
-  });
-
-  it("safely stringifies content when content itself is a nested object", () => {
-    const stdoutLogs: string[] = [];
-    const stderrLogs: string[] = [];
-
-    const mockResult: ExecutionResult = {
-      ok: true,
-      runId: "test-run-obj-content",
-      data: {
-        path: "config.json",
-        content: { key: "value", list: [1, 2] },
-      },
-    };
-
-    renderRawExecutionResult("files.read", mockResult, {
-      stdout: (msg) => stdoutLogs.push(msg),
-      stderr: (msg) => stderrLogs.push(msg),
-    });
-
-    assert.strictEqual(stdoutLogs.join("\n"), JSON.stringify({ key: "value", list: [1, 2] }, null, 2));
-    assert.ok((stderrLogs.join("\n")).includes("[config.json]"));
-  });
-
-  it("renders pure string data directly to stdout without metadata", () => {
-    const stdoutLogs: string[] = [];
-    const stderrLogs: string[] = [];
-
-    const mockResult: ExecutionResult = {
-      ok: true,
-      runId: "test-run-3",
-      data: "pure string output",
-    };
-
-    renderRawExecutionResult("test.echo", mockResult, {
-      stdout: (msg) => stdoutLogs.push(msg),
-      stderr: (msg) => stderrLogs.push(msg),
-    });
-
-    assert.strictEqual(stdoutLogs.join("\n"), "pure string output");
+    assert.strictEqual(stdoutLogs.join("\n"), "");
     assert.strictEqual(stderrLogs.length, 0);
-  });
-
-  it("renders message field to stdout when data contains message", () => {
-    const stdoutLogs: string[] = [];
-    const stderrLogs: string[] = [];
-
-    const mockResult: ExecutionResult = {
-      ok: true,
-      runId: "test-run-4",
-      data: {
-        message: "Hello from action!",
-      },
-    };
-
-    renderRawExecutionResult("sample.greet", mockResult, {
-      stdout: (msg) => stdoutLogs.push(msg),
-      stderr: (msg) => stderrLogs.push(msg),
-    });
-
-    assert.strictEqual(stdoutLogs.join("\n"), "Hello from action!");
-    assert.strictEqual(stderrLogs.length, 0);
-  });
-
-  it("renders text field to stdout when data contains text", () => {
-    const stdoutLogs: string[] = [];
-    const stderrLogs: string[] = [];
-
-    const mockResult: ExecutionResult = {
-      ok: true,
-      runId: "test-run-5",
-      data: {
-        text: "Some text block",
-        code: 200,
-      },
-    };
-
-    renderRawExecutionResult("test.generate", mockResult, {
-      stdout: (msg) => stdoutLogs.push(msg),
-      stderr: (msg) => stderrLogs.push(msg),
-    });
-
-    assert.strictEqual(stdoutLogs.join("\n"), "Some text block");
-    assert.ok((stderrLogs.join("\n")).includes("code: 200"));
   });
 
   it("renders error to stderr and sets exitCode on failure", () => {
@@ -325,7 +281,7 @@ export default defineAction(async (input: { path: string }) => {
     }
   });
 
-  it("defaults to unescaped raw content to stdout and metadata to stderr", async () => {
+  it("defaults to structured JSON output without stderr metadata sniffing", async () => {
     const proc = await runCli(
       ["run", "files.read", "--input", JSON.stringify({ path: "docs/readme.md" })],
       tempDir
@@ -335,8 +291,10 @@ export default defineAction(async (input: { path: string }) => {
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    assert.strictEqual(stdout, "# File Header\n\nBody text line 3\n");
-    assert.ok((stderr).includes("[docs/readme.md | lines 1-3 | hasMore: false]"));
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.path, "docs/readme.md");
+    assert.strictEqual(parsed.content, "# File Header\n\nBody text line 3");
+    assert.strictEqual(stderr.trim(), "");
   });
 
   it("outputs standard JSON execution envelope when --json is provided", async () => {
@@ -357,25 +315,33 @@ export default defineAction(async (input: { path: string }) => {
     assert.strictEqual(parsed.data.content, "# File Header\n\nBody text line 3");
   });
 
-  it("works with ad action run defaulting to raw and supporting --json", async () => {
-    // Default raw
+  it("works with ad run defaulting to raw and supporting --json", async () => {
+    // Default raw (结构化对象按标准规范呈现)
     const procRaw = await runCli(
-      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
+      ["run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
       tempDir
     );
     assert.strictEqual(procRaw.exitCode, 0);
-    assert.strictEqual(procRaw.stdout.toString(), "# File Header\n\nBody text line 3\n");
-    assert.ok((procRaw.stderr.toString()).includes("[info.md | lines 1-3 | hasMore: false]"));
+    const parsedRaw = JSON.parse(procRaw.stdout.toString());
+    assert.strictEqual(parsedRaw.path, "info.md");
+    assert.strictEqual(procRaw.stderr.toString().trim(), "");
 
     // --json machine envelope
     const procJson = await runCli(
-      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--json"],
+      ["run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--json"],
       tempDir
     );
     assert.strictEqual(procJson.exitCode, 0);
     const parsed = JSON.parse(procJson.stdout.toString());
     assert.strictEqual(parsed.ok, true);
     assert.strictEqual(parsed.data.path, "info.md");
+
+    // 验证 action run 套壳已被删除拒绝
+    const procActionRun = await runCli(
+      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
+      tempDir
+    );
+    assert.notStrictEqual(procActionRun.exitCode, 0, "action run 套壳命令应被拒绝");
   });
 
   it("handles action error properly by writing to stderr by default", async () => {

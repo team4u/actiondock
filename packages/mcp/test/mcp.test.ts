@@ -225,8 +225,8 @@ describe("@actiondock/mcp Adapter", () => {
     assert.notStrictEqual(calcTool.outputSchema, undefined);
     assert.strictEqual(calcTool.outputSchema.properties.result.type, "number");
     assert.strictEqual(calcTool.outputSchema.properties.execution, undefined);
-    // 入参 schema 仍注入 execution 执行控制包装字段
-    assert.notStrictEqual(calcTool.inputSchema.properties.execution, undefined);
+    // 入参 schema 保持纯净，不注入 execution 包装字段
+    assert.strictEqual(calcTool.inputSchema.properties.execution, undefined);
   });
 
   it("M06, M09: tools/call executes through ActionRunner and writes run record", async () => {
@@ -608,120 +608,6 @@ describe("@actiondock/mcp Adapter", () => {
     } catch {}
   });
 
-  it("M15-M18: Tasks extension supports async tool calls, tasks/get, tasks/cancel, and tasks/list", async () => {
-
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await server.connect(serverTransport);
-
-    let asyncCallResult: any = null;
-    let taskGetWorkingResult: any = null;
-    let taskCancelResult: any = null;
-    let taskListResult: any = null;
-
-    clientTransport.onmessage = (msg: any) => {
-      if (msg.id === 1) {
-
-
-        // Initialized
-        clientTransport.send({
-          jsonrpc: "2.0",
-          method: "notifications/initialized",
-        });
-
-        // 1. Trigger async tool call on task.slow
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 10,
-          method: "tools/call",
-          params: {
-            name: "task.slow",
-            arguments: { durationMs: 1500, execution: { mode: "async" } },
-          },
-        });
-      } else if (msg.id === 10 && msg.result?.content) {
-        asyncCallResult = JSON.parse(msg.result.content[0].text);
-        const taskId = asyncCallResult.taskId || asyncCallResult.runId;
-
-
-        // 2. Query tasks/get
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 11,
-          method: "tasks/get",
-          params: { taskId },
-        });
-
-        // 3. Query tasks/list
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 12,
-          method: "tasks/list",
-          params: { limit: 10 },
-        });
-
-        // 4. Trigger slow task to test cancel
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 20,
-          method: "tools/call",
-          params: {
-            name: "task.slow",
-            arguments: { durationMs: 2000, execution: { mode: "async" } },
-          },
-        });
-      } else if (msg.id === 11) {
-        taskGetWorkingResult = msg.result;
-      } else if (msg.id === 12) {
-        taskListResult = msg.result;
-      } else if (msg.id === 20) {
-        const slowParsed = JSON.parse(msg.result.content[0].text);
-        const slowTaskId = slowParsed.taskId || slowParsed.runId;
-        // Cancel slow task
-        clientTransport.send({
-          jsonrpc: "2.0",
-          id: 21,
-          method: "tasks/cancel",
-          params: { taskId: slowTaskId, reason: "Testing MCP tasks/cancel" },
-        });
-      } else if (msg.id === 21) {
-        taskCancelResult = msg.result;
-      }
-    };
-
-    clientTransport.send({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2026-07-28",
-        capabilities: {},
-        clientInfo: { name: "test-client", version: "1.0.0" },
-      },
-    });
-
-    // Wait for async task execution and cancel roundtrips
-    await new Promise((r) => setTimeout(r, 350));
-
-    // Assert M15 / M16: Async tool call returned taskId and working status
-    assert.notStrictEqual(asyncCallResult, undefined);
-    assert.notStrictEqual(asyncCallResult.taskId, undefined);
-    assert.strictEqual(asyncCallResult.status, "running");
-
-    // Assert M15: tasks/get returned task payload
-    assert.notStrictEqual(taskGetWorkingResult, undefined);
-    assert.strictEqual(taskGetWorkingResult.task.taskId, asyncCallResult.taskId);
-    assert.ok((["working", "completed"]).includes(taskGetWorkingResult.task.status));
-
-    // Assert M18: tasks/list returned list of tasks
-    assert.notStrictEqual(taskListResult, undefined);
-    assert.strictEqual(Array.isArray(taskListResult.tasks), true);
-    assert.strictEqual(taskListResult.tasks.some((t: any) => t.taskId === asyncCallResult.taskId), true);
-
-    // Assert M17: tasks/cancel successfully cancelled task
-    assert.notStrictEqual(taskCancelResult, undefined);
-    assert.strictEqual(taskCancelResult.status, "cancelled");
-  });
 
   it("M19: supports multiple directories with namespacing on collision", async () => {
     const pkg1Dir = join(tmpDir, "pkg1");
@@ -1087,54 +973,7 @@ describe("@actiondock/mcp Adapter", () => {
     await server.close();
   });
 
-  it("M24: tasks/cancel returns true terminal status when already finished, and maps timed_out/interrupted to failed", async () => {
-    const mockStorage: any = {
-      runs: new Map<string, any>(),
-      getRun(id: string) {
-        return this.runs.get(id);
-      },
-      listRuns() {
-        return Array.from(this.runs.values());
-      },
-      updateRun(id: string, status: any) {
-        const r = this.runs.get(id);
-        if (r) r.status = status;
-      },
-      close() {},
-    };
-
-    mockStorage.runs.set("task-success", {
-      id: "task-success",
-      status: "success",
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-    });
-    mockStorage.runs.set("task-timed-out", {
-      id: "task-timed-out",
-      status: "timed_out",
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-    });
-
-    const server = await createActionDockMcpServer({
-      actions: new Map(),
-      storage: mockStorage,
-    });
-
-    // tasks/get for timed_out should map to failed
-    const reqHandler = (server.server as any)._requestHandlers.get("tasks/get");
-    const getRes = await reqHandler({ method: "tasks/get", params: { taskId: "task-timed-out" } });
-    assert.strictEqual(getRes.task.status, "failed");
-
-    // tasks/cancel on already success task should return completed, not cancelled
-    const cancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
-    const cancelRes = await cancelHandler({ method: "tasks/cancel", params: { taskId: "task-success" } });
-    assert.strictEqual(cancelRes.status, "completed");
-
-    await server.close();
-  });
-
-  it("M25: strips execution control fields (__async, execution) before passing to action", async () => {
+  it("M25: passes tool input arguments purely and directly to action", async () => {
     let receivedInput: any = null;
     const strictAction = defineAction({
       run(input) {
@@ -1169,8 +1008,7 @@ describe("@actiondock/mcp Adapter", () => {
             name: "strict-action",
             arguments: {
               query: "test",
-              __async: false,
-              execution: { mode: "sync" },
+              filter: { active: true },
             },
           },
         });
@@ -1190,10 +1028,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     assert.notStrictEqual(callResult, undefined);
     assert.ok(!(callResult.isError));
-    assert.deepStrictEqual(receivedInput, { query: "test" });
-    const receivedRecord = receivedInput as Record<string, unknown>;
-    assert.strictEqual(receivedRecord.execution, undefined);
-    assert.strictEqual(receivedRecord.__async, undefined);
+    assert.deepStrictEqual(receivedInput, { query: "test", filter: { active: true } });
 
     await server.close();
   });

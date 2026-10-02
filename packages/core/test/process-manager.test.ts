@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  decodeBytes,
   decodeText,
   encodeBytes,
   encodeText,
@@ -235,26 +236,32 @@ describe("受管进程管理器 ProcessManager", () => {
   describe("输入队列、操作调度与去重流转", () => {
   });
 
-  describe("宿主与作用域资源配额限制", () => {
-    it("作用域活跃进程上限超额抛出 QUOTA_EXCEEDED (上限 8)", async () => {
-      const { manager } = createManager({ maxActiveProcessesPerScope: 2 });
+  describe("宿主硬性资源配额限制", () => {
+    it("宿主活跃进程上限超额抛出 QUOTA_EXCEEDED", async () => {
+      const { manager } = createManager({ maxActiveProcessesPerHost: 2 });
 
       await manager.start(ownerA, { requestId: "req-q-1", spec: defaultSpec });
       await manager.start(ownerA, { requestId: "req-q-2", spec: defaultSpec });
 
       // 第三次超出配额 2
       await assert.rejects(
-        manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec })
-      , ProcessError);
-
-      try {
-        await manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec });
-        assert.fail("不应到达此分支");
-      } catch (err: any) {
-        assert.strictEqual(err.code, QUOTA_EXCEEDED);
-      }
+        manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec }),
+        (err: any) => err instanceof ProcessError && err.code === QUOTA_EXCEEDED
+      );
     });
 
+    it("单进程输出缓冲区配额超额抛出 QUOTA_EXCEEDED", async () => {
+      const { manager } = createManager({ maxOutputBufferBytesPerProcess: 1024 });
+
+      await assert.rejects(
+        manager.start(ownerA, {
+          requestId: "req-q-buf",
+          spec: defaultSpec,
+          limits: { outputBufferBytes: 2048 },
+        }),
+        (err: any) => err instanceof ProcessError && err.code === QUOTA_EXCEEDED
+      );
+    });
   });
 
   describe("生命周期、定时器与紧急终止 stop", () => {
@@ -663,10 +670,9 @@ describe("受管进程管理器 ProcessManager", () => {
       assert.ok((decodeText(readRes.chunks)).includes("trailing-output"));
     });
 
-    it("[Issue 6] 终态保留输出日志纳入宿主配额，超额时按 LRU 淘汰旧日志", async () => {
+    it("[Issue 6] 终态保留输出日志支撑游标读取，不可用时抛出 OUTPUT_UNAVAILABLE", async () => {
       const { manager } = createManager({
         maxOutputBufferBytesPerProcess: 2048,
-        maxOutputBufferBytesPerHost: 2048, // 宿主上限 2048 字节
       });
 
       // 启动并退出进程 1，产生 1500 字节保留日志
@@ -680,7 +686,7 @@ describe("受管进程管理器 ProcessManager", () => {
       handle1.emitExit(0, null);
       handle1.emitOutputClosed("natural");
 
-      // 启动第 2 个进程，请求 1024 字节：1500 + 1024 > 2048，触发 LRU 淘汰 p1 的保留日志
+      // 启动第 2 个进程：不应发生过度淘汰，p1 的终态日志保持可读
       const p2 = await manager.start(ownerA, {
         requestId: "req-p2",
         spec: defaultSpec,
@@ -688,7 +694,18 @@ describe("受管进程管理器 ProcessManager", () => {
       });
       assert.notStrictEqual(p2.process.id, undefined);
 
-      // p1 终态日志已被淘汰，当 onGap="error" 时抛出 OUTPUT_UNAVAILABLE 错误
+      const readRes = await manager.read(ownerA, p1.process.id, {
+        cursor: p1.initialCursor,
+        maxBytes: 65536,
+        waitMs: 0,
+        onGap: "error",
+      });
+      assert.strictEqual(readRes.chunks.length, 1);
+      assert.strictEqual(decodeBytes(readRes.chunks[0].data).byteLength, 1500);
+
+      // 清除终态缓存后，已不可用进程直接抛出 OUTPUT_UNAVAILABLE
+      (manager as any).terminalOutputCache.clear();
+
       let readErr: any;
       try {
         await manager.read(ownerA, p1.process.id, {
@@ -703,7 +720,6 @@ describe("受管进程管理器 ProcessManager", () => {
       assert.ok(readErr instanceof ProcessError);
       assert.strictEqual(readErr?.code, OUTPUT_UNAVAILABLE);
 
-      // 墓碑机制移除后，已淘汰进程直接抛出 OUTPUT_UNAVAILABLE
       let skipErr: any;
       try {
         await manager.read(ownerA, p1.process.id, {

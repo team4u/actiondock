@@ -52,7 +52,6 @@ export interface ManagedProcessRecord {
   lifetimeTimer?: ReturnType<typeof setTimeout>;
   drainTimer?: ReturnType<typeof setTimeout>;
   inputQueue: QueuedOperation[];
-  pendingInputBytes: number;
   inputClosed: boolean;
   isDispatching: boolean;
   effectiveLimits: Required<Limits>;

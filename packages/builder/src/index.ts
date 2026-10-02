@@ -12,7 +12,6 @@ export { packProject } from "./pack";
 export {
   exportCompositeSkill,
   exportSkill,
-  exportSkillBatch,
   SkillExporter,
 } from "./exporter";
 
@@ -22,8 +21,6 @@ export { SelectionPlanner } from "./planner";
 // 公共契约与配置类型
 export type {
   ArchiveFormat,
-  BatchSkillExportOptions,
-  BatchSkillExportResult,
   BuildOptions,
   BuildPlan,
   BuildResult,

@@ -1,12 +1,14 @@
-import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import {
   discoverProjects,
   listLinkedPackages,
   resolvePackageRoot,
 } from "@actiondock/core/registry";
+import { getPackageSlug } from "@actiondock/core/project";
 import {
   findProjectRoot,
+  loadProjectConfig,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError, notInProjectError, packageNotFoundError, wrapAsExecutionError } from "../errors";
@@ -118,7 +120,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
       const isMachine = Boolean(options.json);
 
       try {
-        const { exportCompositeSkill, exportSkill, exportSkillBatch } = await import("@actiondock/builder");
+        const { exportCompositeSkill, exportSkill } = await import("@actiondock/builder");
         if (options.bundle !== undefined) {
           const bundleName =
             typeof options.bundle === "string" && options.bundle.trim()
@@ -167,18 +169,54 @@ export function registerExportCommand(program: Command, context?: CliContext): v
           if (!isMachine) {
             writeStdout(`Batch exporting ${roots.length} Skill packages...`);
           }
-          const batchRes = await exportSkillBatch({
-            projectRoots: roots,
-            mode,
-            outDir: options.out,
-            archive: options.archive,
-            playbooks: options.playbook,
-            actions: options.actions,
-            skillMdPath: options.skillMd,
-            vendorDeps: options.vendorDeps,
-            allowInstallScripts: options.allowInstallScripts,
-            requireReproducible: options.requireReproducible,
-          });
+          const baseOutDir = resolve(options.out || join(process.cwd(), "dist", "skills"));
+          mkdirSync(baseOutDir, { recursive: true });
+
+          const usedDirNames = new Set<string>();
+          const results = [];
+
+          for (const projectRoot of roots) {
+            const config = loadProjectConfig(projectRoot);
+            let pkgSlug = getPackageSlug(config.id);
+            if (usedDirNames.has(pkgSlug)) {
+              pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+            }
+            if (!pkgSlug) {
+              pkgSlug = getPackageSlug(config.id) || "package";
+            }
+            if (usedDirNames.has(pkgSlug)) {
+              let suffix = 2;
+              while (usedDirNames.has(`${pkgSlug}-${suffix}`)) {
+                suffix++;
+              }
+              pkgSlug = `${pkgSlug}-${suffix}`;
+            }
+            usedDirNames.add(pkgSlug);
+
+            const pkgOutDir = join(baseOutDir, `${pkgSlug}-skill`);
+            const res = await exportSkill({
+              projectRoot,
+              mode,
+              outDir: pkgOutDir,
+              archive: options.archive,
+              playbooks: options.playbook,
+              actions: options.actions,
+              skillMdPath: options.skillMd,
+              vendorDeps: options.vendorDeps,
+              allowInstallScripts: options.allowInstallScripts,
+              requireReproducible: options.requireReproducible,
+            });
+            results.push(res);
+          }
+
+          const totalActions = results.reduce((sum, r) => sum + r.actionsCount, 0);
+          const totalPlaybooks = results.reduce((sum, r) => sum + r.playbooksCount, 0);
+          const batchRes = {
+            results,
+            outDir: baseOutDir,
+            totalActions,
+            totalPlaybooks,
+          };
 
           renderResult(batchRes, {
             json: isMachine,

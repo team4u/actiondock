@@ -26,7 +26,6 @@ import {
 export function attachDescribeCommand(parent: Command, context?: CliContext): Command {
   const cmd = parent
     .command("describe <id>")
-    .alias("show")
     .description("Show action definition, schema, and description")
     .option("-P, --package <id>", "Target package ID or path");
 
