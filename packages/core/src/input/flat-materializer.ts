@@ -7,7 +7,7 @@ import {
 import { isForbiddenActionInputPropertyName } from "./flat-predicates";
 import { DEFAULT_MAX_MATERIALIZED_SIZE_BYTES } from "./flat-parser";
 import type { FlatAssignment } from "./flat-parser";
-import { validateJsonValue } from "../json/value-validator";
+import { validateJsonValue } from "../value-validator";
 
 /**
  * 节点状态枚举（四态节点模型）。

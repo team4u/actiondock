@@ -70,7 +70,7 @@ import {
 } from "../runtime/run-persistence";
 import { createActionContext, StderrLogger } from "../runtime/context";
 import type { ProcessOwner } from "../process";
-import { validateActionInputValue, validateJsonValue } from "../json/value-validator";
+import { validateActionInputValue, validateJsonValue } from "../value-validator";
 import { validateSchemaOnly } from "../schema/validator";
 
 export type { ExecutionServiceOptions };

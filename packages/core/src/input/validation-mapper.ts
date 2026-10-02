@@ -14,7 +14,7 @@ import {
 import type {
   ActionInputValidationResult,
   JsonValueValidationResult,
-} from "../json/value-validator";
+} from "../value-validator";
 
 /**
  * 校验失败结构化输入描述。

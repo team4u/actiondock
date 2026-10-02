@@ -32,7 +32,7 @@ export interface ValidationResult {
 /**
  * 递归检查数据中是否包含危险的原型污染属性键名（__proto__、constructor、prototype）。
  */
-import { hasDangerousKeys } from "../json/value-validator";
+import { hasDangerousKeys } from "../value-validator";
 
 export { hasDangerousKeys };
 

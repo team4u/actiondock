@@ -5,7 +5,7 @@ import {
   INPUT_CLOSED,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
-} from "../src";
+} from "../src/errors";
 import { NodeProcessDriver } from "../src/process/process-driver";
 import { resolveProcessEnv } from "../src/process/driver";
 

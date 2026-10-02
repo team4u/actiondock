@@ -6,7 +6,7 @@ import {
   escapeJsonPointerSegment,
   appendJsonPointer,
   DEFAULT_MAX_JSON_DEPTH,
-} from "../../src/json";
+} from "../src/value-validator";
 
 describe("Iterative Strict JsonValue Validator", () => {
   describe("RFC 6901 JSON Pointer 转义与拼接", () => {

@@ -24,7 +24,7 @@ import {
   buildActionDescribePayload,
   mapInputValidationFailure,
 } from "../input";
-import { validateActionInputValue } from "../json/value-validator";
+import { validateActionInputValue } from "../value-validator";
 import { normalizeActionCollection } from "./action-collection";
 import { parseDuration } from "../utils";
 

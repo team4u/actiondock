@@ -1,5 +1,5 @@
 import type { JsonValue } from "@actiondock/sdk";
-import { isForbiddenActionInputPropertyName } from "../input/flat-predicates";
+import { isForbiddenActionInputPropertyName } from "./input/flat-predicates";
 
 /** 默认 JSON 最大嵌套深度限制（防止恶意超深结构） */
 export const DEFAULT_MAX_JSON_DEPTH = 256;

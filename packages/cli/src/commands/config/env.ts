@@ -1,7 +1,5 @@
-import {
-  fetchRemoteConfigEnv,
-  resolveEnvValue,
-} from "@actiondock/core/profile";
+import { resolveEnvValue } from "@actiondock/core";
+import { fetchRemoteConfigEnv } from "@actiondock/core/profile";
 import {
   isSecretConfigKey,
 } from "@actiondock/core/project";

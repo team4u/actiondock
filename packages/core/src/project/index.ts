@@ -46,7 +46,7 @@ export {
   type ResolveActionInputOptions,
   type ReadStdinBoundedOptions,
 } from "../input/index";
-export { validateActionInputValue } from "../json/value-validator";
+export { validateActionInputValue } from "../value-validator";
 export { parseJson } from "../input/input-resolver";
 export {
   InputError,

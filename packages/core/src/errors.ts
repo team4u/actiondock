@@ -465,12 +465,6 @@ export const INVALID_ACTION_ID = "INVALID_ACTION_ID";
 /** 规程标识符不符合命名规范 */
 export const INVALID_PLAYBOOK_ID = "INVALID_PLAYBOOK_ID";
 
-/** 文件锁被占用 */
-export const FILE_LOCK_BUSY = "FILE_LOCK_BUSY";
-
-/** 文件锁获取超时 */
-export const FILE_LOCK_TIMEOUT = "FILE_LOCK_TIMEOUT";
-
 /** 项目根目录未找到或不是合法的 ActionDock 包 */
 export const PROJECT_ROOT_NOT_FOUND = "PROJECT_ROOT_NOT_FOUND";
 
@@ -719,8 +713,6 @@ export type ErrorCode =
   | typeof MANIFEST_LOAD_FAILED
   | typeof INVALID_ACTION_ID
   | typeof INVALID_PLAYBOOK_ID
-  | typeof FILE_LOCK_BUSY
-  | typeof FILE_LOCK_TIMEOUT
   | typeof PROJECT_ROOT_NOT_FOUND;
 
 /** 全仓统一错误码类型别名 */

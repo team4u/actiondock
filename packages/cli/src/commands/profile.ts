@@ -7,10 +7,10 @@ import {
   removeProfile,
   resolveProfileToken,
   resolveTarget,
-  toSnakeUpperCase,
   updateProfile,
   useProfile,
 } from "@actiondock/core/profile";
+import { toSnakeUpperCase } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
   maskSecretValue,

@@ -1,5 +1,5 @@
 import { DEFAULT_MAX_INPUT_BYTES } from "./file-input";
-import { DEFAULT_MAX_JSON_DEPTH } from "../json/value-validator";
+import { DEFAULT_MAX_JSON_DEPTH } from "../value-validator";
 import {
   DEFAULT_MAX_ASSIGNMENTS,
   DEFAULT_MAX_PATH_DEPTH,

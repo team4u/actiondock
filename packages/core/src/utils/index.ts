@@ -41,13 +41,6 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /**
- * 检查当前运行环境是否为 Windows 操作系统（跨域通用谓词单一事实源）。
- */
-export function isWindows(): boolean {
-  return process.platform === "win32";
-}
-
-/**
  * 语义化版本元数据结构。
  */
 export interface SemVer {

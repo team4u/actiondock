@@ -8,7 +8,7 @@ import {
   isFlatPathPropertyName,
   isForbiddenActionInputPropertyName,
 } from "./flat-predicates";
-import { validateJsonValue } from "../json/value-validator";
+import { validateJsonValue } from "../value-validator";
 
 /** 最大赋值表达式总数 */
 export const DEFAULT_MAX_ASSIGNMENTS = 1000;

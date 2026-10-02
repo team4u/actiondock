@@ -14,7 +14,7 @@ import type { FlatMaterializerOptions } from "./flat-materializer";
 import {
   validateJsonValue,
   DEFAULT_MAX_JSON_DEPTH,
-} from "../json/value-validator";
+} from "../value-validator";
 import { scanJsonDepth } from "./json-depth-scanner";
 import { decodeUtf8Strict, stripBom } from "./utf8";
 import {

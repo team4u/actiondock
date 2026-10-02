@@ -5,12 +5,10 @@ import {
 } from "@actiondock/core/project";
 import {
   loadProjectConfig,
+  resolveEnvValue,
   type ActionDockService,
   type ConfigValueView,
 } from "@actiondock/core";
-import {
-  resolveEnvValue,
-} from "@actiondock/core/profile";
 
 /**
  * 配置合并视图条目：跨作用域合并后的键值展示结构。
