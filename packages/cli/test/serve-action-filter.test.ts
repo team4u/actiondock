@@ -320,7 +320,7 @@ export default defineAction({
           Authorization: `Bearer ${SECRET}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ input: "hello-cli" }),
+        body: JSON.stringify({ input: { message: "hello-cli" } }),
       }
     );
     assert.strictEqual(runAllowedRes.status, 200);

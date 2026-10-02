@@ -240,7 +240,7 @@ export default defineAction({
         method: "tools/call",
         params: {
           name: "proc.exec",
-          arguments: "mcp-echo-success",
+          arguments: { message: "mcp-echo-success" },
         },
       }),
     });

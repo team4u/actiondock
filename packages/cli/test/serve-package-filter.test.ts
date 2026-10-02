@@ -321,7 +321,7 @@ export default defineAction({
         Authorization: `Bearer ${SECRET}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input: "run-success" }),
+      body: JSON.stringify({ input: { message: "run-success" } }),
     });
     assert.strictEqual(runAllowedRes.status, 200);
     const runAllowedJson = (await runAllowedRes.json()) as any;
@@ -393,7 +393,7 @@ export default defineAction({
         method: "tools/call",
         params: {
           name: toolNames.find((name: string) => name.includes("echo-a")),
-          arguments: "mcp-hello",
+          arguments: { message: "mcp-hello" },
         },
       }),
     });
