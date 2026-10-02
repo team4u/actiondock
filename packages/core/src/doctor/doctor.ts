@@ -1,7 +1,6 @@
 import type { DoctorCheckContext, DoctorCheck } from "./context";
 import { createDoctorCheckContext } from "./context";
 import {
-  checkBunRuntime,
   checkCliExecutable,
   checkGlobalRegistry,
   checkGlobalStorage,
@@ -19,7 +18,6 @@ import type { DoctorReport } from "./types";
  */
 const doctorCheckRegistry: DoctorCheck[] = [
   checkNodeRuntime,
-  checkBunRuntime,
   checkCliExecutable,
   checkGlobalStorage,
   checkGlobalRegistry,

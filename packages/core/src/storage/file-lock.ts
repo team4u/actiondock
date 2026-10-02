@@ -11,6 +11,11 @@ import {
 import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { isProcessAlive } from "../utils";
+import { type Clock, SystemClock } from "./clock";
+import { ActionDockError, STORAGE_BUSY, TIMEOUT } from "../errors";
+
+/** 模块级默认时钟实例 */
+const defaultClock: Clock = new SystemClock();
 
 /**
  * 默认锁超时与重试配置。
@@ -21,10 +26,6 @@ export const DEFAULT_FILE_LOCK_RETRY_DELAY_MS = 25;
 export const DEFAULT_FILE_LOCK_HEARTBEAT_MS = 3000;
 
 export const LOCK_METADATA_FILE = "metadata.json";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 /**
  * 文件锁持有者元数据契约。
@@ -54,6 +55,7 @@ export interface FileLockOptions {
   mtimeFirst?: boolean;
   createLockError?: (message: string) => Error;
   assertHolderReclaimable?: (metadata: FileLockMetadata) => void;
+  clock?: Clock;
 }
 
 /**
@@ -127,12 +129,14 @@ export function readLockMetadataSync(lockPath: string): FileLockMetadata | undef
 export async function isStaleLock(
   lockPath: string,
   staleMs: number = DEFAULT_FILE_LOCK_STALE_MS,
-  options?: FileLockOptions
+  options?: FileLockOptions,
+  clock?: Clock
 ): Promise<boolean> {
+  const effectiveClock = options?.clock ?? clock ?? defaultClock;
   let lockAgeMs: number;
   try {
     const s = await stat(lockPath);
-    lockAgeMs = Date.now() - s.mtimeMs;
+    lockAgeMs = effectiveClock.now().getTime() - s.mtimeMs;
   } catch (err: any) {
     throw err;
   }
@@ -170,12 +174,14 @@ export async function isStaleLock(
 export function isStaleLockSync(
   lockPath: string,
   staleMs: number = DEFAULT_FILE_LOCK_STALE_MS,
-  options?: FileLockOptions
+  options?: FileLockOptions,
+  clock?: Clock
 ): boolean {
+  const effectiveClock = options?.clock ?? clock ?? defaultClock;
   let lockAgeMs: number;
   try {
     const s = statSync(lockPath);
-    lockAgeMs = Date.now() - s.mtimeMs;
+    lockAgeMs = effectiveClock.now().getTime() - s.mtimeMs;
   } catch (err: any) {
     throw err;
   }
@@ -210,8 +216,9 @@ export function isStaleLockSync(
 /**
  * 检查指定锁路径是否当前被活跃进程持有。
  */
-export function isLockHeld(lockPath: string, excludeSelf = true): boolean {
+export function isLockHeld(lockPath: string, excludeSelf = true, clock?: Clock): boolean {
   if (!existsSync(lockPath)) return false;
+  const effectiveClock = clock ?? defaultClock;
   try {
     const meta = readLockMetadataSync(lockPath);
     if (meta && typeof meta.pid === "number") {
@@ -221,7 +228,7 @@ export function isLockHeld(lockPath: string, excludeSelf = true): boolean {
       return isProcessAlive(meta.pid);
     }
     const stat = statSync(lockPath);
-    return Date.now() - stat.mtimeMs < DEFAULT_FILE_LOCK_STALE_MS;
+    return effectiveClock.now().getTime() - stat.mtimeMs < DEFAULT_FILE_LOCK_STALE_MS;
   } catch {
     return false;
   }
@@ -289,6 +296,7 @@ export function acquireFileLockSync(
   lockPath: string,
   options?: FileLockOptions
 ): FileLockHandle {
+  const clock = options?.clock ?? defaultClock;
   const staleMs = options?.staleMs ?? DEFAULT_FILE_LOCK_STALE_MS;
   const parentDir = dirname(lockPath);
   if (!existsSync(parentDir)) {
@@ -312,7 +320,7 @@ export function acquireFileLockSync(
       // 锁已存在:判定是否为可接管的陈旧锁
       let stale = false;
       try {
-        stale = isStaleLockSync(lockPath, staleMs, options);
+        stale = isStaleLockSync(lockPath, staleMs, options, clock);
       } catch (err: any) {
         if (err.code === "ENOENT") {
           continue;
@@ -321,7 +329,7 @@ export function acquireFileLockSync(
       }
 
       if (stale) {
-        const quarantine = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+        const quarantine = `${lockPath}.stale.${process.pid}.${clock.now().getTime()}`;
         try {
           renameSync(lockPath, quarantine);
         } catch (err: any) {
@@ -368,14 +376,14 @@ export function acquireFileLockSync(
       if (options?.createLockError) {
         throw options.createLockError(`Lock '${lockPath}' is currently held by another active process`);
       }
-      throw new Error(`Lock '${lockPath}' is currently held by another active process`);
+      throw new ActionDockError(STORAGE_BUSY, `Lock '${lockPath}' is currently held by another active process`);
     }
 
     // mkdir 成功,写入本方持锁元数据(token 永远由本方生成,禁止被外部 metadata 覆盖)
     token = randomUUID();
     metadata = {
       pid: process.pid,
-      createdAt: new Date().toISOString(),
+      createdAt: clock.now().toISOString(),
       ...options?.metadata,
       token,
     };
@@ -434,11 +442,12 @@ export async function acquireFileLock(
   lockPath: string,
   options?: FileLockOptions
 ): Promise<FileLockHandle> {
+  const clock = options?.clock ?? defaultClock;
   const staleMs = options?.staleMs ?? DEFAULT_FILE_LOCK_STALE_MS;
   const acquireTimeoutMs = options?.acquireTimeoutMs ?? DEFAULT_FILE_LOCK_ACQUIRE_TIMEOUT_MS;
   const retryDelayMs = options?.retryDelayMs ?? DEFAULT_FILE_LOCK_RETRY_DELAY_MS;
   const heartbeatMs = options?.heartbeatMs ?? DEFAULT_FILE_LOCK_HEARTBEAT_MS;
-  const deadline = Date.now() + acquireTimeoutMs;
+  const deadline = clock.monotonic() + acquireTimeoutMs;
 
   const resolvedPath = resolve(lockPath);
   const parentDir = dirname(lockPath);
@@ -459,7 +468,7 @@ export async function acquireFileLock(
 
     let stale = false;
     try {
-      stale = await isStaleLock(lockPath, staleMs, options);
+      stale = await isStaleLock(lockPath, staleMs, options, clock);
     } catch (err: any) {
       if (err.code === "ENOENT") {
         continue;
@@ -468,7 +477,7 @@ export async function acquireFileLock(
     }
 
     if (stale) {
-      const quarantine = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+      const quarantine = `${lockPath}.stale.${process.pid}.${clock.now().getTime()}`;
       try {
         await rename(lockPath, quarantine);
         await rm(quarantine, { recursive: true, force: true });
@@ -480,21 +489,21 @@ export async function acquireFileLock(
       }
     }
 
-    if (Date.now() >= deadline) {
+    if (clock.monotonic() >= deadline) {
       if (options?.createLockError) {
         throw options.createLockError(`Failed to acquire lock '${lockPath}' within ${acquireTimeoutMs}ms`);
       }
-      throw new Error(`Failed to acquire lock '${lockPath}' within ${acquireTimeoutMs}ms`);
+      throw new ActionDockError(TIMEOUT, `Failed to acquire lock '${lockPath}' within ${acquireTimeoutMs}ms`);
     }
 
-    await sleep(retryDelayMs);
+    await clock.sleep(retryDelayMs);
   }
 
   const token = randomUUID();
   const metadata: FileLockMetadata = {
     pid: process.pid,
     token,
-    createdAt: new Date().toISOString(),
+    createdAt: clock.now().toISOString(),
     ...options?.metadata,
   };
 
@@ -511,7 +520,7 @@ export async function acquireFileLock(
   let timer: NodeJS.Timeout | undefined;
   if (heartbeatMs > 0) {
     timer = setInterval(() => {
-      const now = new Date();
+      const now = clock.now();
       utimes(lockPath, now, now).catch((err) => {
         const reason = err instanceof Error ? err.message : String(err);
         console.warn(`[FileLock] Failed to refresh lock heartbeat for '${lockPath}': ${reason}`);

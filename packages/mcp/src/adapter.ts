@@ -3,10 +3,13 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
+  ActionDockError,
   createActionDock,
   createNodePlatform,
   findProjectRoot,
   MCP_TOOL_NAME_COLLISION,
+  PACKAGE_NOT_FOUND,
+  PROJECT_ROOT_NOT_FOUND,
   type ActionDockService,
 } from "@actiondock/core";
 import {
@@ -198,7 +201,8 @@ export async function resolveService(
       const abs = resolve(root);
       const detected = findProjectRoot(abs);
       if (!detected) {
-        throw new Error(
+        throw new ActionDockError(
+          PROJECT_ROOT_NOT_FOUND,
           `Project root '${root}' is not a valid ActionDock package (actiondock.json not found)`
         );
       }
@@ -214,7 +218,10 @@ export async function resolveService(
     for (const pkgId of targetPackageIds) {
       const root = resolvePackageRoot(pkgId, undefined, options.customHome);
       if (!root || !existsSync(root)) {
-        throw new Error(`Package '${pkgId}' not found in registry`);
+        throw new ActionDockError(
+          PACKAGE_NOT_FOUND,
+          `Package '${pkgId}' not found in registry`
+        );
       }
       packages.push({
         ...basePkgOpts,
@@ -228,7 +235,8 @@ export async function resolveService(
     const abs = resolve(options.projectRoot);
     const detected = findProjectRoot(abs);
     if (!detected) {
-      throw new Error(
+      throw new ActionDockError(
+        PROJECT_ROOT_NOT_FOUND,
         `Project root '${options.projectRoot}' is not a valid ActionDock package (actiondock.json not found)`
       );
     }
@@ -243,7 +251,8 @@ export async function resolveService(
   ) {
     const currentRoot = findProjectRoot(process.cwd());
     if (!currentRoot) {
-      throw new Error(
+      throw new ActionDockError(
+        PROJECT_ROOT_NOT_FOUND,
         "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
       );
     }
@@ -253,7 +262,10 @@ export async function resolveService(
   if (options.packageId && !options.actions && packages.length === 0) {
     const root = resolvePackageRoot(options.packageId, undefined, options.customHome);
     if (!root || !existsSync(root)) {
-      throw new Error(`Package '${options.packageId}' not found in registry`);
+      throw new ActionDockError(
+        PACKAGE_NOT_FOUND,
+        `Package '${options.packageId}' not found in registry`
+      );
     }
     packages.push({
       ...basePkgOpts,

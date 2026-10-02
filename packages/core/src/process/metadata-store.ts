@@ -1,3 +1,5 @@
+import { ActionDockError, PROCESS_NOT_FOUND } from "../errors";
+
 /**
  * 受管进程运行状态。
  */
@@ -264,7 +266,7 @@ export class MemoryProcessMetadataStore implements ProcessMetadataStore {
   async updateProcessState(processId: string, patch: Partial<ProcessInfo>): Promise<void> {
     const target = this.processes.get(processId);
     if (!target) {
-      throw new Error(`Process '${processId}' not found`);
+      throw new ActionDockError(PROCESS_NOT_FOUND, `Process '${processId}' not found`);
     }
 
     const ctrl = patch.controlState !== undefined ? patch.controlState : patch.control;

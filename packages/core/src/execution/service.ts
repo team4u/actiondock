@@ -16,7 +16,7 @@ import { parseActionRef } from "../catalog/resolve-action";
 import { computeDigest } from "../project/digest";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
-import type { Clock } from "../storage/clock";
+import { type Clock, SystemClock } from "../storage/clock";
 import type { ModuleLoader } from "../platform/module-loader";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import {
@@ -25,14 +25,17 @@ import {
   ACTION_FAILED,
   ACTION_NOT_FOUND,
   ACTION_TIMEOUT,
+  EXECUTION_CONCURRENCY_LIMIT,
   EXECUTION_FAILED,
   IDEMPOTENCY_CONFLICT,
   INPUT_NOT_JSON,
   INPUT_VALIDATION_FAILED,
+  INVALID_ARGUMENT,
   INVOCATION_UNSUPPORTED,
   OUTPUT_NOT_JSON,
   OUTPUT_VALIDATION_FAILED,
   RUN_REPOSITORY_UNAVAILABLE,
+  SERVICE_CLOSED,
   UNHANDLED_EXECUTION_ERROR,
   describeActionLoadFailure,
 } from "../errors";
@@ -140,7 +143,7 @@ export class DefaultExecutionService implements ExecutionService {
   private ownerId: string;
   private actionResolver?: LocalActionResolver;
   private logger?: Logger;
-  private clock?: Clock;
+  private clock: Clock;
   private process?: ProcessAPI;
   private actionInvoker?: ActionInvoker;
   private customHome?: string;
@@ -151,10 +154,10 @@ export class DefaultExecutionService implements ExecutionService {
 
   constructor(options: ExecutionServiceOptions) {
     if (!options.identity) {
-      throw new Error("DefaultExecutionService requires 'identity' PackageIdentity option");
+      throw new ActionDockError(INVALID_ARGUMENT, "DefaultExecutionService requires 'identity' PackageIdentity option");
     }
     if (!options.storage) {
-      throw new Error("DefaultExecutionService requires 'storage' option");
+      throw new ActionDockError(INVALID_ARGUMENT, "DefaultExecutionService requires 'storage' option");
     }
     this.identity = options.identity;
     this.packageId = this.identity.id;
@@ -173,7 +176,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.actionInvoker = options.actionInvoker;
     this.storage = options.storage;
     this.globalStorage = options.globalStorage;
-    this.clock = options.clock;
+    this.clock = options.clock ?? new SystemClock();
     this.process = options.process;
     this.customHome = options.customHome;
     this.registry = new ActionRegistry(options.actions);
@@ -231,7 +234,7 @@ export class DefaultExecutionService implements ExecutionService {
   ): Promise<ExecutionResult> {
     const ticket = await this.start(ref, input, contextOrOptions);
     if (!ticket.result) {
-      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+      throw new ActionDockError(EXECUTION_FAILED, `Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
     return ticket.result;
   }
@@ -250,12 +253,13 @@ export class DefaultExecutionService implements ExecutionService {
     contextOrOptions?: InvocationContext | RunOptions | Record<string, unknown>
   ): Promise<ExecutionTicket & ExecutionHandle> {
     if (this.isClosing) {
-      throw new Error("ExecutionService is closing: new tasks rejected");
+      throw new ActionDockError(SERVICE_CLOSED, "ExecutionService is closing: new tasks rejected");
     }
 
     const currentTotal = this.activeRuns.size + this.reservedSlots;
     if (currentTotal >= this.maxActiveRuns) {
-      throw new Error(
+      throw new ActionDockError(
+        EXECUTION_CONCURRENCY_LIMIT,
         `Concurrency limit reached: ${currentTotal}/${this.maxActiveRuns} active runs`
       );
     }
@@ -327,7 +331,7 @@ export class DefaultExecutionService implements ExecutionService {
       const currentAction = target.action;
 
       if (this.isClosing) {
-        throw new Error("ExecutionService is closing: new tasks rejected");
+        throw new ActionDockError(SERVICE_CLOSED, "ExecutionService is closing: new tasks rejected");
       }
 
       const runId = designatedRunId || context.runId || crypto.randomUUID();
@@ -518,7 +522,7 @@ export class DefaultExecutionService implements ExecutionService {
         runId,
         controller,
         status: "running",
-        startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+        startedAt: (effectiveClock?.now() ?? this.clock.now()).toISOString(),
         signal: context.signal,
         onAbort,
         ticket,
@@ -805,7 +809,7 @@ export class DefaultExecutionService implements ExecutionService {
       requestId: context.requestId,
       inputDigest,
       runId: provisionalRunId,
-      createdAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+      createdAt: (effectiveClock?.now() ?? this.clock.now()).toISOString(),
     });
 
     if (idemp.outcome === "conflict") {
@@ -967,7 +971,7 @@ export class DefaultExecutionService implements ExecutionService {
   }): ExecutionTicket & ExecutionHandle {
     const { target, input, context, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
     const runId = designatedRunId || context.runId || crypto.randomUUID();
-    const now = (effectiveClock?.now() ?? new Date()).toISOString();
+    const now = (effectiveClock?.now() ?? this.clock.now()).toISOString();
     const error: RuntimeError = target.resolveError || {
       code: ACTION_NOT_FOUND,
       message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
@@ -1046,7 +1050,7 @@ export class DefaultExecutionService implements ExecutionService {
       effectiveClock?.now().toISOString() ||
       (typeof (this.storage as any).clock?.now === "function"
         ? (this.storage as any).clock.now().toISOString()
-        : new Date().toISOString());
+        : this.clock.now().toISOString());
 
     return {
       runId,
@@ -1130,7 +1134,7 @@ export class DefaultExecutionService implements ExecutionService {
         runId,
         rootRunId: context.rootRunId || context.parentRunId || runId,
         sequence: sequence++,
-        timestamp: (effectiveClock?.now() ?? new Date()).toISOString(),
+        timestamp: (effectiveClock?.now() ?? this.clock.now()).toISOString(),
       };
       this.eventSink.emit(evt);
     };
@@ -1212,6 +1216,11 @@ export class DefaultExecutionService implements ExecutionService {
       const waitPromise = Promise.all(
         Array.from(this.activeRuns.values()).map((a) => a.ticket.result?.catch(() => {}))
       );
+      // 此处优雅关闭竞速保留原生 setTimeout 与 clearTimeout 的取舍说明：
+      // Clock 接口仅提供 sleep 异步等待能力，未提供注销或取消计划中休眠的句柄；
+      // 若直接使用 clock.sleep 与 waitPromise 竞速，在任务提早完成时未触发的休眠 Promise 将在后台悬挂直至超时；
+      // 保留原生定时器并在 finally 中即时清理，可确保优雅关闭在任何分支下均不产生定时器泄漏；
+      // 且此处仅为服务终结阶段的兜底防护，对确定性测试执行链路无负面干扰。
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise((resolve) => {
         timeoutTimer = setTimeout(resolve, graceMs);

@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { ActionDockError, INVALID_PATH } from "../errors";
 import { assertPathWithinRoot } from "../utils";
 import type { FileStat, FileSystem } from "./types";
 
@@ -31,7 +32,7 @@ export class NodeFileSystem implements FileSystem {
    */
   private resolvePath(targetPath: string): string {
     if (typeof targetPath !== "string" || targetPath.includes("\0")) {
-      throw new Error("Invalid path: contains null byte or non-string argument");
+      throw new ActionDockError(INVALID_PATH, "Invalid path: contains null byte or non-string argument");
     }
 
     if (this.rootDir) {

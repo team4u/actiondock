@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { getActionDockHome, getPackageSlug } from "../utils";
+import { ActionDockError, MANIFEST_NOT_FOUND, REGISTRY_CORRUPTED } from "../errors";
 import { withRegistryLock } from "./lock";
 import {
   buildLinkedPackageEntry,
@@ -48,7 +49,8 @@ export function parseRegistryContent(raw: string, filePath: string): GlobalRegis
   try {
     parsed = JSON.parse(raw);
   } catch (err: any) {
-    throw new Error(
+    throw new ActionDockError(
+      REGISTRY_CORRUPTED,
       `Registry file '${filePath}' is corrupted (invalid JSON: ${err.message}). ` +
         `The original data has been preserved as '${filePath}.corrupt' and can be restored manually. ` +
         `Fix or restore the file, or remove it to start with an empty registry.`
@@ -56,7 +58,8 @@ export function parseRegistryContent(raw: string, filePath: string): GlobalRegis
   }
 
   if (!parsed || typeof parsed !== "object") {
-    throw new Error(
+    throw new ActionDockError(
+      REGISTRY_CORRUPTED,
       `Registry file '${filePath}' is corrupted (top-level value is not an object). ` +
         `The original data has been preserved as '${filePath}.corrupt' and can be restored manually. ` +
         `Fix or restore the file, or remove it to start with an empty registry.`
@@ -336,7 +339,10 @@ export async function linkPackage(
     });
   }
 
-  throw new Error(`Cannot link: actiondock.json not found in '${absPath}' or its subdirectories`);
+  throw new ActionDockError(
+    MANIFEST_NOT_FOUND,
+    `Cannot link: actiondock.json not found in '${absPath}' or its subdirectories`
+  );
 }
 
 export async function unlinkPackage(

@@ -63,10 +63,6 @@ export default defineAction({
     expect(nodeCheck?.status).toBe("ok");
     expect(nodeCheck?.message).toContain(">= 24.12.0 supported");
 
-    const bunCheck = report.checks.find((c) => c.id === "runtime.bun");
-    expect(bunCheck).toBeDefined();
-    expect(bunCheck?.status).toBe("ok");
-
     const storageCheck = report.checks.find((c) => c.id === "storage.global");
     expect(storageCheck).toBeDefined();
     expect(storageCheck?.status).toBe("ok");

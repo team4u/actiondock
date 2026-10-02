@@ -66,35 +66,6 @@ export const checkNodeRuntime: DoctorCheck = {
 };
 
 /**
- * 检查 Bun 运行时可用性（可选环境，用于跨运行时兼容性测试）。
- */
-export const checkBunRuntime: DoctorCheck = {
-  id: "runtime.bun",
-  run: (ctx) => {
-    const bunVersion =
-      (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) ||
-      (process.versions as any).bun;
-    if (bunVersion) {
-      ctx.checks.push({
-        id: "runtime.bun",
-        category: "runtime",
-        name: "Bun Runtime",
-        status: "ok",
-        message: `v${bunVersion} (available for cross-environment testing)`,
-      });
-    } else {
-      ctx.checks.push({
-        id: "runtime.bun",
-        category: "runtime",
-        name: "Bun Runtime",
-        status: "ok",
-        message: "Bun runtime not detected (optional, used for cross-environment compatibility testing)",
-      });
-    }
-  },
-};
-
-/**
  * 检查 CLI 可执行文件（ad）是否在 PATH 中。
  */
 export const checkCliExecutable: DoctorCheck = {

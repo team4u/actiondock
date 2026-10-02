@@ -71,7 +71,7 @@ export function registerAddCommand(program: Command, context?: CliContext): void
 
       try {
         // 调用包管理器执行安装（默认禁用生命周期安装脚本）
-        const installCmd = getInstallCommand(root);
+        const installCmd = await getInstallCommand(root);
         const pm = installCmd[0];
         const args: string[] = [];
 

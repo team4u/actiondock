@@ -1,16 +1,11 @@
 /**
- * scripts 域共享的语义化版本纯函数库（单一事实源）。
- * 本文件为 Node 直接运行时实现，与 semver.ts 类型声明保持同步（见该文件头部形态说明）。
+ * scripts 域共享的语义化版本纯函数库（与 core parseSemVer 单一事实源对齐）。
+ * 本文件为 Node 直接运行时实现，与 semver.ts 声明保持同步（见该文件头部形态说明）。
  */
 
-const SEMVER_REGEX = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
-
-export function parseSemver(v) {
-  const cleaned = v.trim().replace(/^v/, "");
-  const match = cleaned.match(SEMVER_REGEX);
-  if (!match) {
-    throw new Error(`非法的语义化版本号: '${v}'`);
-  }
+function parseSemVer(v) {
+  const match = v.trim().replace(/^[v=]/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
+  if (!match) return null;
   return {
     major: parseInt(match[1], 10),
     minor: parseInt(match[2], 10),
@@ -19,9 +14,18 @@ export function parseSemver(v) {
   };
 }
 
+export function parseSemver(v) {
+  const parsed = parseSemVer(v);
+  if (!parsed) {
+    throw new Error(`非法的语义化版本号: '${v}'`);
+  }
+  return parsed;
+}
+
 export function normalizeSemver(v) {
-  const cleaned = v.trim().replace(/^v/, "");
-  return SEMVER_REGEX.test(cleaned) ? cleaned : null;
+  const parsed = parseSemVer(v);
+  if (!parsed) return null;
+  return `${parsed.major}.${parsed.minor}.${parsed.patch}${parsed.prerelease ? `-${parsed.prerelease}` : ""}`;
 }
 
 export function bumpSemver(current, type, preId = "beta") {
@@ -53,6 +57,8 @@ export function bumpSemver(current, type, preId = "beta") {
 }
 
 export function extractPrereleaseTag(version) {
-  const match = version.match(/-([a-zA-Z]+)(?:\.|\b)/);
+  const parsed = parseSemVer(version);
+  if (!parsed || !parsed.prerelease) return null;
+  const match = parsed.prerelease.match(/^([a-zA-Z]+)(?:\.|\b)/);
   return match ? match[1].toLowerCase() : null;
 }

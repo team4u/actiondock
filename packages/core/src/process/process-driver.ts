@@ -2,7 +2,9 @@ import childProcess, { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import type { Capabilities, LaunchSpec } from "@actiondock/sdk";
 import {
+  ActionDockError,
   INPUT_CLOSED,
+  PROCESS_NOT_FOUND,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
 } from "../errors";
@@ -762,7 +764,7 @@ export class NodeProcessDriver implements ProcessDriver {
   private resolveInstance(handle: ProcessHandle): InternalProcessInstance {
     const instance = this.instances.get(handle.id);
     if (!instance) {
-      throw new Error(`Process instance not found for handle id: ${handle.id}`);
+      throw new ActionDockError(PROCESS_NOT_FOUND, `Process instance not found for handle id: ${handle.id}`);
     }
     return instance;
   }

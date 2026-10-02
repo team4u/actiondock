@@ -49,6 +49,8 @@ export interface ActionManifestEntry {
 export interface PlaybookManifestEntry {
   /** Playbook Markdown 入口文件相对路径（如 "playbooks/greet-user.md"） */
   entry: string;
+  /** Playbook 展示名称，缺省回落文件名派生 */
+  name?: string;
   /** Playbook 任务描述 */
   description?: string;
   /** 该 Playbook 所依赖/调用的 Action ID 列表 */

@@ -8,7 +8,6 @@ export {
   type TransactionFileRecord,
   type TransactionMetadata,
   type ProjectTransaction,
-  isPidAlive,
   isProjectLockHeld,
   acquireProjectLock,
   runFrozenInstall,

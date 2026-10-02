@@ -1,6 +1,7 @@
 import { cpSync, existsSync, renameSync, rmSync } from "node:fs";
 import { ACTIONDOCK_VERSION } from "@actiondock/core";
 import { traverseDirectory } from "@actiondock/core/project";
+import { BuilderError } from "./errors";
 
 /**
  * builder 包内共享的文件系统基础设施。
@@ -113,8 +114,9 @@ export async function replaceDirAtomic(stagingDir: string, targetDir: string): P
       try {
         await moveDirAtomic(backupDir, targetDir);
       } catch (rollbackErr: any) {
-        throw new Error(
-          `Failed to promote directory to '${targetDir}' (${promoteErr instanceof Error ? promoteErr.message : String(promoteErr)}), and rollback from backup '${backupDir}' also failed: ${rollbackErr?.message || String(rollbackErr)}`
+        throw new BuilderError(
+          `Failed to promote directory to '${targetDir}' (${promoteErr instanceof Error ? promoteErr.message : String(promoteErr)}), and rollback from backup '${backupDir}' also failed: ${rollbackErr?.message || String(rollbackErr)}`,
+          "FS_PROMOTE_FAILED"
         );
       }
       throw promoteErr;

@@ -26,6 +26,7 @@ import {
   CAPABILITY_UNAVAILABLE,
   EXECUTION_ABORTED,
   HOST_PROCESS_EXITED,
+  INVALID_ARGUMENT,
   IPC_ERROR,
   SERVICE_CLOSED,
 } from "../errors";
@@ -124,7 +125,7 @@ export class IpcActionDockService implements ActionDockService {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
       });
     } else {
-      throw new Error("IpcActionDockService requires either 'childProcess' or 'scriptPath'");
+      throw new ActionDockError(INVALID_ARGUMENT, "IpcActionDockService requires either 'childProcess' or 'scriptPath'");
     }
 
     if (this.child.stdout) {

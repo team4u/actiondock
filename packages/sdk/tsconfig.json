@@ -3,7 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "paths": {}
+    "paths": {},
+    "noEmit": false,
+    "allowImportingTsExtensions": false
   },
   "include": [
     "src/**/*"

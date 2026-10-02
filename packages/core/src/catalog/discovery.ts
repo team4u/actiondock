@@ -5,6 +5,7 @@ import { loadManifest } from "../project/manifest";
 import type { ActionDockManifest } from "../project/types";
 import { loadRegistry } from "../registry/registry";
 import { discoverProjectConfigs } from "../registry/scan";
+import { ActionDockError, PACKAGE_ID_CONFLICT } from "../errors";
 
 import type { PackageIdentity } from "../runtime/identity";
 
@@ -101,7 +102,8 @@ export class PackageDiscovery {
       const idRealPaths = this.idRealPaths;
       const existingReal = idRealPaths.get(manifest.id);
       if (existingReal !== undefined && existingReal !== real) {
-        throw new Error(
+        throw new ActionDockError(
+          PACKAGE_ID_CONFLICT,
           `PACKAGE_ID_CONFLICT: Package ID '${manifest.id}' is declared by multiple directories: '${existingReal}' and '${abs}'`
         );
       }

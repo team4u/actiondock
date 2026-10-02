@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ActionDockError, ACTION_LOAD_FAILED } from "../errors";
+import { ActionDockError, ACTION_LOAD_FAILED, MODULE_RESOLVE_FAILED } from "../errors";
 /**
  * 统一源码模块加载器接口。
  * 解耦 Action 与各类扩展模块的具体加载机制（如 ECMAScript 原生 import、tsx 动态转译加载等）。
@@ -108,19 +108,22 @@ export class NodeModuleLoader implements ModuleLoader {
 
     const ext = extname(candidateBasePath);
     if (!ext) {
-      throw new Error(
+      throw new ActionDockError(
+        MODULE_RESOLVE_FAILED,
         `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': missing file extension. Explicit .ts, .mts, .js, or .mjs extension is required.`
       );
     }
 
     if (!ALLOWED_EXTENSIONS.has(ext)) {
-      throw new Error(
+      throw new ActionDockError(
+        MODULE_RESOLVE_FAILED,
         `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': unsupported extension '${ext}'. Only .ts, .mts, .js, and .mjs are supported.`
       );
     }
 
     if (!existsSync(candidateBasePath)) {
-      throw new Error(
+      throw new ActionDockError(
+        MODULE_RESOLVE_FAILED,
         `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': file not found`
       );
     }

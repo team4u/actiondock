@@ -1,8 +1,10 @@
 import type { OperationReceipt } from "@actiondock/sdk";
 import {
+  ActionDockError,
   CONTROL_REVOKED,
   INPUT_CLOSED,
   INPUT_OUTCOME_UNKNOWN,
+  INVALID_STATE,
   PROCESS_QUARANTINED,
   QUEUE_FULL,
   ProcessError,
@@ -257,7 +259,7 @@ export class InputDispatcher {
         if (op.type === "write" && op.bytes) {
           try {
             if (!proc.handle) {
-              throw new Error("Missing driver handle");
+              throw new ActionDockError(INVALID_STATE, "Missing driver handle");
             }
             await proc.handle.write(op.bytes);
 
@@ -290,7 +292,7 @@ export class InputDispatcher {
         } else if (op.type === "control" && op.action) {
           try {
             if (!proc.handle) {
-              throw new Error("Missing driver handle");
+              throw new ActionDockError(INVALID_STATE, "Missing driver handle");
             }
             if (op.action.type === "input-eof") {
               if (proc.handle.sendInputEOF) {

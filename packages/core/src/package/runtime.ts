@@ -109,6 +109,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
     this.packageRoot = packageRoot;
     this.projectConfig = projectConfig;
+    // 兼容未在公开选项契约中显式声明的包实例标识与代系标识内部参数透传
     this.identity = options.identity || createPackageIdentity({
       id: projectConfig.id,
       instanceId: (options as any)?.packageInstanceId || (projectConfig as any).packageInstanceId,
@@ -177,7 +178,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       process: options.process ?? this.platform.process,
       clock: options.clock ?? this.platform.clock,
       logger: options.logger,
-      eventSink: options.eventSink ?? (this.platform as any)?.eventSink,
+      eventSink: options.eventSink ?? this.platform.eventSink,
       maxActiveRuns: options.maxActiveRuns,
       ownerId: options.ownerId,
       actionResolver: options.actionResolver,
@@ -313,6 +314,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     }
 
     if (liveAction) {
+      // 动态解析或第三方 Action 实例可能存在规范外的运行时元数据扩展字段
       const actObj = liveAction as any;
       return {
         id: actObj.id || id,
@@ -448,15 +450,11 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   public setActionInvoker(invoker?: ActionInvoker): void {
-    if (this.executionService && typeof (this.executionService as any).setActionInvoker === "function") {
-      (this.executionService as any).setActionInvoker(invoker);
-    }
+    this.executionService.setActionInvoker?.(invoker);
   }
 
   public recoverDeadSessionRuns(sessionId?: string): void {
-    if (typeof (this.storage as any).recoverDeadSessionRuns === "function") {
-      (this.storage as any).recoverDeadSessionRuns(sessionId);
-    }
+    this.storage.recoverDeadSessionRuns?.(sessionId);
   }
 
   async listConfig(): Promise<ConfigValueView[]> {
@@ -782,15 +780,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
-    if (typeof (this.storage as any).cleanExpiredRuns === "function") {
-      return (this.storage as any).cleanExpiredRuns(policy);
-    }
-    return 0;
+    return this.storage.cleanExpiredRuns?.(policy) ?? 0;
   }
 
   async listStateEntries(options?: any): Promise<import("../storage/types").StateEntry[]> {
-    if (typeof (this.storage as any).listStateEntries === "function") {
-      return (this.storage as any).listStateEntries(options);
+    if (typeof this.storage.listStateEntries === "function") {
+      return this.storage.listStateEntries(options);
     }
     throw new ActionDockError(
       CAPABILITY_UNAVAILABLE,

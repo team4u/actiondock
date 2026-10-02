@@ -38,6 +38,7 @@ export {
   type RunsRetentionPolicy,
 } from "./storage/types";
 export { parseDuration } from "./utils";
+export { isWindows } from "./utils";
 
 // 3. 执行配置与结果模型（转引 SDK 规范类型与核心执行契约）
 export type {
@@ -203,6 +204,7 @@ export {
   RUN_NOT_FOUND,
   RUN_ALREADY_FINISHED,
   IPC_ERROR,
+  PROJECT_ROOT_NOT_FOUND,
   describeActionLoadFailure,
   type ActionLoadFailureContext,
   createErrorEnvelope,

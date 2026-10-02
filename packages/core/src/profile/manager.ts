@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
 import { getActionDockHome, isLoopbackHost } from "../utils";
-import { ActionDockError, INVALID_ARGUMENT } from "../errors";
+import { ActionDockError, INVALID_ARGUMENT, PROFILE_NOT_FOUND } from "../errors";
 import type {
   ProfileEntry,
   ProfilesConfig,
@@ -136,10 +136,11 @@ export function addProfile(
 ): void {
   const trimmedName = name.trim();
   if (!trimmedName) {
-    throw new Error("Profile name cannot be empty");
+    throw new ActionDockError(INVALID_ARGUMENT, "Profile name cannot be empty");
   }
   if (!PROFILE_NAME_REGEX.test(trimmedName)) {
-    throw new Error(
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
       `Invalid profile name '${trimmedName}'. Profile names may only contain letters, numbers, hyphens, underscores, and dots.`
     );
   }
@@ -165,12 +166,13 @@ export function updateProfile(
 ): void {
   const trimmedName = name.trim();
   if (!trimmedName) {
-    throw new Error("Profile name cannot be empty");
+    throw new ActionDockError(INVALID_ARGUMENT, "Profile name cannot be empty");
   }
   const profilesConfig = loadProfiles(customHome);
   const existing = profilesConfig.profiles[trimmedName];
   if (!existing) {
-    throw new Error(
+    throw new ActionDockError(
+      PROFILE_NOT_FOUND,
       `Profile '${trimmedName}' not found. Configure it with 'ad profile add ${trimmedName} --server <url>'`
     );
   }
@@ -209,7 +211,8 @@ export function useProfile(name: string, customHome?: string): void {
   const profilesConfig = loadProfiles(customHome);
 
   if (trimmedName !== "local" && !profilesConfig.profiles[trimmedName]) {
-    throw new Error(
+    throw new ActionDockError(
+      PROFILE_NOT_FOUND,
       `Profile '${trimmedName}' not found. Use 'ad profile list' to see available profiles or 'ad profile add' to register one.`
     );
   }
@@ -352,7 +355,8 @@ export function resolveTarget(
     }
     const found = profilesConfig.profiles[pName];
     if (!found) {
-      throw new Error(
+      throw new ActionDockError(
+        PROFILE_NOT_FOUND,
         `Profile '${pName}' not found. Configure it with 'ad profile add ${pName} --server <url>'`
       );
     }
@@ -394,7 +398,8 @@ export function resolveTarget(
     }
     const found = profilesConfig.profiles[pName];
     if (!found) {
-      throw new Error(
+      throw new ActionDockError(
+        PROFILE_NOT_FOUND,
         `Profile '${pName}' (from ACTIONDOCK_PROFILE) not found. Configure it with 'ad profile add ${pName} --server <url>'`
       );
     }

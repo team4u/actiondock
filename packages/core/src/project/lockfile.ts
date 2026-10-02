@@ -2,6 +2,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { computeManifestDigest, parseJsonWithoutDuplicates } from "./digest";
 import { MANIFEST_FILE_NAME } from "./manifest";
+import {
+  ActionDockError,
+  LOCKFILE_CORRUPTED,
+  LOCKFILE_INVALID,
+  LOCKFILE_READ_FAILED,
+  UNSUPPORTED_LOCKFILE_VERSION,
+} from "../errors";
 
 export const LOCKFILE_NAME = "actiondock.lock.json";
 export const LOCKFILE_VERSION = 1;
@@ -55,28 +62,41 @@ export function loadLockfile(projectRoot: string): ActionDockLockfile | null {
   try {
     raw = readFileSync(filePath, "utf-8");
   } catch (err: any) {
-    throw new Error(`Failed to read lockfile at ${filePath}: ${err.message}`);
+    throw new ActionDockError(
+      LOCKFILE_READ_FAILED,
+      `Failed to read lockfile at ${filePath}: ${err.message}`
+    );
   }
 
   let parsed: any;
   try {
     parsed = parseJsonWithoutDuplicates(raw);
   } catch (err: any) {
-    throw new Error(`Corrupted or duplicate keys in lockfile at ${filePath}: ${err.message}`);
+    throw new ActionDockError(
+      LOCKFILE_CORRUPTED,
+      `Corrupted or duplicate keys in lockfile at ${filePath}: ${err.message}`
+    );
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Invalid lockfile format in ${filePath}: expected a JSON object`);
+    throw new ActionDockError(
+      LOCKFILE_INVALID,
+      `Invalid lockfile format in ${filePath}: expected a JSON object`
+    );
   }
 
   if (parsed.lockfileVersion !== LOCKFILE_VERSION) {
-    throw new Error(
+    throw new ActionDockError(
+      UNSUPPORTED_LOCKFILE_VERSION,
       `Unsupported lockfileVersion in ${filePath}: received '${parsed.lockfileVersion}', expected ${LOCKFILE_VERSION}`
     );
   }
 
   if (!parsed.packages || typeof parsed.packages !== "object" || Array.isArray(parsed.packages)) {
-    throw new Error(`Invalid lockfile format in ${filePath}: 'packages' must be an object`);
+    throw new ActionDockError(
+      LOCKFILE_INVALID,
+      `Invalid lockfile format in ${filePath}: 'packages' must be an object`
+    );
   }
 
   // 规范化并注入兼容字段

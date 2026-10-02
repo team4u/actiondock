@@ -9,6 +9,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@actiondock/sdk": ["./packages/sdk/src/index.ts"],
       "@actiondock/core": ["./packages/core/src/index.ts"],

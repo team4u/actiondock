@@ -232,11 +232,17 @@ async function compileTypeScript(
     try {
       const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
       if (configFile.error) {
-        throw new Error(ts.formatDiagnostic(configFile.error));
+        throw new BuilderError(
+          ts.formatDiagnostic(configFile.error),
+          "TSCONFIG_READ_FAILED"
+        );
       }
       const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, root);
       if (parsedConfig.errors && parsedConfig.errors.length > 0) {
-        throw new Error(ts.formatDiagnostics(parsedConfig.errors));
+        throw new BuilderError(
+          ts.formatDiagnostics(parsedConfig.errors),
+          "TSCONFIG_PARSE_FAILED"
+        );
       }
       // tsc 不会改写 import 说明符：paths 路径别名在产物中无法解析，必须显式拒绝而非静默编译出坏产物
       if (parsedConfig.options.paths && Object.keys(parsedConfig.options.paths).length > 0) {
@@ -254,7 +260,11 @@ async function compileTypeScript(
         noEmit: false,
       });
     } catch (err) {
-      if (err instanceof BuilderError) {
+      if (
+        err instanceof BuilderError &&
+        err.code !== "TSCONFIG_READ_FAILED" &&
+        err.code !== "TSCONFIG_PARSE_FAILED"
+      ) {
         throw err;
       }
       // tsconfig 解析失败回退默认 compilerOptions，但必须输出显著告警：

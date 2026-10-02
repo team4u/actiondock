@@ -8,8 +8,12 @@
 
 import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { ACTION_CANCELLED, EXECUTION_FAILED, RUN_INTERRUPTED, TIMEOUT } from "../errors";
+import { type Clock, SystemClock } from "../storage/clock";
 import { isTerminalRunStatus } from "../storage/types";
 import { SERVICE_CLOSED } from "./types";
+
+/** 模块级默认时钟实例 */
+const defaultClock: Clock = new SystemClock();
 
 /**
  * 轮询依赖上下文：由 RemoteActionDockService 门面注入自身能力，
@@ -22,6 +26,8 @@ export interface RunPollingContext {
   isClosed(): boolean;
   /** 查询远端运行详情（键不存在时返回 undefined） */
   getRun(runId: string): Promise<RunRecord | undefined>;
+  /** 可选注入时钟抽象（缺省使用系统时钟） */
+  clock?: Clock;
 }
 
 /**
@@ -66,15 +72,17 @@ export async function pollRunCompletion(
   runId: string,
   signal?: AbortSignal,
   timeoutMs?: number,
-  startTime: number = Date.now(),
+  startTime?: number,
   totalMaxWaitMs?: number
 ): Promise<ExecutionResult> {
+  const clock = ctx.clock ?? defaultClock;
+  const effectiveStartTime = startTime ?? clock.monotonic();
   const maxWaitMs = totalMaxWaitMs ?? Math.max(ctx.baseTimeoutMs, timeoutMs ?? 0);
-  const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
+  const remainingWaitMs = Math.max(0, maxWaitMs - (clock.monotonic() - effectiveStartTime));
   let delayMs = Math.min(150, Math.max(10, Math.floor((remainingWaitMs || maxWaitMs) / 4)));
   const maxDelayMs = 2000;
 
-  while (Date.now() - startTime < maxWaitMs) {
+  while (clock.monotonic() - effectiveStartTime < maxWaitMs) {
     if (ctx.isClosed()) {
       return {
         ok: false,
@@ -113,11 +121,11 @@ export async function pollRunCompletion(
       }
       throw err;
     }
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await clock.sleep(delayMs);
     delayMs = Math.min(delayMs * 2, maxDelayMs);
   }
 
-  const waitedMs = Date.now() - startTime;
+  const waitedMs = Math.round(clock.monotonic() - effectiveStartTime);
   return {
     ok: false,
     runId,

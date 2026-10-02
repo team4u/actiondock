@@ -2,6 +2,13 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { ActionDockManifest } from "./types";
 import { isPathOutsideBoundary, PACKAGE_ID_REGEX } from "../utils";
+import {
+  ActionDockError,
+  MANIFEST_CORRUPTED,
+  MANIFEST_INVALID,
+  MANIFEST_READ_FAILED,
+  UNSUPPORTED_MANIFEST_SCHEMA,
+} from "../errors";
 
 export const MANIFEST_FILE_NAME = "actiondock.json";
 
@@ -21,25 +28,35 @@ export function loadManifest(projectRoot: string): ActionDockManifest | null {
   try {
     raw = readFileSync(filePath, "utf-8");
   } catch (err: any) {
-    throw new Error(`Failed to read manifest at ${filePath}: ${err.message}`);
+    throw new ActionDockError(
+      MANIFEST_READ_FAILED,
+      `Failed to read manifest at ${filePath}: ${err.message}`
+    );
   }
 
   let parsed: any;
   try {
     parsed = JSON.parse(raw);
   } catch (err: any) {
-    throw new Error(`Corrupted JSON in manifest at ${filePath}: ${err.message}`);
+    throw new ActionDockError(
+      MANIFEST_CORRUPTED,
+      `Corrupted JSON in manifest at ${filePath}: ${err.message}`
+    );
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Invalid manifest format in ${filePath}: expected a JSON object`);
+    throw new ActionDockError(
+      MANIFEST_INVALID,
+      `Invalid manifest format in ${filePath}: expected a JSON object`
+    );
   }
 
   if (
     parsed.schemaVersion !== undefined &&
     (typeof parsed.schemaVersion !== "number" || parsed.schemaVersion < 1 || parsed.schemaVersion > 2)
   ) {
-    throw new Error(
+    throw new ActionDockError(
+      UNSUPPORTED_MANIFEST_SCHEMA,
       `Unsupported manifest schemaVersion in ${filePath}: received '${parsed.schemaVersion}', expected 2`
     );
   }

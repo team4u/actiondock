@@ -1,4 +1,4 @@
-import { ACTIONDOCK_VERSION, UNAUTHORIZED } from "@actiondock/core";
+import { ACCESS_DENIED, ACTIONDOCK_VERSION, ActionDockError, UNAUTHORIZED } from "@actiondock/core";
 import {
   createMcpEndpointHandler,
   formatHostForUrl,
@@ -38,7 +38,8 @@ export function startMcpHttpServer(
 
   // Non-loopback address requires token authentication by default
   if (!isLoopbackHost(host) && !token && !options.allowInsecureNoAuth) {
-    throw new Error(
+    throw new ActionDockError(
+      ACCESS_DENIED,
       "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."
     );
   }

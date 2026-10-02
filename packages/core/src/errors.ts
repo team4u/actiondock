@@ -390,6 +390,90 @@ export const RUN_NOT_FOUND = "RUN_NOT_FOUND";
 /** 目标运行已进入终态不可操作 */
 export const RUN_ALREADY_FINISHED = "RUN_ALREADY_FINISHED";
 
+/** 目标环境配置 Profile 未找到 */
+export const PROFILE_NOT_FOUND = "PROFILE_NOT_FOUND";
+
+/** 锁文件读取失败 */
+export const LOCKFILE_READ_FAILED = "LOCKFILE_READ_FAILED";
+
+/** 锁文件内容损坏或存在重复键 */
+export const LOCKFILE_CORRUPTED = "LOCKFILE_CORRUPTED";
+
+/** 锁文件结构或格式非法 */
+export const LOCKFILE_INVALID = "LOCKFILE_INVALID";
+
+/** 不受支持的锁文件版本 */
+export const UNSUPPORTED_LOCKFILE_VERSION = "UNSUPPORTED_LOCKFILE_VERSION";
+
+/** 项目清单读取失败 */
+export const MANIFEST_READ_FAILED = "MANIFEST_READ_FAILED";
+
+/** 项目清单 JSON 解析失败或内容损坏 */
+export const MANIFEST_CORRUPTED = "MANIFEST_CORRUPTED";
+
+/** 项目清单结构或格式非法 */
+export const MANIFEST_INVALID = "MANIFEST_INVALID";
+
+/** 不受支持的项目清单 Schema 版本 */
+export const UNSUPPORTED_MANIFEST_SCHEMA = "UNSUPPORTED_MANIFEST_SCHEMA";
+
+/** 项目清单文件 actiondock.json 未找到 */
+export const MANIFEST_NOT_FOUND = "MANIFEST_NOT_FOUND";
+
+/** 清单确定性摘要与锁文件记录不一致 */
+export const MANIFEST_DIGEST_MISMATCH = "MANIFEST_DIGEST_MISMATCH";
+
+/** 全局注册表文件损坏或格式非法 */
+export const REGISTRY_CORRUPTED = "REGISTRY_CORRUPTED";
+
+/** 底层 SQLite 存储不支持异步事务 */
+export const ASYNC_TRANSACTION_UNSUPPORTED = "ASYNC_TRANSACTION_UNSUPPORTED";
+
+/** 底层存储或数据库连接已关闭 */
+export const STORAGE_CLOSED = "STORAGE_CLOSED";
+
+/** 多个不同物理路径声明了相同的包标识冲突 */
+export const PACKAGE_ID_CONFLICT = "PACKAGE_ID_CONFLICT";
+
+/** 路径参数非法（含空字节或非字符串） */
+export const INVALID_PATH = "INVALID_PATH";
+
+/** 存储数据目录初始化失败 */
+export const STORAGE_INIT_FAILED = "STORAGE_INIT_FAILED";
+
+/** 对象处于非法状态或缺少必要内部资源 */
+export const INVALID_STATE = "INVALID_STATE";
+
+/** 目标进程未找到或不存在 */
+export const PROCESS_NOT_FOUND = "PROCESS_NOT_FOUND";
+
+/** 模块标识符解析失败 */
+export const MODULE_RESOLVE_FAILED = "MODULE_RESOLVE_FAILED";
+
+/** 执行并发达到上限 */
+export const EXECUTION_CONCURRENCY_LIMIT = "EXECUTION_CONCURRENCY_LIMIT";
+
+/** 项目配置文件 actiondock.json 未找到 */
+export const PROJECT_CONFIG_NOT_FOUND = "PROJECT_CONFIG_NOT_FOUND";
+
+/** 项目清单加载失败 */
+export const MANIFEST_LOAD_FAILED = "MANIFEST_LOAD_FAILED";
+
+/** 动作标识符不符合命名规范 */
+export const INVALID_ACTION_ID = "INVALID_ACTION_ID";
+
+/** 规程标识符不符合命名规范 */
+export const INVALID_PLAYBOOK_ID = "INVALID_PLAYBOOK_ID";
+
+/** 文件锁被占用 */
+export const FILE_LOCK_BUSY = "FILE_LOCK_BUSY";
+
+/** 文件锁获取超时 */
+export const FILE_LOCK_TIMEOUT = "FILE_LOCK_TIMEOUT";
+
+/** 项目根目录未找到或不是合法的 ActionDock 包 */
+export const PROJECT_ROOT_NOT_FOUND = "PROJECT_ROOT_NOT_FOUND";
+
 /**
  * ActionDock 统一基础结构化异常类。
  * 全仓各领域异常与跨层透传异常的统一事实源基类。
@@ -609,7 +693,35 @@ export type ErrorCode =
   | typeof RUN_NOT_FOUND
   | typeof RUN_ALREADY_FINISHED
   | typeof IPC_ERROR
-  | typeof SERVICE_ERROR;
+  | typeof SERVICE_ERROR
+  | typeof PROFILE_NOT_FOUND
+  | typeof LOCKFILE_READ_FAILED
+  | typeof LOCKFILE_CORRUPTED
+  | typeof LOCKFILE_INVALID
+  | typeof UNSUPPORTED_LOCKFILE_VERSION
+  | typeof MANIFEST_READ_FAILED
+  | typeof MANIFEST_CORRUPTED
+  | typeof MANIFEST_INVALID
+  | typeof UNSUPPORTED_MANIFEST_SCHEMA
+  | typeof MANIFEST_NOT_FOUND
+  | typeof MANIFEST_DIGEST_MISMATCH
+  | typeof REGISTRY_CORRUPTED
+  | typeof ASYNC_TRANSACTION_UNSUPPORTED
+  | typeof STORAGE_CLOSED
+  | typeof PACKAGE_ID_CONFLICT
+  | typeof INVALID_PATH
+  | typeof STORAGE_INIT_FAILED
+  | typeof INVALID_STATE
+  | typeof PROCESS_NOT_FOUND
+  | typeof MODULE_RESOLVE_FAILED
+  | typeof EXECUTION_CONCURRENCY_LIMIT
+  | typeof PROJECT_CONFIG_NOT_FOUND
+  | typeof MANIFEST_LOAD_FAILED
+  | typeof INVALID_ACTION_ID
+  | typeof INVALID_PLAYBOOK_ID
+  | typeof FILE_LOCK_BUSY
+  | typeof FILE_LOCK_TIMEOUT
+  | typeof PROJECT_ROOT_NOT_FOUND;
 
 /** 全仓统一错误码类型别名 */
 export type ActionDockErrorCode = ErrorCode;

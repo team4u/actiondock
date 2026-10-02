@@ -1,9 +1,20 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { NodeModuleLoader, type ModuleLoader, unwrapDefaultExport } from "../platform/module-loader";
-import { ACTION_LOAD_FAILED, isMissingModuleError } from "../errors";
+import {
+  ActionDockError,
+  ACTION_LOAD_FAILED,
+  describeActionLoadFailure,
+  INVALID_ACTION_ID,
+  INVALID_JSON,
+  INVALID_PACKAGE_ID,
+  INVALID_PLAYBOOK_ID,
+  MANIFEST_LOAD_FAILED,
+  PLAYBOOK_NOT_FOUND,
+  PROJECT_CONFIG_NOT_FOUND,
+} from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import type {
   ActionDockManifest,
@@ -60,14 +71,20 @@ import {
 export function loadProjectConfig(projectRoot: string): ProjectConfig {
   const configPath = join(projectRoot, "actiondock.json");
   if (!existsSync(configPath)) {
-    throw new Error(`actiondock.json not found in ${projectRoot}`);
+    throw new ActionDockError(
+      PROJECT_CONFIG_NOT_FOUND,
+      `actiondock.json not found in ${projectRoot}`
+    );
   }
   const content = readFileSync(configPath, "utf-8");
   try {
     const parsed = JSON.parse(content);
     const isScoped = /^@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(parsed.id);
     if (!parsed.id || typeof parsed.id !== "string" || (!PACKAGE_ID_REGEX.test(parsed.id) && !isScoped)) {
-      throw new Error(`actiondock.json invalid or missing 'id': '${parsed?.id}' (must match ${PACKAGE_ID_REGEX})`);
+      throw new ActionDockError(
+        INVALID_PACKAGE_ID,
+        `actiondock.json invalid or missing 'id': '${parsed?.id}' (must match ${PACKAGE_ID_REGEX})`
+      );
     }
     if (!parsed.name || typeof parsed.name !== "string") {
       parsed.name = parsed.id;
@@ -84,20 +101,57 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
 
     return parsed as ProjectConfig;
   } catch (err: any) {
-    throw new Error(`Failed to parse actiondock.json: ${err.message}`);
+    if (err instanceof ActionDockError) {
+      throw err;
+    }
+    throw new ActionDockError(INVALID_JSON, `Failed to parse actiondock.json: ${err.message}`);
   }
 }
 
 export const ALLOWED_INSTALLERS = new Set(["npm", "bun"]);
 
 /**
+ * 异步探测包管理器可用性（通过执行 --version 并检查退出码）。
+ *
+ * 异步化取舍说明：
+ * - 替换同步阻塞子进程调用，避免阻塞 Node.js 事件循环；
+ * - Windows 兼容性保留：npm 在 Windows 上是 .cmd 批处理脚本，在 shell 开启下执行以避免直接调用报错；
+ * - 探测命令限制于白名单内部候选，杜绝外部输入注入风险。
+ */
+function probePackageManager(command: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const proc = spawn(command, ["--version"], {
+        stdio: "pipe",
+        shell: process.platform === "win32",
+      });
+      let settled = false;
+      proc.on("error", () => {
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
+      });
+      proc.on("close", (code) => {
+        if (!settled) {
+          settled = true;
+          resolve(code === 0);
+        }
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/**
  * 探测宿主系统中可用的包管理工具。
  * 优先级：
  * - 环境变量 ACTIONDOCK_INSTALLER 显式指定（严格白名单校验：npm, bun）；
  * - 依据项目根目录下现存的锁文件进行精确匹配（bun.lock/bun.lockb -> bun, package-lock.json/npm-shrinkwrap.json -> npm）；
- * - 候选回退优先级探测（npm > bun）。
+ * - 候选回退优先级异步探测（npm > bun）。
  */
-export function getInstallCommand(projectRoot?: string): string[] {
+export async function getInstallCommand(projectRoot?: string): Promise<string[]> {
   const preferred = process.env.ACTIONDOCK_INSTALLER?.trim();
   if (preferred) {
     if (ALLOWED_INSTALLERS.has(preferred)) {
@@ -127,18 +181,9 @@ export function getInstallCommand(projectRoot?: string): string[] {
     ["bun", "install"],
   ];
   for (const [pm, action] of candidates) {
-    try {
-      const check = spawnSync(pm, ["--version"], {
-        stdio: "pipe",
-        // Windows 兼容：npm 是 .cmd 脚本，无 shell 直接 spawn 必然 ENOENT，
-        // 会导致探测误判 npm 缺失而错误回退选择 bun
-        shell: process.platform === "win32",
-      });
-      if (check.status === 0) {
-        return [pm, action];
-      }
-    } catch {
-      // 继续探测下一个候选包管理器
+    const available = await probePackageManager(pm);
+    if (available) {
+      return [pm, action];
     }
   }
   return ["npm", "install"];
@@ -210,51 +255,56 @@ export async function loadActions(
   try {
     manifest = loadManifest(projectRoot);
   } catch (err: any) {
-    throw new Error(`Failed to load manifest in ${projectRoot}: ${err.message}`);
+    throw new ActionDockError(
+      MANIFEST_LOAD_FAILED,
+      `Failed to load manifest in ${projectRoot}: ${err.message}`
+    );
   }
 
   // 以 actiondock.json 为唯一事实源读取 Action 的元数据契约与入口
   if (manifest?.actions && Object.keys(manifest.actions).length > 0) {
     for (const [actionId, item] of Object.entries(manifest.actions)) {
       if (!ACTION_ID_REGEX.test(actionId)) {
-        throw new Error(
+        throw new ActionDockError(
+          INVALID_ACTION_ID,
           `Invalid action ID '${actionId}' in actiondock.json. Action IDs must match ${ACTION_ID_REGEX}`
         );
       }
       const entryPath = resolve(projectRoot, item.entry);
       assertPathWithinRoot(projectRoot, entryPath, `action entry '${item.entry}'`);
       if (!existsSync(entryPath)) {
-        const error: any = new Error(`Action '${actionId}' entry file not found: ${item.entry}`);
-        error.code = ACTION_LOAD_FAILED;
-        error.details = {
-          actionId,
-          entry: item.entry,
-          entryPath,
-          hint: `请检查 actiondock.json 中 action '${actionId}' 的 entry 配置 '${item.entry}' 是否正确。`,
-        };
-        throw error;
+        throw new ActionDockError(
+          ACTION_LOAD_FAILED,
+          `Action '${actionId}' entry file not found: ${item.entry}`,
+          {
+            actionId,
+            entry: item.entry,
+            entryPath,
+            hint: `请检查 actiondock.json 中 action '${actionId}' 的 entry 配置 '${item.entry}' 是否正确。`,
+          }
+        );
       }
 
       let imported: any;
       try {
         imported = await loader.load(entryPath);
       } catch (err: any) {
-        // 复用 errors.ts 的模块缺失判定单一事实源，保留加载器视角的中文修复提示
-        const msg = String(err.message || "");
-        const error: any = new Error(
-          `Failed to load action '${actionId}' from '${item.entry}': ${msg}`
-        );
-        error.code = ACTION_LOAD_FAILED;
-        error.details = {
+        const failure = describeActionLoadFailure(err, {
           actionId,
-          entry: item.entry,
-          entryPath,
-          rootCause: msg,
-          hint: isMissingModuleError(msg)
-            ? `项目依赖缺失，请在 '${projectRoot}' 目录下运行 'npm install --omit=dev' 安装依赖后再试。`
-            : undefined,
-        };
-        throw error;
+          packageId: manifest?.id || basename(projectRoot),
+          projectRoot,
+        });
+        throw new ActionDockError(
+          failure.code,
+          failure.message,
+          {
+            ...failure.details,
+            entry: item.entry,
+            entryPath,
+          },
+          undefined,
+          failure.details.hint
+        );
       }
 
       const exported = unwrapDefaultExport(imported);
@@ -266,17 +316,16 @@ export async function loadActions(
       }
 
       if (!runFn) {
-        const error: any = new Error(
-          `Action '${actionId}' in '${item.entry}' does not export a runnable handler`
+        throw new ActionDockError(
+          ACTION_LOAD_FAILED,
+          `Action '${actionId}' in '${item.entry}' does not export a runnable handler`,
+          {
+            actionId,
+            entry: item.entry,
+            entryPath,
+            hint: `确保 '${item.entry}' 使用 export default defineAction(...) 导出了可执行处理函数。`,
+          }
         );
-        error.code = ACTION_LOAD_FAILED;
-        error.details = {
-          actionId,
-          entry: item.entry,
-          entryPath,
-          hint: `确保 '${item.entry}' 使用 export default defineAction(...) 导出了可执行处理函数。`,
-        };
-        throw error;
       }
 
       const def: ActionDefinition = {
@@ -320,7 +369,10 @@ export function parsePlaybookContent(
 
   const playbookId = metadata?.id || defaultId;
   if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
-    throw new Error(`Invalid playbook ID '${playbookId}' found in ${filePath}. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`);
+    throw new ActionDockError(
+      INVALID_PLAYBOOK_ID,
+      `Invalid playbook ID '${playbookId}' found in ${filePath}. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`
+    );
   }
 
   // 规程正文为纯 Markdown，剔除可能残存的旧式 Frontmatter 包裹块
@@ -328,7 +380,7 @@ export function parsePlaybookContent(
 
   return {
     id: playbookId,
-    name: (metadata as any)?.name,
+    name: metadata?.name,
     description: metadata?.description,
     actions: Array.isArray(metadata?.actions) ? [...metadata.actions] : [],
     content: body.trim(),
@@ -358,7 +410,14 @@ export function loadPlaybooks(
   } else {
     try {
       manifest = loadManifest(projectRoot);
-    } catch {
+    } catch (err: any) {
+      // 容错与可观测性取舍说明：
+      // - 工程无清单时 loadManifest 返回 null，按空规程集处理属正常场景；
+      // - 清单文件存在但内容损坏或解析失败时，记录可观测警告后安全降级，避免静默吞没异常。
+      const reason = err instanceof Error ? err.message : String(err ?? "Unknown error");
+      process.stderr.write(
+        `[actiondock] Warning: Failed to load manifest in ${projectRoot}: ${reason}\n`
+      );
       return playbooks;
     }
   }
@@ -367,14 +426,18 @@ export function loadPlaybooks(
   if (manifest?.playbooks && Object.keys(manifest.playbooks).length > 0) {
     for (const [playbookId, pbEntry] of Object.entries(manifest.playbooks)) {
       if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
-        throw new Error(
+        throw new ActionDockError(
+          INVALID_PLAYBOOK_ID,
           `Invalid playbook ID '${playbookId}' in actiondock.json. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`
         );
       }
       const fullPath = resolve(projectRoot, pbEntry.entry);
       assertPathWithinRoot(projectRoot, fullPath, `playbook entry '${pbEntry.entry}'`);
       if (!existsSync(fullPath)) {
-        throw new Error(`Playbook file '${pbEntry.entry}' for '${playbookId}' not found in ${projectRoot}`);
+        throw new ActionDockError(
+          PLAYBOOK_NOT_FOUND,
+          `Playbook file '${pbEntry.entry}' for '${playbookId}' not found in ${projectRoot}`
+        );
       }
       const content = readFileSync(fullPath, "utf-8");
       const def = parsePlaybookContent(content, fullPath, {

@@ -3,6 +3,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
   ActionDockError,
   ACTION_PACKAGE_VERSION_CONFLICT,
+  MANIFEST_DIGEST_MISMATCH,
+  MANIFEST_NOT_FOUND,
+  MANIFEST_READ_FAILED,
   PACKAGE_NOT_FOUND,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
@@ -738,7 +741,8 @@ export class PackageGraphBuilder {
 
         const manifestPath = join(pkgDir, MANIFEST_FILE_NAME);
         if (!existsSync(manifestPath)) {
-          throw new Error(
+          throw new ActionDockError(
+            MANIFEST_NOT_FOUND,
             `Action package '${item.pkgId}' at '${pkgDir}' misses required manifest 'actiondock.json'`
           );
         }
@@ -747,14 +751,18 @@ export class PackageGraphBuilder {
         try {
           manifestRaw = readFileSync(manifestPath, "utf-8");
         } catch (err: any) {
-          throw new Error(`Failed to read manifest for '${item.pkgId}': ${err.message}`);
+          throw new ActionDockError(
+            MANIFEST_READ_FAILED,
+            `Failed to read manifest for '${item.pkgId}': ${err.message}`
+          );
         }
 
         const depManifest = parseJsonWithoutDuplicates<ActionDockManifest>(manifestRaw);
         const actualDigest = computeManifestDigest(depManifest);
 
         if (locked?.manifestDigest && locked.manifestDigest !== actualDigest) {
-          throw new Error(
+          throw new ActionDockError(
+            MANIFEST_DIGEST_MISMATCH,
             `Manifest digest mismatch for package '${item.pkgId}': expected '${locked.manifestDigest}', got '${actualDigest}'. Re-resolution required.`
           );
         }

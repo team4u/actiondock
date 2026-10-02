@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { computeManifestDigest } from "./digest";
 import { loadManifest } from "./manifest";
 import type { ActionDockManifest } from "./types";
+import { ActionDockError, MANIFEST_NOT_FOUND } from "../errors";
 
 export const GENERATED_TYPES_REL_PATH = join(".actiondock", "generated", "actions.d.ts");
 export const GENERATED_TYPES_OUTDATED_CODE = "GENERATED_TYPES_OUTDATED";
@@ -129,7 +130,7 @@ export function writeActionTypes(
 ): { filePath: string; digest: string } {
   const targetManifest = manifest || loadManifest(projectRoot);
   if (!targetManifest) {
-    throw new Error(`actiondock.json not found in ${projectRoot}`);
+    throw new ActionDockError(MANIFEST_NOT_FOUND, `actiondock.json not found in ${projectRoot}`);
   }
   const { code, digest } = generateActionTypes(targetManifest);
   const fullPath = join(projectRoot, GENERATED_TYPES_REL_PATH);

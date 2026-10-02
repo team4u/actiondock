@@ -1,4 +1,4 @@
-export { checkBunRuntime, checkCliExecutable, checkNodeRuntime } from "./runtime";
+export { checkCliExecutable, checkNodeRuntime } from "./runtime";
 export { checkGlobalStorage } from "./storage";
 export {
   checkGlobalRegistry,

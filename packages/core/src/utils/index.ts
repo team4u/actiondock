@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { ActionDockError, INVALID_PACKAGE_ID, PATH_TRAVERSAL } from "../errors";
+import { ActionDockError, INVALID_ARGUMENT, INVALID_PACKAGE_ID, PATH_TRAVERSAL } from "../errors";
 
 /**
  * 检查指定的主机地址是否为本地回环接口（Loopback Host）。
@@ -38,6 +38,13 @@ export function isProcessAlive(pid: number): boolean {
   } catch (err: any) {
     return err?.code !== "ESRCH";
   }
+}
+
+/**
+ * 检查当前运行环境是否为 Windows 操作系统（跨域通用谓词单一事实源）。
+ */
+export function isWindows(): boolean {
+  return process.platform === "win32";
 }
 
 /**
@@ -178,22 +185,13 @@ export function traverseDirectory(
 
 
 /**
- * 跨运行时安全查找可执行文件绝对物理路径。
+ * 安全查找可执行文件绝对物理路径。
  *
  * 注意：本函数为同步实现，内部同步遍历 PATH 逐个探测物理文件存在性；
  * 当前全部调用方（doctor 体检与测试 CLI 桥）均为同步链路，serve 链路未使用本函数，
  * 因此暂不提供异步版本。若后续异步链路需要，应另行新增异步实现而非改造本函数。
  */
 export function findExecutable(command: string): string | null {
-  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
-    try {
-      const bPath = (globalThis as any).Bun.which(command);
-      if (bPath) return bPath;
-    } catch {
-      // ignore
-    }
-  }
-
   const hasPathSep = command.includes("/") || command.includes("\\");
   if (hasPathSep) {
     return existsSync(command) ? command : null;
@@ -234,7 +232,8 @@ export function parseDuration(input?: string): number | undefined {
 
   const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)$/i);
   if (!match) {
-    throw new Error(
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
       `Invalid duration format: '${input}'. Supported formats: 500ms, 30s, 5m, 1h`
     );
   }
@@ -392,7 +391,7 @@ export function assertWithinProjectRoot(
   fieldName: string
 ): void {
   if (isAbsolute(subDir)) {
-    throw new Error(`'${fieldName}' cannot be an absolute path: ${subDir}`);
+    throw new ActionDockError(INVALID_ARGUMENT, `'${fieldName}' cannot be an absolute path: ${subDir}`);
   }
   assertPathWithinRoot(projectRoot, subDir, fieldName);
 }

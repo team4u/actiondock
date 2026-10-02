@@ -6,13 +6,14 @@ import {
   escapeStateSegment,
   unescapeStateSegment,
   type JsonValue,
+  type Logger,
   type RuntimeError,
   type RunRecord,
 } from "@actiondock/sdk";
 import { type Clock, SystemClock } from "./clock";
 import { NodeSqliteDriver } from "./sqlite-driver";
 import { safeParseStoredJson } from "./utils";
-import { ActionDockError, AMBIGUOUS_STATE_KEY, STORED_ERROR_DECODE_FAILED, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
+import { ActionDockError, AMBIGUOUS_STATE_KEY, STORAGE_CLOSED, STORED_ERROR_DECODE_FAILED, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
 import {
   DEFAULT_MAX_RUNS_PER_PACKAGE,
   DEFAULT_MIN_RETAIN_RUNS,
@@ -39,6 +40,17 @@ export {
 };
 
 /**
+ * SQLite 运行时存储配置选项契约。
+ */
+export interface SqliteStorageOptions extends StorageOptions {
+  /**
+   * 可选注入的统一日志记录器。
+   * 注入时所有内部诊断与异常告警均走 logger.warn，未注入时保留 console.warn 兜底以维持向后兼容的可观测性。
+   */
+  logger?: Logger;
+}
+
+/**
  * 统一 SQLite 运行时存储实现。
  * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎。
  *
@@ -58,6 +70,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private driver: SqliteDriver;
   private packageId: string;
   private clock: Clock;
+  private logger?: Logger;
   private isClosed = false;
   private statementCache = new Map<string, SqliteStatement>();
   private dbPath: string;
@@ -76,9 +89,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.isClosed;
   }
 
-  constructor(options: StorageOptions) {
+  /**
+   * 统一输出警告日志。
+   * 优先输出至注入的 Logger；未注入时回退至 console.warn 兜底，兼顾 MCP STDIO 协议隔离与向后兼容可观测性。
+   */
+  private logWarn(message: string, ...args: unknown[]): void {
+    if (this.logger) {
+      this.logger.warn(message, ...args);
+    } else {
+      console.warn(message, ...args);
+    }
+  }
+
+  constructor(options: SqliteStorageOptions) {
     this.packageId = options.packageId;
     this.clock = options.clock ?? new SystemClock();
+    this.logger = options.logger;
     const dbPath = options.dbPath || ":memory:";
     this.dbPath = dbPath;
     this.recoverOrphans = options.recoverOrphans === true;
@@ -241,7 +267,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       const res = stmt.run(...params);
       return res.changes;
     } catch (err) {
-      console.warn(
+      this.logWarn(
         `[actiondock] recoverDeadSessionRuns failed: ${err instanceof Error ? err.message : String(err)}`
       );
       return 0;
@@ -333,7 +359,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         // 惰性删除失败仅降级不影响读取语义，但必须可观测，与其他存储降级点对齐
         this.deleteState(namespace, key).catch((err) => {
           const reason = err instanceof Error ? err.message : String(err);
-          console.warn(
+          this.logWarn(
             `[actiondock] expired state lazy delete failed (namespace='${namespace}' key='${key}'): ${reason}`
           );
         });
@@ -402,7 +428,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         const k = r.key;
         this.deleteState(ns, k).catch((err) => {
           const reason = err instanceof Error ? err.message : String(err);
-          console.warn(
+          this.logWarn(
             `[actiondock] expired state lazy delete failed (namespace='${ns}' key='${k}'): ${reason}`
           );
         });
@@ -546,14 +572,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         ).run(retentionCutoff);
       } catch (err) {
         // 独立记录幂等清理失败，不影响状态清理主路径的返回语义
-        console.warn(
+        this.logWarn(
           `[actiondock] idempotency retention cleanup failed: ${err instanceof Error ? err.message : String(err)}`
         );
       }
 
       return res.changes;
     } catch (err) {
-      console.warn(
+      this.logWarn(
         `[actiondock] cleanExpiredState failed: ${err instanceof Error ? err.message : String(err)}`
       );
       return 0;
@@ -735,7 +761,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       try {
         this.cleanExpiredRuns();
       } catch (cleanupErr) {
-        console.warn(
+        this.logWarn(
           `[actiondock] opportunistic cleanExpiredRuns failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`
         );
       }
@@ -772,13 +798,13 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       // 命中零行且新状态为终态：说明该记录已不再处于 running 状态（被其他持有者进程或
       // 恢复流程改写），本次终态写入被丢弃；保持返回值语义不变，仅输出告警保证漂移可观测
       if (res.changes === 0 && isTerminalRunStatus(status)) {
-        console.warn(
+        this.logWarn(
           `[actiondock] updateRun matched 0 rows: run '${id}' is no longer 'running' in db=${this.dbPath}; terminal status '${status}' was not persisted (record likely settled or recovered by another holder process)`
         );
       }
     } catch (err) {
       if (this.isClosed) return;
-      console.warn(`[SqliteRuntimeStorage] Failed to update run "${id}":`, err);
+      this.logWarn(`[SqliteRuntimeStorage] Failed to update run "${id}":`, err);
       throw err;
     }
   }
@@ -858,7 +884,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       this.getStatement("DELETE FROM idempotency_keys WHERE run_id NOT IN (SELECT id FROM runs)").run();
     } catch (err) {
       // 孤立索引清理失败不影响主清理结果的返回语义，但必须可观测
-      console.warn(
+      this.logWarn(
         `[actiondock] orphaned idempotency keys cleanup failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
@@ -939,7 +965,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
             "DELETE FROM idempotency_keys WHERE run_id NOT IN (SELECT id FROM runs)"
           ).run();
         } catch (err) {
-          console.warn(
+          this.logWarn(
             `[actiondock] orphaned idempotency keys cleanup failed: ${err instanceof Error ? err.message : String(err)}`
           );
         }
@@ -947,7 +973,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
       return totalDeleted;
     } catch (err) {
-      console.warn(
+      this.logWarn(
         `[actiondock] cleanExpiredRuns failed: ${err instanceof Error ? err.message : String(err)}`
       );
       return 0;
@@ -1003,7 +1029,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
   checkAndRecordIdempotency(record: IdempotencyRecord): IdempotencyCheckResult {
     if (this.isClosed) {
-      throw new Error("SqliteRuntimeStorage is closed");
+      throw new ActionDockError(STORAGE_CLOSED, "SqliteRuntimeStorage is closed");
     }
 
     // 事务外预读：同步契约下驱动的事务录制器仅允许写语句，
@@ -1143,7 +1169,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       this.driver.close();
     } catch (err) {
       // 驱动关闭异常必须可观测，但不再重复抛出以免阻断上层关停链路
-      console.warn(
+      this.logWarn(
         `[actiondock] storage close failed (db=${this.dbPath}): ${err instanceof Error ? err.message : String(err)}`
       );
     }

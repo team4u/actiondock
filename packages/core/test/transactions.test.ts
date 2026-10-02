@@ -7,7 +7,6 @@ import {
   acquireProjectLock,
   beginTransaction,
   hasPendingTransactions,
-  isPidAlive,
   recoverPendingTransactions,
   safeReleaseProjectLock,
 } from "../src/project/transactions";

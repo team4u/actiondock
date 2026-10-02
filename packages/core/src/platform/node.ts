@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ProcessAPI } from "@actiondock/sdk";
+import type { Logger, ProcessAPI } from "@actiondock/sdk";
+import { ActionDockError, STORAGE_INIT_FAILED } from "../errors";
 import { SystemClock, type Clock } from "../storage/clock";
 import { NodeModuleLoader, type ModuleLoader } from "./module-loader";
 import { NodeProcessDriver } from "../process/process-driver";
@@ -15,6 +16,7 @@ import {
   type SqliteDriver,
 } from "../storage";
 import { NodeFileSystem } from "./node-fs";
+import type { EventSink } from "../runtime/events";
 import type {
   FileSystem,
   GlobalStorageFactoryOptions,
@@ -51,6 +53,10 @@ export interface NodePlatformOptions {
   clock?: Clock;
   /** 自定义存储工厂（默认基于 NodeSqliteDriver 构造） */
   storage?: StorageFactory;
+  /** 可选注入的执行事件接收器 */
+  eventSink?: EventSink;
+  /** 可选注入的统一日志记录器 */
+  logger?: Logger;
 }
 
 function ensureDirectoryForDb(dbPath: string): void {
@@ -63,7 +69,8 @@ function ensureDirectoryForDb(dbPath: string): void {
         if (err?.code === "EEXIST" || err?.code === "EISDIR") {
           return;
         }
-        throw new Error(
+        throw new ActionDockError(
+          STORAGE_INIT_FAILED,
           `Failed to create data directory '${dir}' for database '${dbPath}': ${
             err?.message || String(err)
           }`,
@@ -119,6 +126,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         driver: createDriver(dbPath),
         recoverOrphans: opts?.recoverOrphans === true,
         retentionPolicy: opts?.retentionPolicy,
+        logger: options.logger,
       });
     },
     createGlobalStorage(opts?: GlobalStorageFactoryOptions): RuntimeStorage {
@@ -137,6 +145,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         clock,
         driver: createDriver(dbPath),
         recoverOrphans: opts?.recoverOrphans === true,
+        logger: options.logger,
       });
     },
   };
@@ -148,5 +157,6 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
     modules,
     process,
     storage,
+    eventSink: options.eventSink,
   };
 }

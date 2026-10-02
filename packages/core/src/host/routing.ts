@@ -18,7 +18,7 @@ import {
   type ResolvedAction,
 } from "../catalog";
 import { InvocationPolicy } from "../invocation/policy";
-import { ActionDockError, PACKAGE_NOT_FOUND } from "../errors";
+import { ActionDockError, PACKAGE_NOT_FOUND, UNDECLARED_ACTION_DEPENDENCY } from "../errors";
 
 /**
  * 宽松解析引用：优先结构化解析，失败时按对象或裸短标识符回退。
@@ -137,7 +137,8 @@ export async function describeVisiblePlaybook(
   if (!isPublic && visibility.graph) {
     const rootNode = visibility.graph.root ? visibility.graph.getNode(visibility.graph.root.id) : undefined;
     if (!rootNode?.directDependencies.has(resolved.packageId)) {
-      throw new Error(
+      throw new ActionDockError(
+        UNDECLARED_ACTION_DEPENDENCY,
         `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${resolved.packageId}'`
       );
     }
@@ -145,7 +146,10 @@ export async function describeVisiblePlaybook(
 
   const runtime = runtimes.find((a) => a.packageId === resolved.packageId);
   if (!runtime) {
-    throw new Error(`Package '${resolved.packageId}' not found in host`);
+    throw new ActionDockError(
+      PACKAGE_NOT_FOUND,
+      `Package '${resolved.packageId}' not found in host`
+    );
   }
   return runtime.describePlaybook(resolved.playbookId);
 }
@@ -185,7 +189,10 @@ export async function describeActionAcrossRuntimes(
 ): Promise<ActionSpec> {
   const parsed = parseRefLoose(ref);
   if (parsed.packageId && failedLinkedPackages.has(parsed.packageId)) {
-    throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
+    throw new ActionDockError(
+      PACKAGE_NOT_FOUND,
+      packageNotFoundMessage(parsed.packageId, failedLinkedPackages)
+    );
   }
   const effectiveGraph =
     graph || visibility.graph || buildFallbackGraph(runtimes);
@@ -219,14 +226,18 @@ export async function describeActionAcrossRuntimes(
       effectiveGraph
     )
   ) {
-    throw new Error(
+    throw new ActionDockError(
+      UNDECLARED_ACTION_DEPENDENCY,
       `UNDECLARED_ACTION_DEPENDENCY: Action '${resolved.package.id}/${resolved.ref.actionId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`
     );
   }
 
   const runtime = runtimes.find((a) => a.packageId === resolved.package.id);
   if (!runtime) {
-    throw new Error(packageNotFoundMessage(resolved.package.id, failedLinkedPackages));
+    throw new ActionDockError(
+      PACKAGE_NOT_FOUND,
+      packageNotFoundMessage(resolved.package.id, failedLinkedPackages)
+    );
   }
 
   const spec = await runtime.describeAction(resolved.ref.actionId);

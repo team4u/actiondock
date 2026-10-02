@@ -13,7 +13,7 @@ import type { RuntimeStorage } from "../storage/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { createDefaultProcessOwner } from "../invocation/types";
 import { resolveEnvValue } from "./env";
-import { ActionDockError, INVALID_ACTION_REF } from "../errors";
+import { ActionDockError, INVALID_ACTION_REF, INVALID_STATE } from "../errors";
 
 /**
  * 生产级配置解析器实现。
@@ -270,7 +270,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
         currentRunId
       )) as O;
     }
-    throw new Error("ActionInvoker not configured with an invocation delegate");
+    throw new ActionDockError(INVALID_STATE, "ActionInvoker not configured with an invocation delegate");
   };
 
   const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);

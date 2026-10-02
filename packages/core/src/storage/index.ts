@@ -1,5 +1,6 @@
 import { join, relative, resolve } from "node:path";
 import { assertValidPackageId, getActionDockHome, isPathOutsideBoundary } from "../utils";
+import { ActionDockError, PATH_TRAVERSAL } from "../errors";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage } from "./types";
 
@@ -46,7 +47,7 @@ export function resolveDatabasePath(
     const dbPath = resolve(rootDir, safePkgPath, "runtime.db");
     const rel = relative(rootDir, dbPath);
     if (isPathOutsideBoundary(rel)) {
-      throw new Error(`'database dataDir path' escapes boundary '${rootDir}': ${dbPath}`);
+      throw new ActionDockError(PATH_TRAVERSAL, `'database dataDir path' escapes boundary '${rootDir}': ${dbPath}`);
     }
     return dbPath;
   }
@@ -56,7 +57,7 @@ export function resolveDatabasePath(
   const dbPath = resolve(rootDir, safePkgPath, "runtime.db");
   const rel = relative(rootDir, dbPath);
   if (isPathOutsideBoundary(rel)) {
-    throw new Error(`'database storage path' escapes boundary '${rootDir}': ${dbPath}`);
+    throw new ActionDockError(PATH_TRAVERSAL, `'database storage path' escapes boundary '${rootDir}': ${dbPath}`);
   }
   return dbPath;
 }

@@ -270,7 +270,14 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
                       }
                     }
                   }
-                } catch {}
+                } catch (err: unknown) {
+                  // 防御与透明：解析动作白名单引用失败时输出警告，不中断服务启动但确保配置异常可观测
+                  const reason = err instanceof Error ? err.message : String(err);
+                  writeStderr(
+                    `Warning: Invalid action reference '${actRef}' in action allowlist: ${reason}`,
+                    context
+                  );
+                }
               }
             }
           }

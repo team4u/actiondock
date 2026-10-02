@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
 import type { SqliteDriver, SqliteStatement } from "./types";
+import { ActionDockError, ASYNC_TRANSACTION_UNSUPPORTED, STORAGE_CLOSED } from "../errors";
 
 export { normalizeSqliteParams };
 
@@ -101,7 +102,7 @@ export class NodeSqliteDriver implements SqliteDriver {
       } catch {
         // 忽略回滚阶段发生的级联异常
       }
-      throw new Error("Async transactions are not allowed in SQLite");
+      throw new ActionDockError(ASYNC_TRANSACTION_UNSUPPORTED, "Async transactions are not allowed in SQLite");
     }
 
     this.db.exec("COMMIT");
@@ -123,7 +124,7 @@ export class NodeSqliteDriver implements SqliteDriver {
    */
   private assertOpen(): void {
     if (this.closed) {
-      throw new Error("Database connection is closed");
+      throw new ActionDockError(STORAGE_CLOSED, "Database connection is closed");
     }
   }
 }

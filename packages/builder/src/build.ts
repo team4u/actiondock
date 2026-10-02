@@ -276,7 +276,10 @@ const cleanup = async () => {
   cleanedUp = true;
   try {
     await service.close();
-  } catch {}
+  } catch (err) {
+    // 防御与透明：服务关闭失败时告警输出至标准错误流，不阻塞退出流程
+    process.stderr.write(\`[Supervisor] Warning: Cleanup failed: \${err?.message || String(err)}\\n\`);
+  }
 };
 
 process.once("SIGINT", async () => {

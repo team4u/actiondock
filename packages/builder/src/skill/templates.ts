@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { ActionSpec, ProjectConfig } from "@actiondock/core";
 import type { PlaybookDefinition } from "@actiondock/core/project";
+import { BuilderError } from "../errors";
 
 export type SkillActionItem =
   | ActionSpec
@@ -466,8 +467,9 @@ export function parseCustomSections(source: string): CompositeCustomSection[] {
       flush();
       const slot = match[1] as CompositeCustomSlot;
       if (!COMPOSITE_CUSTOM_SLOTS.includes(slot)) {
-        throw new Error(
-          `Unknown ActionDock custom slot '${match[1]}'. Valid slots: ${COMPOSITE_CUSTOM_SLOTS.join(", ")}`
+        throw new BuilderError(
+          `Unknown ActionDock custom slot '${match[1]}'. Valid slots: ${COMPOSITE_CUSTOM_SLOTS.join(", ")}`,
+          "UNKNOWN_CUSTOM_SLOT"
         );
       }
       currentSlot = slot;

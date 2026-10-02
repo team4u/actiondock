@@ -41,10 +41,13 @@ import {
   ACTION_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_SUBRUN_LIMIT,
+  EXECUTION_FAILED,
   INVALID_ACTION_REF,
+  PACKAGE_ID_CONFLICT,
   PACKAGE_NOT_FOUND,
   PROJECT_BUSY,
   PROJECT_RECOVERY_REQUIRED,
+  SERVICE_CLOSED,
   UNDECLARED_ACTION_DEPENDENCY,
   type ErrorCode,
 } from "../errors";
@@ -145,7 +148,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       maxCallDepth: this.maxCallDepth,
       maxSubRuns: this.maxSubRuns,
     });
-    this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
+    this.eventSink = options.eventSink ?? options.platform?.eventSink ?? new InMemoryEventSink();
     // Host 默认声明数据目录持有者身份；查询旁观方（CLI 查询命令）显式置 false
     this.recoverOrphans = options.recoverOrphans !== false;
     this.graph = new DefaultPackageGraph(new Map());
@@ -399,8 +402,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       for (const runtime of this.runtimes.values()) {
         try {
           const closePromise = runtime.close();
-          if (closePromise && typeof (closePromise as any).catch === "function") {
-            (closePromise as any).catch(() => {});
+          if (closePromise && typeof closePromise.catch === "function") {
+            closePromise.catch(() => {});
           }
         } catch {
           // 忽略 runtime 关闭异常
@@ -756,7 +759,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           subInvocationContext
         );
         if (!ticket.result) {
-          throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+          throw new ActionDockError(EXECUTION_FAILED, `Execution ticket for run '${ticket.runId}' has no result Promise`);
         }
         const result = await ticket.result;
         if (!result.ok) {
@@ -817,7 +820,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (existing === runtime) {
         return;
       }
-      throw new Error(
+      throw new ActionDockError(
+        PACKAGE_ID_CONFLICT,
         `Package ID conflict: package '${runtime.packageId}' is already registered in host`
       );
     }
@@ -914,7 +918,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   ): Promise<ExecutionResult> {
     const ticket = await this.startAction(ref, input, options);
     if (!ticket.result) {
-      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+      throw new ActionDockError(EXECUTION_FAILED, `Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
     return ticket.result;
   }
@@ -925,7 +929,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     options: RunOptions = {}
   ): Promise<ExecutionTicket> {
     if (this.isClosed) {
-      throw new Error("ActionDockHost is closed: new tasks rejected");
+      throw new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closed: new tasks rejected");
     }
 
     // - 统一基于纯领域 resolveAction 解析目标包与 Action 动作标识
@@ -1162,7 +1166,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   private requireRuntime(packageId: string): PackageRuntime {
     const runtime = this.resolveRuntime(packageId);
     if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
+      throw new ActionDockError(PACKAGE_NOT_FOUND, `Package '${packageId}' not found in host`);
     }
     return runtime;
   }

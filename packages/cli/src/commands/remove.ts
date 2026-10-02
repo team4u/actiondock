@@ -118,7 +118,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
 
         // 调用包管理器执行卸载（说明符白名单校验，消除 win32 shell 拼接注入面）
         assertSafePackageSpec(npmPackageName);
-        const installCmd = getInstallCommand(root);
+        const installCmd = await getInstallCommand(root);
         const pm = installCmd[0];
         const args = pm === "bun" ? ["remove", npmPackageName] : ["uninstall", npmPackageName, "--ignore-scripts"];
 

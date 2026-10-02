@@ -2,6 +2,7 @@ import type { ProcessAPI } from "@actiondock/sdk";
 import type { Clock } from "../storage/clock";
 import type { ModuleLoader } from "./module-loader";
 import type { RunsRetentionPolicy, RuntimeStorage } from "../storage/types";
+import type { EventSink } from "../runtime/events";
 
 /**
  * 文件元数据信息契约。
@@ -102,4 +103,8 @@ export interface RuntimePlatform {
   readonly process: ProcessAPI;
   /** 持久化数据库存储驱动工厂 */
   readonly storage: StorageFactory;
+  /**
+   * 可选执行事件接收器，宿主可注入，缺省由上层默认构造。
+   */
+  readonly eventSink?: EventSink;
 }

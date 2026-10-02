@@ -6,6 +6,10 @@ import {
   normalizeServerUrl,
   type RemoteClientRequestOptions,
 } from "./transport";
+import { type Clock, SystemClock } from "../storage/clock";
+
+/** 模块级默认时钟实例 */
+const defaultClock: Clock = new SystemClock();
 
 /**
  * 远端服务器健康探测与时延检测结果。
@@ -26,6 +30,14 @@ export interface RemoteHealthResult {
 }
 
 /**
+ * 远端健康探测控制选项。
+ */
+export interface CheckRemoteHealthOptions extends RemoteClientRequestOptions {
+  /** 可选注入时钟抽象（缺省使用系统时钟） */
+  clock?: Clock;
+}
+
+/**
  * 远端健康检查域端点。
  */
 
@@ -41,9 +53,10 @@ export async function checkRemoteHealth(
   serverUrl: string,
   token?: string,
   timeoutMs: number = 5000,
-  options?: RemoteClientRequestOptions
+  options?: CheckRemoteHealthOptions
 ): Promise<RemoteHealthResult> {
-  const startTime = Date.now();
+  const clock = options?.clock ?? defaultClock;
+  const startTime = clock.monotonic();
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
@@ -69,7 +82,7 @@ export async function checkRemoteHealth(
 
     const res = await fetchRemoteRoute(normalizeServerUrl(serverUrl), "/api/v2/health", fetchInit);
 
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Math.round(clock.monotonic() - startTime);
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -89,7 +102,7 @@ export async function checkRemoteHealth(
       latencyMs,
     };
   } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Math.round(clock.monotonic() - startTime);
     return {
       ok: false,
       latencyMs,

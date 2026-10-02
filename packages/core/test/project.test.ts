@@ -188,20 +188,20 @@ Perform audit steps.
     expect(ALLOWED_INSTALLERS.has("yarn")).toBe(false);
   });
 
-  it("resolves install commands respecting npm and bun priority and lockfiles", () => {
+  it("resolves install commands respecting npm and bun priority and lockfiles", async () => {
     const pkgDir = mkdtempSync(join(tmpdir(), "installer-test-"));
     const origEnv = process.env.ACTIONDOCK_INSTALLER;
     try {
       // 1. Explicit ACTIONDOCK_INSTALLER
       process.env.ACTIONDOCK_INSTALLER = "bun";
-      expect(getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+      expect(await getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
 
       process.env.ACTIONDOCK_INSTALLER = "npm";
-      expect(getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+      expect(await getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
 
       // Disallowed installers should be ignored and fall back
       process.env.ACTIONDOCK_INSTALLER = "pnpm";
-      const pnpmFallback = getInstallCommand(pkgDir);
+      const pnpmFallback = await getInstallCommand(pkgDir);
       expect(["npm", "bun"]).toContain(pnpmFallback[0]);
 
       delete process.env.ACTIONDOCK_INSTALLER;
@@ -209,17 +209,17 @@ Perform audit steps.
       // 2. Lockfile matching
       // pnpm-lock.yaml and yarn.lock are ignored
       writeFileSync(join(pkgDir, "pnpm-lock.yaml"), "lockfileVersion: 5.4");
-      const ignoredLock = getInstallCommand(pkgDir);
+      const ignoredLock = await getInstallCommand(pkgDir);
       expect(ignoredLock[0]).not.toBe("pnpm");
 
       // bun.lock / bun.lockb matches bun
       writeFileSync(join(pkgDir, "bun.lockb"), "");
-      expect(getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+      expect(await getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
 
       // package-lock.json matches npm
       rmSync(join(pkgDir, "bun.lockb"), { force: true });
       writeFileSync(join(pkgDir, "package-lock.json"), "{}");
-      expect(getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+      expect(await getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
     } finally {
       if (origEnv === undefined) {
         delete process.env.ACTIONDOCK_INSTALLER;

@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { traverseDirectory } from "@actiondock/core/project";
+import { BuilderError } from "./errors";
 
 /**
  * 纯 Node 实现的归档压缩模块。
@@ -315,7 +316,7 @@ function tarHeader(
     prefix = cleanPath.slice(0, split);
     name = cleanPath.slice(split + 1) + (trailingSlash ? "/" : "");
     if (split <= 0 || Buffer.byteLength(prefix, "utf8") > 155 || Buffer.byteLength(name, "utf8") > 100) {
-      throw new Error(`归档路径超出 USTAR 字段容量: ${path}`);
+      throw new BuilderError(`归档路径超出 USTAR 字段容量: ${path}`, "ARCHIVE_PATH_TOO_LONG");
     }
   }
 

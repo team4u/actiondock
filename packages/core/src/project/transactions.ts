@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   copyFileSync,
@@ -55,13 +55,6 @@ export interface ProjectTransaction {
   commit(): Promise<void>;
   rollback(options?: { frozenInstall?: boolean }): Promise<void>;
   releaseLock(): void;
-}
-
-/**
- * 检查当前进程 PID 是否处于活跃运行状态。
- */
-export function isPidAlive(pid: number): boolean {
-  return isProcessAlive(pid);
 }
 
 /**
@@ -139,10 +132,74 @@ export function acquireProjectLock(
   };
 }
 
+interface SpawnExecutionResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
 /**
- * 依据恢复后的锁文件执行禁用安装脚本的冻结安装，使 node_modules 与声明重新一致。
+ * 异步执行子进程并收集退出状态与输出流。
+ *
+ * 异步化取舍说明：
+ * - 避免在事务回滚与恢复链路中执行同步阻塞调用导致事件循环停顿；
+ * - Windows 兼容性保留：npm 在 Windows 上是 .cmd 批处理脚本，启用 shell 以防直接调用抛错；
+ * - 命令与参数由系统内部锁文件逻辑决定，不接受外部未受控入参。
  */
-export function runFrozenInstall(projectRoot: string): void {
+function execSubprocessAsync(
+  command: string,
+  args: string[],
+  options?: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+  }
+): Promise<SpawnExecutionResult> {
+  return new Promise((resolve, reject) => {
+    try {
+      const proc = spawn(command, args, {
+        cwd: options?.cwd,
+        stdio: "pipe",
+        shell: process.platform === "win32",
+        env: options?.env,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      if (proc.stdout) {
+        proc.stdout.on("data", (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+      }
+      if (proc.stderr) {
+        proc.stderr.on("data", (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+      }
+
+      let settled = false;
+      proc.on("error", (err) => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      });
+      proc.on("close", (status) => {
+        if (!settled) {
+          settled = true;
+          resolve({ status, stdout, stderr });
+        }
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * 依据恢复后的锁文件异步执行禁用安装脚本的冻结安装，使 node_modules 与声明重新一致。
+ */
+export async function runFrozenInstall(projectRoot: string): Promise<void> {
   if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
     return;
   }
@@ -167,10 +224,7 @@ export function runFrozenInstall(projectRoot: string): void {
   }
 
   try {
-    const check = spawnSync(cmd, ["--version"], {
-      stdio: "pipe",
-      shell: process.platform === "win32",
-    });
+    const check = await execSubprocessAsync(cmd, ["--version"]);
     if (check.status !== 0) {
       cmd = "npm";
       args = ["install", "--ignore-scripts"];
@@ -180,19 +234,26 @@ export function runFrozenInstall(projectRoot: string): void {
     args = ["install", "--ignore-scripts"];
   }
 
-  const proc = spawnSync(cmd, args, {
-    cwd: projectRoot,
-    stdio: "pipe",
-    shell: process.platform === "win32",
-    env: {
-      ...process.env,
-      npm_config_allow_scripts: "",
-      NPM_CONFIG_ALLOW_SCRIPTS: "",
-    },
-  });
+  let proc: SpawnExecutionResult;
+  try {
+    proc = await execSubprocessAsync(cmd, args, {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        npm_config_allow_scripts: "",
+        NPM_CONFIG_ALLOW_SCRIPTS: "",
+      },
+    });
+  } catch (err: any) {
+    const errorMsg = err?.message || "Unknown error";
+    throw new ActionDockError(
+      PROJECT_RECOVERY_REQUIRED,
+      `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`
+    );
+  }
 
   if (proc.status !== 0) {
-    const errorMsg = proc.stderr?.toString() || proc.stdout?.toString() || "Unknown error";
+    const errorMsg = proc.stderr || proc.stdout || "Unknown error";
     throw new ActionDockError(
       PROJECT_RECOVERY_REQUIRED,
       `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`
@@ -306,7 +367,7 @@ export async function beginTransaction(
         }
 
         if (options?.frozenInstall !== false) {
-          runFrozenInstall(projectRoot);
+          await runFrozenInstall(projectRoot);
         }
 
         meta.status = "rolled_back";
@@ -386,7 +447,7 @@ export async function recoverPendingTransactions(
         }
 
         if (options?.frozenInstall !== false) {
-          runFrozenInstall(projectRoot);
+          await runFrozenInstall(projectRoot);
         }
 
         meta.status = "rolled_back";

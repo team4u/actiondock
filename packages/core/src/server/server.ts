@@ -1,7 +1,7 @@
 import { posix, resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
-import { NOT_FOUND, UNAUTHORIZED } from "../errors";
+import { ActionDockError, ACCESS_DENIED, NOT_FOUND, SERVICE_ERROR, UNAUTHORIZED } from "../errors";
 import { parseActionRef } from "../catalog/resolve-action";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
@@ -96,7 +96,8 @@ export async function startActionDockServer(
     Array.from(views.values()).some((v) => Boolean(v.policy.token))
   );
   if (!isLoopbackHost(host) && !hasTokenConfigured && !options.allowInsecureNoAuth) {
-    throw new Error(
+    throw new ActionDockError(
+      ACCESS_DENIED,
       "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."
     );
   }
@@ -118,7 +119,7 @@ export async function startActionDockServer(
   }
 
   if (!serviceInstance) {
-    throw new Error("Failed to initialize ActionDockService for server");
+    throw new ActionDockError(SERVICE_ERROR, "Failed to initialize ActionDockService for server");
   }
 
   // 2. 聚合所有 views 声明的依赖包与动作，确保依赖闭包满足

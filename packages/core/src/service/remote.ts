@@ -50,6 +50,7 @@ import {
 import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
 import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
 import { streamRemoteEvents } from "./sse-stream";
+import { type Clock, SystemClock } from "../storage/clock";
 import { isTerminalRunStatus, type StateEntry } from "../storage/types";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
@@ -85,6 +86,7 @@ export class RemoteActionDockService implements ActionDockService {
   public readonly allowInsecureHttp?: boolean;
   public readonly insecure?: boolean;
   public readonly dispatcher?: unknown;
+  public readonly clock: Clock;
   private isClosed = false;
 
   public readonly discovery: DiscoveryPort;
@@ -96,7 +98,7 @@ export class RemoteActionDockService implements ActionDockService {
     state: StatePort;
   };
 
-  constructor(options: ConnectActionDockOptions | RemoteServiceOptions) {
+  constructor(options: (ConnectActionDockOptions | RemoteServiceOptions) & { clock?: Clock }) {
     if (!options.serverUrl) {
       throw new ActionDockError(INVALID_ARGUMENT, "serverUrl is required for RemoteActionDockService");
     }
@@ -107,6 +109,7 @@ export class RemoteActionDockService implements ActionDockService {
     this.allowInsecureHttp = options.allowInsecureHttp;
     this.insecure = options.insecure;
     this.dispatcher = options.dispatcher;
+    this.clock = options.clock ?? new SystemClock();
 
     const self = this;
 
@@ -687,7 +690,7 @@ export class RemoteActionDockService implements ActionDockService {
     signal?: AbortSignal,
     timeoutMs?: number
   ): Promise<ExecutionResult> {
-    const startTime = Date.now();
+    const startTime = this.clock.monotonic();
     const maxWaitMs = Math.max(this.baseTimeoutMs, timeoutMs ?? 0);
 
     // 服务已关闭时的统一失败结果
@@ -767,7 +770,7 @@ export class RemoteActionDockService implements ActionDockService {
       return cancelledResult();
     }
 
-    const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
+    const remainingWaitMs = Math.max(0, maxWaitMs - (this.clock.monotonic() - startTime));
     if (remainingWaitMs <= 0) {
       if (this.isClosed) {
         return closedResult();
@@ -783,7 +786,7 @@ export class RemoteActionDockService implements ActionDockService {
         }
         throw err;
       }
-      const waitedMs = Date.now() - startTime;
+      const waitedMs = Math.round(this.clock.monotonic() - startTime);
       return {
         ok: false,
         runId,
@@ -799,6 +802,7 @@ export class RemoteActionDockService implements ActionDockService {
         baseTimeoutMs: this.baseTimeoutMs,
         isClosed: () => this.isClosed,
         getRun: (id) => this.runs.get(id),
+        clock: this.clock,
       },
       runId,
       signal,
