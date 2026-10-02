@@ -56,6 +56,10 @@ export function runCommandSync(cmdArray, options = {}) {
 /**
  * 异步启动子进程并挂载 exited 退出承诺（对齐既有测试对长驻服务进程的等待语义）。
  *
+ * 跨平台进程组终止语义：Linux 下默认 detached（新进程组）以便测试能独立终止长驻服务，
+ * 因此 kill 必须升级为负 PID 进程组信号，否则只杀组长留下 worker 孤儿持有管道，
+ * 导致测试运行器等待管道 EOF 永久挂起。kill 方法统一封装该差异。
+ *
  * @param cmdArray 命令段数组
  * @param options 可选的 cwd、env、stdio 与 detached 配置
  */
@@ -76,6 +80,19 @@ export function startCommand(cmdArray, options = {}) {
     proc.on("error", () => resolve(1));
   });
   proc.exited = exited;
+  const originalKill = proc.kill.bind(proc);
+  proc.kill = (signal = "SIGTERM") => {
+    if (proc.pid && process.platform !== "win32" && proc.killed === false) {
+      try {
+        // 负 PID 向整个进程组发信号，确保 supervisor 派生的 worker 同步终止
+        process.kill(-proc.pid, signal);
+        return true;
+      } catch {
+        // 进程组已不存在时回退单进程信号
+      }
+    }
+    return originalKill(signal);
+  };
   return proc;
 }
 
