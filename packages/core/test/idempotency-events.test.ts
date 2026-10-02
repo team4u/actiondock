@@ -105,12 +105,12 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       const service = host;
 
       const reqId = "client-conflict-001";
-      const res1 = await service.execution.run("pkg.conflict/echo", "initial", { requestId: reqId });
+      const res1 = await service.execution.run("pkg.conflict/echo", { message: "initial" }, { requestId: reqId });
       assert.strictEqual(res1.ok, true);
 
       let conflictError: any;
       try {
-        await service.execution.run("pkg.conflict/echo", "tampered", { requestId: reqId });
+        await service.execution.run("pkg.conflict/echo", { message: "tampered" }, { requestId: reqId });
       } catch (err: any) {
         conflictError = err;
       }
