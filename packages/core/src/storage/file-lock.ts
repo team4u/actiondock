@@ -287,11 +287,86 @@ export async function safeReleaseFileLock(
 }
 
 /**
+/**
+ * 检查陈旧锁接管守卫是否处于活跃状态。
+ */
+function isReclaimGuardActive(
+  reclaimPath: string,
+  staleMs: number,
+  clock: Clock
+): boolean {
+  if (!existsSync(reclaimPath)) return false;
+  try {
+    const raw = readFileSync(join(reclaimPath, "reclaim.json"), "utf-8");
+    const meta = JSON.parse(raw);
+    if (typeof meta.pid === "number") {
+      const age = clock.now().getTime() - (meta.createdAt ?? 0);
+      if (age < staleMs && isProcessAlive(meta.pid)) {
+        return true;
+      }
+    }
+  } catch {}
+  try {
+    const s = statSync(reclaimPath);
+    return clock.now().getTime() - s.mtimeMs < staleMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 尝试原子获取接管守卫目录。
+ */
+function tryAcquireReclaimGuardSync(
+  reclaimPath: string,
+  staleMs: number,
+  clock: Clock
+): boolean {
+  try {
+    mkdirSync(reclaimPath, { mode: 0o700 });
+    writeFileSync(
+      join(reclaimPath, "reclaim.json"),
+      JSON.stringify({ pid: process.pid, createdAt: clock.now().getTime() }),
+      { mode: 0o600 }
+    );
+    return true;
+  } catch (err: any) {
+    if (err.code !== "EEXIST") throw err;
+  }
+
+  // 守卫目录已存在，检查是否为崩溃遗留的残留守卫
+  if (!isReclaimGuardActive(reclaimPath, staleMs, clock)) {
+    try {
+      rmSync(reclaimPath, { recursive: true, force: true });
+      mkdirSync(reclaimPath, { mode: 0o700 });
+      writeFileSync(
+        join(reclaimPath, "reclaim.json"),
+        JSON.stringify({ pid: process.pid, createdAt: clock.now().getTime() }),
+        { mode: 0o600 }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * 安全释放接管守卫目录。
+ */
+function releaseReclaimGuardSync(reclaimPath: string): void {
+  try {
+    rmSync(reclaimPath, { recursive: true, force: true });
+  } catch {}
+}
+
+/**
  * 同步非阻塞获取文件锁。
  *
  * 保证非阻塞：绝不使用 Atomics.wait 或忙等循环阻塞主线程。
  * 遇锁占用且持有者存活时立即抛出占用异常；
- * 遇陈旧锁时通过原子 rename 抢占接管。
+ * 遇陈旧锁时通过原子接管守卫互斥抢占并更新元数据。
  */
 export function acquireFileLockSync(
   lockPath: string,
@@ -305,11 +380,19 @@ export function acquireFileLockSync(
   }
 
   const resolvedPath = resolve(lockPath);
+  const reclaimPath = `${lockPath}.reclaim`;
   let token = "";
   let metadata: FileLockMetadata | undefined;
 
   let acquired = false;
   while (!acquired) {
+    if (isReclaimGuardActive(reclaimPath, staleMs, clock)) {
+      if (options?.createLockError) {
+        throw options.createLockError(`Lock '${lockPath}' is currently being reclaimed by another active process`);
+      }
+      throw new ActionDockError(STORAGE_BUSY, `Lock '${lockPath}' is currently being reclaimed by another active process`);
+    }
+
     try {
       mkdirSync(lockPath, { mode: 0o700 });
       activeLockPaths.add(resolvedPath);
@@ -320,10 +403,7 @@ export function acquireFileLockSync(
 
       // 锁已存在:判定是否为可接管的陈旧锁
       let stale = false;
-      // 判定时采集对象指纹(类型与修改时间),供接管核验比对改名对象的同一性
-      let judgedStat: Stats;
       try {
-        judgedStat = statSync(lockPath);
         stale = isStaleLockSync(lockPath, staleMs, options, clock);
       } catch (err: any) {
         if (err.code === "ENOENT") {
@@ -333,60 +413,77 @@ export function acquireFileLockSync(
       }
 
       if (stale) {
-        const quarantine = `${lockPath}.stale.${process.pid}.${clock.now().getTime()}`;
-        try {
-          renameSync(lockPath, quarantine);
-        } catch (err: any) {
-          if (err.code === "ENOENT") {
-            continue;
+        const guardAcquired = tryAcquireReclaimGuardSync(reclaimPath, staleMs, clock);
+        if (!guardAcquired) {
+          if (options?.createLockError) {
+            throw options.createLockError(`Lock '${lockPath}' is currently held by another active process`);
           }
-          throw err;
+          throw new ActionDockError(STORAGE_BUSY, `Lock '${lockPath}' is currently held by another active process`);
         }
-        // 接管核验:改名的对象必须与判定陈旧的是同一对象。
-        // 判定与改名之间存在竞态窗口:本方判定的可能是旧锁,而竞争者恰在此间完成新接管,
-        // 导致 rename 抢到的是活锁。通过「对象指纹比对 + 持有者存活探测」双重校验,
-        // 任一不一致即还原并回到循环重判,宁可重试也绝不误抢,严格维护互斥契约。
-        let stolenLive = true;
+
         try {
-          const takenStat = statSync(quarantine);
-          const identityMatch =
-            takenStat.isDirectory() === judgedStat.isDirectory() &&
-            Math.abs(takenStat.mtimeMs - judgedStat.mtimeMs) < 1;
-          if (!identityMatch) {
-            stolenLive = true;
-          } else {
-            const takenMeta = readLockMetadataSync(quarantine);
-            if (typeof takenMeta?.pid === "number") {
-              stolenLive = takenMeta.pid !== process.pid && isProcessAlive(takenMeta.pid);
-            } else if (judgedStat.isDirectory()) {
-              // 目录锁但元数据缺失:还原重判,避免误抢 meta 写入窗口中的活锁
-              stolenLive = true;
-            } else {
-              // 文件锁且无元数据:按陈旧锁归属处理,允许接管
-              stolenLive = false;
-            }
-          }
-        } catch {
-          // 校验不可达时保守视为活锁,还原重判
-        }
-        if (stolenLive) {
+          // 接管前在守卫保护下二次确认锁状态
+          let stillStale = false;
           try {
-            if (!existsSync(lockPath)) {
-              renameSync(quarantine, lockPath);
+            stillStale = !existsSync(lockPath) || isStaleLockSync(lockPath, staleMs, options, clock);
+          } catch (err: any) {
+            if (err.code === "ENOENT") {
+              stillStale = true;
             } else {
-              rmSync(quarantine, { recursive: true, force: true });
+              throw err;
             }
-          } catch {
-            // 还原失败时保守清理隔离目录,不阻断主流程
           }
-          continue;
+
+          if (!stillStale) {
+            if (options?.createLockError) {
+              throw options.createLockError(`Lock '${lockPath}' is currently held by another active process`);
+            }
+            throw new ActionDockError(STORAGE_BUSY, `Lock '${lockPath}' is currently held by another active process`);
+          }
+
+          let isDir = false;
+          try {
+            isDir = existsSync(lockPath) && statSync(lockPath).isDirectory();
+          } catch {
+            isDir = false;
+          }
+
+          if (existsSync(lockPath) && !isDir) {
+            // 单文件陈旧锁：安全清理并转为目录锁结构
+            rmSync(lockPath, { force: true });
+            mkdirSync(lockPath, { mode: 0o700 });
+          } else if (!existsSync(lockPath)) {
+            mkdirSync(lockPath, { mode: 0o700 });
+          }
+
+          // 保持目录锁常驻，直接原子更新本方持有者元数据
+          token = randomUUID();
+          metadata = {
+            pid: process.pid,
+            createdAt: clock.now().toISOString(),
+            ...options?.metadata,
+            token,
+          };
+
+          const metaPath = join(lockPath, LOCK_METADATA_FILE);
+          const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
+          writeFileSync(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+          renameSync(tmpPath, metaPath);
+
+          const verify = readLockMetadataSync(lockPath);
+          if (verify?.token !== token) {
+            if (options?.createLockError) {
+              throw options.createLockError(`Failed to verify acquired lock ownership in '${lockPath}'`);
+            }
+            throw new ActionDockError(STORAGE_BUSY, `Failed to verify acquired lock ownership in '${lockPath}'`);
+          }
+
+          activeLockPaths.add(resolvedPath);
+          acquired = true;
+          break;
+        } finally {
+          releaseReclaimGuardSync(reclaimPath);
         }
-        try {
-          rmSync(quarantine, { recursive: true, force: true });
-        } catch {
-          // 清理失败不影响正确性
-        }
-        continue;
       }
 
       if (options?.createLockError) {
@@ -410,13 +507,11 @@ export function acquireFileLockSync(
       writeFileSync(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
       renameSync(tmpPath, metaPath);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      console.warn(`[FileLock] Failed to write lock metadata in '${lockPath}': ${reason}`);
+      activeLockPaths.delete(resolvedPath);
+      throw err;
     }
 
     // 获取后自校验:回读元数据确认锁仍属于自己的令牌。
-    // 极端竞态下(他方误判陈旧并改走了本方新锁)回读将不匹配,
-    // 此时放弃本次获取回到循环重试,绝不容忍双重持锁。
     try {
       const verify = readLockMetadataSync(lockPath);
       if (verify?.token !== token) {
@@ -424,7 +519,7 @@ export function acquireFileLockSync(
         continue;
       }
     } catch {
-      // 元数据暂不可读不阻断:持有 mkdir 成功的事实所有权
+      // 容忍临时读取异常
     }
 
     acquired = true;
@@ -466,19 +561,25 @@ export async function acquireFileLock(
   const deadline = clock.monotonic() + acquireTimeoutMs;
 
   const resolvedPath = resolve(lockPath);
+  const reclaimPath = `${lockPath}.reclaim`;
   const parentDir = dirname(lockPath);
   try {
     await mkdir(parentDir, { recursive: true });
   } catch {}
 
+  let token = "";
+  let metadata: FileLockMetadata | undefined;
+
   while (true) {
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
-      activeLockPaths.add(resolvedPath);
-      break;
-    } catch (err: any) {
-      if (err.code !== "EEXIST") {
-        throw err;
+    if (!isReclaimGuardActive(reclaimPath, staleMs, clock)) {
+      try {
+        await mkdir(lockPath, { mode: 0o700 });
+        activeLockPaths.add(resolvedPath);
+        break;
+      } catch (err: any) {
+        if (err.code !== "EEXIST") {
+          throw err;
+        }
       }
     }
 
@@ -493,14 +594,50 @@ export async function acquireFileLock(
     }
 
     if (stale) {
-      const quarantine = `${lockPath}.stale.${process.pid}.${clock.now().getTime()}`;
-      try {
-        await rename(lockPath, quarantine);
-        await rm(quarantine, { recursive: true, force: true });
-        continue;
-      } catch (err: any) {
-        if (err.code === "ENOENT") {
-          continue;
+      const guardAcquired = tryAcquireReclaimGuardSync(reclaimPath, staleMs, clock);
+      if (guardAcquired) {
+        try {
+          let stillStale = false;
+          try {
+            stillStale = !existsSync(lockPath) || isStaleLockSync(lockPath, staleMs, options, clock);
+          } catch (err: any) {
+            if (err.code === "ENOENT") stillStale = true;
+            else throw err;
+          }
+
+          if (stillStale) {
+            let isDir = false;
+            try {
+              isDir = existsSync(lockPath) && statSync(lockPath).isDirectory();
+            } catch {
+              isDir = false;
+            }
+
+            if (existsSync(lockPath) && !isDir) {
+              rmSync(lockPath, { force: true });
+              mkdirSync(lockPath, { mode: 0o700 });
+            } else if (!existsSync(lockPath)) {
+              mkdirSync(lockPath, { mode: 0o700 });
+            }
+
+            token = randomUUID();
+            metadata = {
+              pid: process.pid,
+              token,
+              createdAt: clock.now().toISOString(),
+              ...options?.metadata,
+            };
+
+            const metaPath = join(lockPath, LOCK_METADATA_FILE);
+            const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
+            writeFileSync(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+            renameSync(tmpPath, metaPath);
+
+            activeLockPaths.add(resolvedPath);
+            break;
+          }
+        } finally {
+          releaseReclaimGuardSync(reclaimPath);
         }
       }
     }
@@ -515,22 +652,24 @@ export async function acquireFileLock(
     await clock.sleep(retryDelayMs);
   }
 
-  const token = randomUUID();
-  const metadata: FileLockMetadata = {
-    pid: process.pid,
-    token,
-    createdAt: clock.now().toISOString(),
-    ...options?.metadata,
-  };
+  if (!metadata) {
+    token = randomUUID();
+    metadata = {
+      pid: process.pid,
+      token,
+      createdAt: clock.now().toISOString(),
+      ...options?.metadata,
+    };
 
-  const metaPath = join(lockPath, LOCK_METADATA_FILE);
-  const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
-  try {
-    await writeFile(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
-    await rename(tmpPath, metaPath);
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.warn(`[FileLock] Failed to write lock metadata in '${lockPath}': ${reason}`);
+    const metaPath = join(lockPath, LOCK_METADATA_FILE);
+    const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
+    try {
+      await writeFile(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+      await rename(tmpPath, metaPath);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`[FileLock] Failed to write lock metadata in '${lockPath}': ${reason}`);
+    }
   }
 
   let timer: NodeJS.Timeout | undefined;

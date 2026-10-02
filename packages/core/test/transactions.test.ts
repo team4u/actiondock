@@ -157,80 +157,89 @@ rl.on("line", (cmd) => {
       procs.push(child);
     }
 
-    let winnerProc: ReturnType<typeof spawn> | null = null;
+    const winnerProcs: ReturnType<typeof spawn>[] = [];
     let readyCount = 0;
 
-    await new Promise<void>((resolvePromise, rejectPromise) => {
-      const timeout = setTimeout(() => {
-        for (const p of procs) {
-          try {
-            p.kill("SIGKILL");
-          } catch {}
-        }
-        rejectPromise(
-          new Error(`Test timed out waiting for children results (got ${results.length}/${concurrency})`)
-        );
-      }, 10000);
+    try {
+      await new Promise<void>((resolvePromise, rejectPromise) => {
+        const timeout = setTimeout(() => {
+          for (const p of procs) {
+            try {
+              p.kill("SIGKILL");
+            } catch {}
+          }
+          rejectPromise(
+            new Error(`Test timed out waiting for children results (got ${results.length}/${concurrency})`)
+          );
+        }, 10000);
 
-      for (const child of procs) {
-        let buffer = "";
-        child.stdout?.on("data", (chunk) => {
-          buffer += chunk.toString();
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+        for (const child of procs) {
+          let buffer = "";
+          child.stdout?.on("data", (chunk) => {
+            buffer += chunk.toString();
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed === "READY") {
-              readyCount++;
-              if (readyCount === concurrency) {
-                for (const p of procs) {
-                  p.stdin?.write("START\n");
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed === "READY") {
+                readyCount++;
+                if (readyCount === concurrency) {
+                  for (const p of procs) {
+                    p.stdin?.write("START\n");
+                  }
+                }
+              } else if (trimmed.startsWith("RESULT:")) {
+                const res = trimmed.replace("RESULT:", "");
+                results.push(res);
+                if (res === "SUCCESS") {
+                  winnerProcs.push(child);
+                }
+                if (results.length === concurrency) {
+                  clearTimeout(timeout);
+                  resolvePromise();
                 }
               }
-            } else if (trimmed.startsWith("RESULT:")) {
-              const res = trimmed.replace("RESULT:", "");
-              results.push(res);
-              if (res === "SUCCESS") {
-                winnerProc = child;
-              }
-              if (results.length === concurrency) {
-                clearTimeout(timeout);
-                resolvePromise();
-              }
             }
-          }
-        });
+          });
 
-        child.on("error", (err) => {
-          clearTimeout(timeout);
-          rejectPromise(err);
-        });
+          child.on("error", (err) => {
+            clearTimeout(timeout);
+            rejectPromise(err);
+          });
+        }
+      });
+
+      const successCount = results.filter((r) => r === "SUCCESS").length;
+
+      for (const w of winnerProcs) {
+        (w as any).stdin?.write("RELEASE\n");
       }
-    });
 
-    const successCount = results.filter((r) => r === "SUCCESS").length;
-    assert.strictEqual(successCount, 1);
-    assert.strictEqual(results.length, concurrency);
+      await Promise.all(
+        procs.map(
+          (p) =>
+            new Promise<void>((res) => {
+              if (p.exitCode !== null) {
+                res();
+              } else {
+                p.on("exit", () => res());
+              }
+            })
+        )
+      );
 
-    if (winnerProc) {
-      (winnerProc as any).stdin?.write("RELEASE\n");
+      assert.strictEqual(successCount, 1);
+      assert.strictEqual(results.length, concurrency);
+
+      assert.strictEqual(existsSync(lockDir), false);
+    } finally {
+      for (const p of procs) {
+        try {
+          p.kill("SIGKILL");
+        } catch {}
+      }
     }
-
-    await Promise.all(
-      procs.map(
-        (p) =>
-          new Promise<void>((res) => {
-            if (p.exitCode !== null) {
-              res();
-            } else {
-              p.on("exit", () => res());
-            }
-          })
-      )
-    );
-
-    assert.strictEqual(existsSync(lockDir), false);
   });
 
   it("当 acquireProjectLock 遇到存活进程持锁抛出 PROJECT_BUSY 错误代码", () => {
