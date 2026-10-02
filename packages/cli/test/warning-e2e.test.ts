@@ -7,10 +7,14 @@ import { resolve } from "node:path";
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 const githubToolsDir = resolve(import.meta.dirname, "../../../examples/github-tools");
 
+const emitExperimentalWarningImport =
+  "data:text/javascript,process.emitWarning('Test experimental warning payload', 'ExperimentalWarning');";
+
 interface RunCliOptions {
   cwd?: string;
   env?: Record<string, string>;
   input?: string;
+  nodeArgs?: string[];
 }
 
 /**
@@ -25,7 +29,9 @@ function runCliBinary(
   delete baseEnv.ACTIONDOCK_SILENCE_WARNINGS;
   delete baseEnv.NODE_OPTIONS;
 
-  return spawnSync(process.execPath, [cliPath, ...args], {
+  const execArgs = [...(options.nodeArgs ?? []), cliPath, ...args];
+
+  return spawnSync(process.execPath, execArgs, {
     cwd: options.cwd ?? githubToolsDir,
     env: {
       ...baseEnv,
@@ -47,9 +53,12 @@ function runDerivedCli(
   delete baseEnv.ACTIONDOCK_SILENCE_WARNINGS;
   delete baseEnv.NODE_OPTIONS;
 
+  const nodeArgsJson = JSON.stringify(options.nodeArgs ?? []);
   const wrapperScript = `
 import { spawnSync } from "node:child_process";
+const nodeArgs = ${nodeArgsJson};
 const res = spawnSync(process.execPath, [
+  ...nodeArgs,
   ${JSON.stringify(cliPath)},
   ...process.argv.slice(1)
 ], {
@@ -185,9 +194,10 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
   });
 
   describe("逃生通道断言 (ACTIONDOCK_SILENCE_WARNINGS=0)", () => {
-    it("显式注入 ACTIONDOCK_SILENCE_WARNINGS=0 时 ad info 标准错误流能够正常捕获 SQLite 实验性告警", () => {
+    it("显式注入 ACTIONDOCK_SILENCE_WARNINGS=0 时 ad info 标准错误流能够正常捕获实验性告警", () => {
       const res = runCliBinary(["info"], {
         env: { ACTIONDOCK_SILENCE_WARNINGS: "0" },
+        nodeArgs: ["--import", emitExperimentalWarningImport],
       });
 
       assert.strictEqual(res.status, 0, `逃生通道下命令仍应成功执行，stderr: ${res.stderr}`);
@@ -196,8 +206,8 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         `逃生通道开启时 stderr 应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        res.stderr.includes("SQLite is an experimental feature"),
-        `逃生通道开启时 stderr 应包含 SQLite 实验性告警详情，实际输出: ${res.stderr}`
+        res.stderr.includes("Test experimental warning payload"),
+        `逃生通道开启时 stderr 应包含测试实验性告警详情，实际输出: ${res.stderr}`
       );
       assert.ok(
         res.stdout.includes("team4u.github-tools"),
@@ -205,7 +215,7 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
       );
     });
 
-    it("显式注入 ACTIONDOCK_SILENCE_WARNINGS=0 时 ad run list-prs 标准错误流能够正常捕获 SQLite 实验性告警", () => {
+    it("显式注入 ACTIONDOCK_SILENCE_WARNINGS=0 时 ad run list-prs 标准错误流能够正常捕获实验性告警", () => {
       const res = runCliBinary(
         [
           "run",
@@ -215,6 +225,7 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         ],
         {
           env: { ACTIONDOCK_SILENCE_WARNINGS: "0" },
+          nodeArgs: ["--import", emitExperimentalWarningImport],
         }
       );
 
@@ -224,8 +235,8 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         `逃生通道开启时 stderr 应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        res.stderr.includes("SQLite is an experimental feature"),
-        `逃生通道开启时 stderr 应包含 SQLite 实验性告警详情，实际输出: ${res.stderr}`
+        res.stderr.includes("Test experimental warning payload"),
+        `逃生通道开启时 stderr 应包含测试实验性告警详情，实际输出: ${res.stderr}`
       );
       assert.ok(
         res.stdout.includes("feat(core): support bun native compilation"),
@@ -279,6 +290,7 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
     it("外部派生子进程显式注入 ACTIONDOCK_SILENCE_WARNINGS=0 时逃生通道穿透子进程边界正常生效", () => {
       const res = runDerivedCli(["info"], {
         env: { ACTIONDOCK_SILENCE_WARNINGS: "0" },
+        nodeArgs: ["--import", emitExperimentalWarningImport],
       });
 
       assert.strictEqual(res.status, 0, `派生进程逃生通道执行失败，stderr: ${res.stderr}`);
@@ -287,8 +299,8 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         `派生进程在逃生通道开启时 stderr 应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        res.stderr.includes("SQLite is an experimental feature"),
-        `派生进程在逃生通道开启时 stderr 应包含 SQLite 实验性告警，实际输出: ${res.stderr}`
+        res.stderr.includes("Test experimental warning payload"),
+        `派生进程在逃生通道开启时 stderr 应包含测试实验性告警，实际输出: ${res.stderr}`
       );
     });
 
@@ -299,7 +311,7 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
 
       const res = spawnSync(
         process.execPath,
-        ["--import", "tsx", cliPath, "info"],
+        ["--import", emitExperimentalWarningImport, "--import", "tsx", cliPath, "info"],
         {
           cwd: githubToolsDir,
           env: cleanEnv,
@@ -313,8 +325,8 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         `tsx 派生执行 stderr 不应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        !res.stderr.includes("SQLite is an experimental feature"),
-        `tsx 派生执行 stderr 不应包含 SQLite 实验性告警，实际输出: ${res.stderr}`
+        !res.stderr.includes("Test experimental warning payload"),
+        `tsx 派生执行 stderr 不应包含测试实验性告警，实际输出: ${res.stderr}`
       );
       assert.ok(
         res.stdout.includes("team4u.github-tools"),
@@ -328,7 +340,7 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
 
       const res = spawnSync(
         process.execPath,
-        ["--import", "tsx", cliPath, "info"],
+        ["--import", emitExperimentalWarningImport, "--import", "tsx", cliPath, "info"],
         {
           cwd: githubToolsDir,
           env: {
@@ -345,8 +357,8 @@ describe("CLI 端到端实验性告警拦截自动化测试防护网", () => {
         `tsx 逃生通道开启时 stderr 应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        res.stderr.includes("SQLite is an experimental feature"),
-        `tsx 逃生通道开启时 stderr 应包含 SQLite 实验性告警，实际输出: ${res.stderr}`
+        res.stderr.includes("Test experimental warning payload"),
+        `tsx 逃生通道开启时 stderr 应包含测试实验性告警，实际输出: ${res.stderr}`
       );
     });
 
@@ -356,6 +368,7 @@ await import("@actiondock/core");
 const { DatabaseSync } = await import("node:sqlite");
 const db = new DatabaseSync(":memory:");
 db.exec("CREATE TABLE test (id INT);");
+process.emitWarning("Direct core escape test warning", "ExperimentalWarning");
 console.log("SQLITE_OK");
 `;
 
@@ -379,8 +392,8 @@ console.log("SQLITE_OK");
         `子进程 stderr 不应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        !res.stderr.includes("SQLite is an experimental feature"),
-        `子进程 stderr 不应包含 SQLite 实验性告警，实际输出: ${res.stderr}`
+        !res.stderr.includes("Direct core escape test warning"),
+        `子进程 stderr 不应包含实验性告警，实际输出: ${res.stderr}`
       );
       assert.ok(
         res.stdout.includes("SQLITE_OK"),
@@ -394,6 +407,7 @@ await import("@actiondock/core");
 const { DatabaseSync } = await import("node:sqlite");
 const db = new DatabaseSync(":memory:");
 db.exec("CREATE TABLE test (id INT);");
+process.emitWarning("Direct core escape test warning", "ExperimentalWarning");
 console.log("SQLITE_OK");
 `;
 
@@ -419,8 +433,8 @@ console.log("SQLITE_OK");
         `子进程在逃生通道开启时 stderr 应包含 ExperimentalWarning，实际输出: ${res.stderr}`
       );
       assert.ok(
-        res.stderr.includes("SQLite is an experimental feature"),
-        `子进程在逃生通道开启时 stderr 应包含 SQLite 实验性告警，实际输出: ${res.stderr}`
+        res.stderr.includes("Direct core escape test warning"),
+        `子进程在逃生通道开启时 stderr 应包含实验性告警，实际输出: ${res.stderr}`
       );
       assert.ok(
         res.stdout.includes("SQLITE_OK"),

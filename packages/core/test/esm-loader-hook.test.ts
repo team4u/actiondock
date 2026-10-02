@@ -167,7 +167,7 @@ describe("全链路 ESM 路径重映射加载器单元测试", () => {
         return { url: specifier };
       }
     );
-    assert.strictEqual(redirectedSpecifier.endsWith(join("common", "index.ts")), true);
+    assert.strictEqual(redirectedSpecifier.replace(/\\/g, "/").endsWith("common/index.ts"), true);
 
     // 4. 物理文件存在时直接透传原生路径
     let untouchedSpecifier = "";
