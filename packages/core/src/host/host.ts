@@ -418,7 +418,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         });
       }
 
-      // 阶段一：注册显式传入的 packages 列表
+      // 阶段一：注册显式传入的 packages 列表（仅建立身份与路由，不打开资源）
       this.registerExplicitPackages(this.options);
 
       // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
@@ -426,12 +426,19 @@ export class DefaultActionDockHost implements ActionDockHost {
         await this.loadCurrentProject(this.options);
       }
 
-      // 阶段三：扫描已软链接的外部包并注册至 Host
+      // 阶段三：扫描已软链接的外部包并注册至 Host（仅建立身份与路由）
       if (this.options.scanLinkedPackages) {
         this.registerLinkedPackages(this.options);
       }
 
       this.rebuildGraphAndCatalog();
+
+      // 阶段四：持有者身份在工厂返回前显式预热全部内部包的存储与运行记录恢复；
+      // 旁观身份（recoverOrphans: false）跳过预热，首次持久化调用时才按需打开
+      if (this.recoverOrphans) {
+        await this.prewarmManagedRuntimes();
+      }
+
       this.isInitialized = true;
     } catch (err) {
       this.initPromise = undefined;
@@ -442,6 +449,27 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
       throw err;
     }
+  }
+
+  /**
+   * 持有者预热：等待内部创建的全部包完成存储准备（含运行记录恢复）。
+   * 预热的是存储，不是执行服务、进程接口或业务模块；任一包准备失败按既有
+   * 初始化失败时机整体回滚。外部注入的 Runtime 保持既有生命周期约定，不在此预热。
+   */
+  private async prewarmManagedRuntimes(): Promise<void> {
+    const managed = Array.from(this.runtimes.values()).filter(
+      (rt) => rt instanceof DefaultPackageRuntime
+    ) as DefaultPackageRuntime[];
+    if (managed.length === 0) {
+      return;
+    }
+    await Promise.all(
+      managed.map((rt) =>
+        rt.prepareResources().catch((err) => {
+          throw err;
+        })
+      )
+    );
   }
 
   /**
@@ -494,7 +522,8 @@ export class DefaultActionDockHost implements ActionDockHost {
         const runtime = new DefaultPackageRuntime({
           ...packageOptions,
           hostSessionId: this.hostSessionId,
-          globalStorage: (packageOptions as any).globalStorage ?? this.getGlobalStorage(),
+          globalStorage: (packageOptions as any).globalStorage,
+          globalStorageProvider: () => this.getGlobalStorage(),
           platform: packageOptions.platform ?? options.platform,
           inMemory: packageOptions.inMemory ?? options.inMemory,
           customHome: packageOptions.customHome ?? options.customHome,
@@ -563,7 +592,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             projectConfig: pkg.manifest,
             identity: pkg.identity,
             hostSessionId: this.hostSessionId,
-            globalStorage: this.getGlobalStorage(),
+            globalStorageProvider: () => this.getGlobalStorage(),
             platform: options.platform,
             inMemory: options.inMemory,
             customHome: options.customHome,
@@ -620,7 +649,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           packageRoot: linked.path,
           projectConfig: config,
           hostSessionId: this.hostSessionId,
-          globalStorage: this.getGlobalStorage(),
+          globalStorageProvider: () => this.getGlobalStorage(),
           platform: options.platform,
           inMemory: options.inMemory,
           customHome: options.customHome,
@@ -854,21 +883,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.bindRuntime(runtime);
     this.rebuildGraphAndCatalog();
-
-    // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
-    // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
-    if (this.recoverOrphans) {
-      if (typeof (runtime as any).recoverDeadSessionRuns === "function") {
-        try {
-          (runtime as any).recoverDeadSessionRuns(this.hostSessionId);
-        } catch (err) {
-          // 单包恢复失败不阻断整体接管流程，但必须可观测
-          console.warn(
-            `[actiondock] recoverDeadSessionRuns failed for package '${runtime.packageId}': ${err instanceof Error ? err.message : String(err)}`
-          );
-        }
-      }
-    }
+    // 注册阶段只建立身份与路由；运行记录恢复收敛到包存储准备路径（持有者工厂预热时统一执行），
+    // 旁观 Host 注册不触碰其他进程的在途记录
   }
 
   registerRuntime(runtime: PackageRuntime): void {
@@ -1142,12 +1158,32 @@ export class DefaultActionDockHost implements ActionDockHost {
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
+    const self = this;
     for (const runtime of this.listRuntimes()) {
-      const storageRecord = (runtime as any).storage?.getRun?.(runId);
-      if (storageRecord) {
+      // 使用公共运行记录查询确认包归属，不依赖运行时私有存储字段；
+      // 查询本身复用存储能力，不新建执行服务
+      const record = runtime.getRun(runId);
+      if (record instanceof Promise) {
+        return (async function* () {
+          const resolved = await record;
+          if (resolved) {
+            yield* runtime.events(runId, options);
+            return;
+          }
+          yield* self.subscribeEventsFallback(runId, options);
+        })();
+      }
+      if (record) {
         return runtime.events(runId, options);
       }
     }
+    return this.subscribeEventsFallback(runId, options);
+  }
+
+  private subscribeEventsFallback(
+    runId: string,
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+  ): AsyncIterable<ExecutionEvent> {
     const firstRuntime = this.listRuntimes()[0];
     if (firstRuntime) {
       return firstRuntime.events(runId, options);
@@ -1165,6 +1201,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         this.options.platform?.storage?.createGlobalStorage?.({
           dataDir: this.options.dataDir,
           customHome: this.options.customHome,
+          ...(inMemory ? { inMemory: true } : {}),
         }) ??
         createGlobalStorage({
           dataDir: this.options.dataDir,

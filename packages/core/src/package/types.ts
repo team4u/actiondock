@@ -255,8 +255,14 @@ export interface PackageRuntimeInternalOptions extends PackageRuntimeOptions {
   identity?: PackageIdentity;
   /** 显式注入的项目级运行时存储实例 */
   storage?: RuntimeStorage;
-  /** 显式注入的全局运行时存储实例 */
+  /** 显式注入的全局运行时存储实例（优先级最高） */
   globalStorage?: RuntimeStorage;
+  /**
+   * Host 共享全局存储提供函数（同步求值，首次需要时才调用）。
+   * 优先级低于显式 globalStorage 注入，高于包自建全局库；
+   * 提供函数必须同步，因 RuntimeConfig 与 ctx.config.get() 的读取契约是同步的。
+   */
+  globalStorageProvider?: () => RuntimeStorage;
   /** 显式注入的事件接收器 */
   eventSink?: EventSink;
   /** 子任务动作调用委托器 */
@@ -449,4 +455,9 @@ export interface PackageRuntime {
  */
 export interface HostManagedPackageRuntime extends PackageRuntime {
   setActionInvoker(invoker?: ActionInvoker): void;
+  /**
+   * 内部存储准备入口（Host 持有者路径预热专用）：打开包存储并完成运行记录恢复，
+   * 只扩展内部装配契约，不加入公共服务端口。
+   */
+  prepareResources?(): Promise<void>;
 }

@@ -660,8 +660,8 @@ Execute build and then deploy artifact.
     assert.strictEqual(customStorageClosed, true);
 
     // 关机后拒绝接收新任务
-    await assert.rejects(app.runAction("dummy", {}), 
-      /ExecutionService is closing: new tasks rejected/);
+    await assert.rejects(app.runAction("dummy", {}),
+      /is closed/);
 
     // 重复 close 不报错
     await app.close();

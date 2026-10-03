@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { Logger, ProcessAPI } from "@actiondock/sdk";
 import { ActionDockError, STORAGE_INIT_FAILED } from "../errors";
 import { SystemClock, type Clock } from "../storage/clock";
-import { NodeModuleLoader, registerModuleLoaderHook, type ModuleLoader } from "./module-loader";
+import { NodeModuleLoader, type ModuleLoader } from "./module-loader";
 import { NodeProcessDriver } from "../process/process-driver";
 import { ProcessManager } from "../process/process-manager";
 import type { ProcessDriver } from "../process/driver";
@@ -88,23 +88,48 @@ function ensureDirectoryForDb(dbPath: string): void {
  * - NodeModuleLoader 原生源码加载器
  * - SystemClock 系统时钟
  *
+ * 资源按需装配原则：
+ * - clock 与存储工厂可立即创建（存储工厂本身不打开任何数据库）；
+ * - process 与 modules 采用缓存访问器，首次真正访问时才装配默认驱动，
+ *   静态发现等旁观路径不触发进程管理器与模块加载钩子的创建成本；
+ * - 模块加载钩子注册收敛至 NodeModuleLoader 构造内部，不再在平台工厂入口执行。
+ *
  * @param options 平台配置选项
  */
 export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePlatform {
-  registerModuleLoaderHook();
   const platformName: "node" | "test" = options.name ?? "node";
   const clock: Clock = options.clock ?? new SystemClock();
-  const modules: ModuleLoader = options.modules ?? new NodeModuleLoader();
-  const processDriver = options.processDriver ?? new NodeProcessDriver();
-  const processManager = options.processManager ?? new ProcessManager({ driver: processDriver });
-  const process: ProcessAPI =
-    options.process ??
-    processManager.forOwner({
-      tenantId: "default",
-      principalId: "default",
-      packageInstanceId: "default",
-      generationId: "default",
-    });
+
+  // - 进程接口缓存访问器：显式注入直接透传；缺省时按需装配一次默认驱动链
+  let cachedProcess: ProcessAPI | undefined;
+  const resolveProcess = (): ProcessAPI => {
+    if (options.process) {
+      return options.process;
+    }
+    if (!cachedProcess) {
+      const processDriver = options.processDriver ?? new NodeProcessDriver();
+      const processManager = options.processManager ?? new ProcessManager({ driver: processDriver });
+      cachedProcess = processManager.forOwner({
+        tenantId: "default",
+        principalId: "default",
+        packageInstanceId: "default",
+        generationId: "default",
+      });
+    }
+    return cachedProcess;
+  };
+
+  // - 模块加载器缓存访问器：首次访问时才创建默认加载器（构造内部注册加载钩子）
+  let cachedModules: ModuleLoader | undefined;
+  const resolveModules = (): ModuleLoader => {
+    if (options.modules) {
+      return options.modules;
+    }
+    if (!cachedModules) {
+      cachedModules = new NodeModuleLoader();
+    }
+    return cachedModules;
+  };
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
 
@@ -148,12 +173,17 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
     },
   };
 
-  return {
+  const platform: RuntimePlatform = {
     name: platformName,
     clock,
-    modules,
-    process,
-    storage,
     eventSink: options.eventSink,
+    get process(): ProcessAPI {
+      return resolveProcess();
+    },
+    get modules(): ModuleLoader {
+      return resolveModules();
+    },
+    storage,
   };
+  return platform;
 }

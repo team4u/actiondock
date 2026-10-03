@@ -272,8 +272,12 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     });
 
     const runtime = host.getRuntime("pkg.same-package")!;
-    const origInvoker = ((runtime as any).executionService as any).actionInvoker;
-    ((runtime as any).executionService as any).setActionInvoker(async (childAction: any, childInput: any, context: any) => {
+    // 延迟装配下执行服务按需创建：先触发一次执行确保服务存在，再取内部委托验证同包调用路由
+    const warmup = await host.runAction("pkg.same-package/bar", { val: 1 });
+    assert.strictEqual(warmup.ok, true);
+    const execService = (runtime as any).peekExecutionService?.() ?? (runtime as any).executionService;
+    const origInvoker = (execService as any).actionInvoker;
+    (execService as any).setActionInvoker(async (childAction: any, childInput: any, context: any) => {
       invokerIntercepted = true;
       return origInvoker(childAction, childInput, context);
     });
@@ -305,19 +309,22 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     });
 
     const runtime = host.getRuntime("pkg.singleton-exec")!;
-    const execServiceFirst = (runtime as any).executionService;
+    // 延迟装配下执行服务按需创建：执行前不存在属预期，首次执行后必须存在且唯一
+    await host.runAction("pkg.singleton-exec/test", {});
+    const execServiceFirst = (runtime as any).peekExecutionService?.() ?? (runtime as any).executionService;
+    assert.notStrictEqual(execServiceFirst, undefined);
 
-    // 执行一次动作
+    // 再次执行动作
     await host.runAction("pkg.singleton-exec/test", {});
 
-    const execServiceSecond = (runtime as any).executionService;
+    const execServiceSecond = (runtime as any).peekExecutionService?.() ?? (runtime as any).executionService;
     // 实例必须绝对同一
     assert.strictEqual(execServiceFirst, execServiceSecond);
 
     // 再次执行动作
     await host.runAction("pkg.singleton-exec/test", {});
-    const execServiceThird = (runtime as any).executionService;
-    assert.strictEqual(execServiceFirst, execServiceThird);
+    const execServiceThird = (runtime as any).peekExecutionService?.() ?? (runtime as any).executionService;
+    assert.strictEqual(execServiceSecond, execServiceThird);
 
     await host.close();
   });
@@ -341,10 +348,12 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
 
     // 校验 Runtime 与 ExecutionService 共享同一 PackageIdentity 引用
     assert.strictEqual(runtime.identity, customIdentity);
-    assert.strictEqual((runtime as any).executionService.identity, customIdentity);
+    await runtime.runAction("ping", {});
+    const execService = (runtime as any).peekExecutionService?.() ?? (runtime as any).executionService;
+    assert.strictEqual(execService.identity, customIdentity);
 
     // 校验 Runner 内部持有的 identity 与传入的实例绝对同一
-    const runner = ((runtime as any).executionService as any)._runner;
+    const runner = (execService as any)._runner;
     assert.strictEqual(runner.identity, customIdentity);
     assert.strictEqual(runner.packageId, "pkg.identity-check");
     assert.strictEqual(runner.packageInstanceId, "inst-xyz-99");
@@ -409,19 +418,25 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     const runtime = host.getRuntime("pkg.shared-global")!;
     assert.notStrictEqual(runtime, undefined);
 
-    // 校验 Host 与 Runtime 共享同一 GlobalStorage 内存实例
-    assert.notStrictEqual((host as any).globalStorage, undefined);
-    assert.strictEqual(runtime.globalStorage, (host as any).globalStorage);
-
-    // Host 写入全局配置
+    // 校验 Host 与 Runtime 共享同一 GlobalStorage 内存实例（延迟装配下首次准备后固定）
     await service.management!.config.set("global", "company_name", "AcmeCorp");
+    const hostGlobalStorage = (host as any).globalStorage;
+    assert.notStrictEqual(hostGlobalStorage, undefined);
+    // 触发 Runtime 侧全局库准备（执行），验证共享同一实例
+    const res = await host.runAction("pkg.shared-global/readGlobal", {});
+    assert.strictEqual(res.ok, true);
+    assert.strictEqual(
+      (runtime as any).globalStorageRes?.storage ?? (runtime as any).globalStorage,
+      hostGlobalStorage
+    );
 
     // Runtime 可立即通过 globalStorage 读取
-    assert.strictEqual(runtime.globalStorage?.getConfig("company_name"), "AcmeCorp");
+    assert.strictEqual(
+      ((runtime as any).globalStorageRes?.storage ?? (runtime as any).globalStorage)?.getConfig("company_name"),
+      "AcmeCorp"
+    );
 
     // Action 运行期间通过 ctx.config 读取全局配置
-    const res = await service.execution.run("pkg.shared-global/readGlobal", {});
-    assert.strictEqual(res.ok, true);
     if (res.ok) {
       assert.strictEqual((res.data as any).globalSetting, "AcmeCorp");
     }
@@ -452,12 +467,15 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
 
     const runtime = host.getRuntime("pkg.close-order-test")!;
     assert.notStrictEqual(runtime, undefined);
+    // 确保包侧全局库引用已准备（持有者预热仅打开包库）
+    await host.getConfig("pkg.close-order-test", "noop_key_missing");
 
     // 劫持 runtime.close，验证在 runtime 关闭期间 globalStorage 依然存活可用
     const originalClose = runtime.close.bind(runtime);
     runtime.close = async (options?: { graceMs?: number }) => {
       try {
-        const val = (runtime as any).globalStorage?.getConfig("close_phase_key");
+        const gs = (runtime as any).globalStorageRes?.storage ?? (runtime as any).globalStorage;
+        const val = gs?.getConfig("close_phase_key");
         globalConfigValueDuringRuntimeClose = val;
         globalStorageAccessibleDuringRuntimeClose = val === "still_alive";
       } catch {
@@ -608,7 +626,9 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
       assert.strictEqual(mockStorageClosed, true);
 
       // 断言 2：全局存储已被真正 close
-      assert.strictEqual(globalStorageClosed, true);
+      // （延迟装配下全局库不在注册阶段打开，初始化失败回滚时若已创建则必须关闭；
+      //   本场景冲突发生在注册阶段，全局库从未被求值，关闭次数为零属预期）
+      assert.strictEqual(globalStorageClosed, globalStorageCreated ? true : false);
 
       // 断言 3：数据目录排他锁已被安全释放，后续能够重新成功获取锁
       const subsequentLock = DataDirLock.acquire(tempDir, { hostSessionId: "subsequent-session" });
@@ -770,7 +790,10 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     assert.notStrictEqual(runtimeA, undefined);
     assert.notStrictEqual(runtimeB, undefined);
 
-    const execServiceB = (runtimeB as any).executionService;
+    // 延迟装配下先触发一次执行确保目标包执行服务存在
+    const warmupRun = await host.runAction("pkg.target-b/worker", { msg: "warmup" });
+    assert.strictEqual(warmupRun.ok, true);
+    const execServiceB = (runtimeB as any).peekExecutionService?.() ?? (runtimeB as any).executionService;
     const runnerB = (execServiceB as any)._runner;
     assert.notStrictEqual(execServiceB, undefined);
     assert.notStrictEqual(runnerB, undefined);
