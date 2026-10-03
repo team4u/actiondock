@@ -98,6 +98,8 @@ export function registerConfigSetCommand(configCmd: Command, context?: CliContex
 
         await service.management?.config.set(projConfig.id, key, parsedVal as any);
         writeStdout(`[OK] Configuration '${key}' updated for package '${projConfig.id}'`, context);
-      });
+      },
+      // 按实际查询范围打开存储：显式包寻址结果作为本地根目录传递
+      { localRoot: root || undefined });
     });
 }

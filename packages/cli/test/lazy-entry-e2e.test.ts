@@ -105,32 +105,37 @@ describe("独立产物发现零业务副作用（进程级）", () => {
 
     const marker = join(tempDir, "side-effect.marker");
     const entry = join(outDir, "entry.mjs");
+    // 发现命令显式指定不存在的 --data-dir：命令成功后该目录仍不存在（无数据库、无锁）
+    const probeDataDir = join(tempDir, "probe-data-dir");
 
     // 发现：list
-    const listRes = await runCmd(otherCwd, [entry, "list", "--json"], {
+    const listRes = await runCmd(otherCwd, [entry, "list", "--json", "--data-dir", probeDataDir], {
       ACTIONDOCK_HOME: join(tempDir, "home"),
     });
     assert.strictEqual(listRes.code, 0, `list failed: ${listRes.stderr}`);
     const listPayload = JSON.parse(listRes.stdout);
     assert.ok(listPayload.items.some((i: any) => i.id.includes("probe")));
     assert.strictEqual(existsSync(marker), false, "list must not import action module");
+    assert.strictEqual(existsSync(probeDataDir), false, "list must not create data dir");
 
     // 发现：describe
-    const descRes = await runCmd(otherCwd, [entry, "describe", "probe", "--json"], {
+    const descRes = await runCmd(otherCwd, [entry, "describe", "probe", "--json", "--data-dir", probeDataDir], {
       ACTIONDOCK_HOME: join(tempDir, "home"),
     });
     assert.strictEqual(descRes.code, 0, `describe failed: ${descRes.stderr}`);
     const descPayload = JSON.parse(descRes.stdout);
     assert.ok(descPayload.inputSchema, "describe must still expose full contract");
     assert.strictEqual(existsSync(marker), false, "describe must not import action module");
+    assert.strictEqual(existsSync(probeDataDir), false, "describe must not create data dir");
 
-    // 执行：run（首次导入业务模块）
-    const runRes = await runCmd(otherCwd, [entry, "run", "probe", "--input", "{}", "--json"], {
+    // 执行：run（首次导入业务模块，持有者初始化创建数据目录）
+    const runRes = await runCmd(otherCwd, [entry, "run", "probe", "--input", "{}", "--json", "--data-dir", probeDataDir], {
       ACTIONDOCK_HOME: join(tempDir, "home"),
     });
     assert.strictEqual(runRes.code, 0, `run failed: ${runRes.stderr}`);
     const runPayload = JSON.parse(runRes.stdout);
     assert.strictEqual(runPayload.ok, true);
     assert.strictEqual(existsSync(marker), true, "run must load action module");
+    assert.strictEqual(existsSync(probeDataDir), true, "run (owner mode) must create data dir");
   });
 });

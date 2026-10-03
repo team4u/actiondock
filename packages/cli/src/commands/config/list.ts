@@ -106,9 +106,12 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
         return;
       }
 
-      // 本地分支（通过 Service 门面统一访问）
-      await withService(options, context, async (service) => {
-        const root = resolveLocalPackageRoot(options.package);
+      // 本地分支（通过 Service 门面统一访问）：显式包寻址结果作为本地根目录传递（仅 local 分支求值）
+      await withService(
+        options,
+        context,
+        async (service) => {
+        const root = resolveLocalPackageRoot(options.package) || undefined;
 
         // 全局作用域分支：显式 --global 或无工程回退时仅列举全局配置
         if (options.global || !root) {
@@ -171,6 +174,9 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             ),
           context,
         });
+      },
+      {
+        localRoot: () => resolveLocalPackageRoot(options.package) || undefined,
       });
     });
 }

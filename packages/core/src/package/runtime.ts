@@ -181,11 +181,9 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   private executionSlot: ExecutionSlot = {};
   /** 全局存储：显式注入或首次准备后固定，配合 ownership 判定关闭归属 */
   private globalStorageRes?: GlobalStorageOwnership;
-  private globalStorageInitPromise?: Promise<RuntimeStorage>;
   private runtimeConfig?: RuntimeConfig;
   /** 执行委托暂存：执行服务尚未创建时只保存，不触发资源初始化 */
   private pendingInvoker?: ActionInvoker;
-  private invokerBound = false;
   /** Host 会话级恢复标记：存储准备阶段收敛执行一次，避免重复执行恢复链 */
   private recoveredForHostSession = false;
 
@@ -297,53 +295,70 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   /**
    * 准备包存储：打开（或复用注入的）包数据库，等待可选的 ensureInitialized，
-   * 并在持有者模式下完成运行记录恢复。并发首次调用共享同一在途 Promise。
+   * 并在持有者模式下完成运行记录恢复（允许返回 Promise 的恢复接口必须被等待）。
+   * 并发首次调用共享同一在途 Promise；失败时释放新建资源、清空失败 Promise、透传原始错误。
    */
   private ensureStorage(): Promise<RuntimeStorage> {
     if (this.storageSlot.instance) {
       return Promise.resolve(this.storageSlot.instance);
     }
     if (!this.storageSlot.initPromise) {
-      this.storageSlot.initPromise = (async () => {
-        const storageOpts: StorageFactoryOptions = {
-          projectRoot: this.packageRoot,
-          dataDir: this.options.dataDir,
-          customHome: this.options.customHome,
-          inMemory: this.options.inMemory,
-          // 默认持有者语义：App 主路径打开时收割死亡会话遗留非终态运行记录；
-          // CLI 查询旁观视图显式置 recoverOrphans: false 跳过收割
-          recoverOrphans: this.options.recoverOrphans !== false,
-        };
-        const storage = this.platform.storage.createStorage(this.packageId, storageOpts);
-        try {
-          if (typeof storage.ensureInitialized === "function") {
-            await storage.ensureInitialized();
-          }
-          // 存储打开阶段无会话参数的恢复（初始化链语义）已完成：
-          // 这里补充 Host 会话粒度的恢复（同一宿主会话内只收敛执行一次）
-          this.recoverForHostSessionOnce(storage);
-          this.storageSlot.instance = storage;
-          return storage;
-        } catch (err) {
-          // 初始化失败：释放本次新建且由本层拥有的资源，清空失败 Promise，透传原始错误
-          try {
-            storage.close();
-          } catch {
-            // 忽略清理阶段的副异常，确保原始错误优先透传
-          }
+      const init = this.openStorageAsync();
+      this.storageSlot.initPromise = init;
+      init.catch(() => {
+        // 失败后清空在途 Promise 供后续显式调用重试；同时防止未处理拒绝告警
+        if (this.storageSlot.initPromise === init) {
           this.storageSlot.initPromise = undefined;
-          throw err;
         }
-      })();
-      void this.storageSlot.initPromise.catch(() => {
-        // 防止未处理拒绝告警：错误已在调用方透传
       });
     }
     return this.storageSlot.initPromise;
   }
 
-  /** Host 会话级运行记录恢复：同实例生命周期内最多执行一次，结果可被观测 */
-  private recoverForHostSessionOnce(storage: RuntimeStorage): void {
+  private async openStorageAsync(): Promise<RuntimeStorage> {
+    let storage: RuntimeStorage | undefined;
+    try {
+      storage = this.platform.storage.createStorage(this.packageId, this.buildStorageOptions());
+      if (typeof storage.ensureInitialized === "function") {
+        await storage.ensureInitialized();
+      }
+      // 存储打开阶段无会话参数的恢复（初始化链语义）已完成：
+      // 这里补充 Host 会话粒度的恢复（同一宿主会话内只收敛执行一次，返回 Promise 时被等待）
+      await this.recoverForHostSessionOnce(storage);
+      this.storageSlot.instance = storage;
+      return storage;
+    } catch (err) {
+      // 初始化失败：释放本次新建且由本层拥有的资源，透传原始错误
+      if (storage) {
+        try {
+          await storage.close();
+        } catch {
+          // 忽略清理阶段的副异常，确保原始错误优先透传
+        }
+      }
+      throw err;
+    }
+  }
+
+  /** 构造包存储工厂选项（单一事实源，异步与同步打开路径共用） */
+  private buildStorageOptions(): StorageFactoryOptions {
+    return {
+      projectRoot: this.packageRoot,
+      dataDir: this.options.dataDir,
+      customHome: this.options.customHome,
+      inMemory: this.options.inMemory,
+      // 默认持有者语义：App 主路径打开时收割死亡会话遗留非终态运行记录；
+      // CLI 查询旁观视图显式置 recoverOrphans: false 跳过收割
+      recoverOrphans: this.options.recoverOrphans !== false,
+    };
+  }
+
+  /**
+   * Host 会话级运行记录恢复：同实例生命周期内最多执行一次。
+   * 允许返回 Promise 的恢复接口被等待：恢复完成（或失败透传）前存储不发布；
+   * 恢复失败沿用既有可观测处理（告警透传），不因异步化静默丢失。
+   */
+  private async recoverForHostSessionOnce(storage: RuntimeStorage): Promise<void> {
     if (this.recoveredForHostSession) {
       return;
     }
@@ -355,20 +370,15 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       return;
     }
     try {
-      const result = storage.recoverDeadSessionRuns(this.options.hostSessionId);
-      if (result instanceof Promise) {
-        // 可选的异步恢复实现：不阻塞同步调用者的既有契约，失败保持可观测
-        void result.catch((err) => {
-          console.warn(
-            `[actiondock] recoverDeadSessionRuns failed for package '${this.packageId}': ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
-      }
+      await storage.recoverDeadSessionRuns(this.options.hostSessionId);
     } catch (err) {
-      // 单包恢复失败不阻断整体接管流程，但必须可观测
+      // 单包恢复失败不阻断整体接管流程，但必须可观测：告警后透传，不静默丢失
+      const message =
+        err instanceof Error ? err.message : String(err);
       console.warn(
-        `[actiondock] recoverDeadSessionRuns failed for package '${this.packageId}': ${err instanceof Error ? err.message : String(err)}`
+        `[actiondock] recoverDeadSessionRuns failed for package '${this.packageId}': ${message}`
       );
+      throw err;
     }
   }
 
@@ -423,11 +433,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   /**
    * 准备配置解析器：依赖包存储与全局存储（五层优先级链既有实现不变）。
+   * 同步契约：RuntimeConfig 与 ctx.config.get() 的读取是同步的，故同步打开包库；
+   * 若异步准备已在途，同步路径仅在实例已发布后复用，避免双打开竞态。
    */
   private ensureRuntimeConfig(): RuntimeConfig {
     if (!this.runtimeConfig) {
       this.runtimeConfig = new RuntimeConfig(
-        this.getStorageSync(),
+        this.getStorageAlreadyPrepared(),
         this.options.configOverrides,
         this.projectConfig,
         this.ensureGlobalStorageSync()
@@ -436,26 +448,33 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     return this.runtimeConfig;
   }
 
-  /** 同步获取已就绪的包存储（未准备时同步打开，沿用既有同步打开语义） */
-  private getStorageSync(): RuntimeStorage {
-    const existing = this.storageSlot.instance;
-    if (existing) {
-      return existing;
+  /**
+   * 获取已就绪的包存储（同步契约专用）：
+   * - 已发布实例直接复用；
+   * - 异步准备在途时等待其结算后复用同一实例；
+   * - 未准备时同步打开并登记在途 Promise 已完成状态。
+   * 单一事实源：同步打开也走 buildStorageOptions，并补齐会话恢复等待语义的同步近似。
+   */
+  private getStorageAlreadyPrepared(): RuntimeStorage {
+    if (this.storageSlot.instance) {
+      return this.storageSlot.instance;
+    }
+    if (this.storageSlot.initPromise) {
+      // 异步准备在途：无法同步等待，抛出明确错误供调用方改用异步入口
+      throw new ActionDockError(
+        SERVICE_CLOSED,
+        `Package storage for '${this.packageId}' is still initializing; retry after initialization settles`
+      );
     }
     return this.openStorageSync();
   }
 
+  /** 同步打开包存储（仅当异步准备从未发起时使用） */
   private openStorageSync(): RuntimeStorage {
     this.assertOpen();
-    const storageOpts: StorageFactoryOptions = {
-      projectRoot: this.packageRoot,
-      dataDir: this.options.dataDir,
-      customHome: this.options.customHome,
-      inMemory: this.options.inMemory,
-      recoverOrphans: this.options.recoverOrphans !== false,
-    };
-    const storage = this.platform.storage.createStorage(this.packageId, storageOpts);
+    const storage = this.platform.storage.createStorage(this.packageId, this.buildStorageOptions());
     this.storageSlot.instance = storage;
+    this.storageSlot.initPromise = Promise.resolve(storage);
     return storage;
   }
 
@@ -468,65 +487,71 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       return Promise.resolve(this.executionSlot.instance);
     }
     if (!this.executionSlot.initPromise) {
-      this.executionSlot.initPromise = (async () => {
-        const storage = await this.prepareStorageAsync();
-        const globalStorage = await this.ensureGlobalStorage();
-        const service = new DefaultExecutionService({
-          identity: this.identity,
-          hostSessionId: this.options.hostSessionId,
-          storage,
-          globalStorage,
-          projectRoot: this.packageRoot,
-          projectConfig: this.projectConfig,
-          configOverrides: this.options.configOverrides,
-          actions: this.actionsMap,
-          process: this.options.process ?? this.platform.process,
-          clock: this.options.clock ?? this.platform.clock,
-          logger: this.options.logger,
-          eventSink: this.options.eventSink ?? this.platform.eventSink,
-          maxActiveRuns: this.options.maxActiveRuns,
-          ownerId: this.options.ownerId,
-          actionResolver: this.options.actionResolver,
-          customHome: this.options.customHome,
-          moduleLoader: this.platform.modules,
-          actionInvoker: this.pendingInvoker,
-        });
-        // 服务创建后使用最后一次绑定的委托；单包独立使用保留 INVOCATION_UNSUPPORTED 限制
-        if (!this.pendingInvoker && !this.options.actionInvoker) {
-          const unsupportedInvoker: ActionInvoker = async () => {
-            throw new ActionDockError(
-              INVOCATION_UNSUPPORTED,
-              "Cascaded action invocation (ctx.actions.invoke) is not supported in standalone PackageRuntime. Actions must be executed within an ActionDock Host."
-            );
-          };
-          service.setActionInvoker?.(unsupportedInvoker);
-        } else if (this.pendingInvoker) {
-          service.setActionInvoker?.(this.pendingInvoker);
+      const init = this.buildExecutionService();
+      this.executionSlot.initPromise = init;
+      init.catch(() => {
+        // 失败后清空在途 Promise 供后续显式调用重试；同时防止未处理拒绝告警
+        if (this.executionSlot.initPromise === init) {
+          this.executionSlot.initPromise = undefined;
         }
-        this.invokerBound = true;
-        this.executionSlot.instance = service;
-        return service;
-      })();
-      void this.executionSlot.initPromise.catch(() => {
-        // 防止未处理拒绝告警：错误已在调用方透传
       });
     }
     return this.executionSlot.initPromise;
   }
 
-  /** 异步等待存储准备完成（供执行准备与异步入口复用） */
+  private async buildExecutionService(): Promise<DefaultExecutionService> {
+    try {
+      const storage = await this.prepareStorageAsync();
+      const globalStorage = await this.ensureGlobalStorage();
+      const service = new DefaultExecutionService({
+        identity: this.identity,
+        hostSessionId: this.options.hostSessionId,
+        storage,
+        globalStorage,
+        projectRoot: this.packageRoot,
+        projectConfig: this.projectConfig,
+        configOverrides: this.options.configOverrides,
+        actions: this.actionsMap,
+        process: this.options.process ?? this.platform.process,
+        clock: this.options.clock ?? this.platform.clock,
+        logger: this.options.logger,
+        eventSink: this.options.eventSink ?? this.platform.eventSink,
+        maxActiveRuns: this.options.maxActiveRuns,
+        ownerId: this.options.ownerId,
+        actionResolver: this.options.actionResolver,
+        customHome: this.options.customHome,
+        moduleLoader: this.platform.modules,
+        // 委托优先级：最后一次绑定的 pendingInvoker 优先，否则透传显式注入的构造选项委托
+        actionInvoker: this.pendingInvoker ?? this.options.actionInvoker,
+      });
+      // 服务创建后使用最后一次绑定的委托；单包独立使用保留 INVOCATION_UNSUPPORTED 限制
+      if (!this.pendingInvoker && !this.options.actionInvoker) {
+        const unsupportedInvoker: ActionInvoker = async () => {
+          throw new ActionDockError(
+            INVOCATION_UNSUPPORTED,
+            "Cascaded action invocation (ctx.actions.invoke) is not supported in standalone PackageRuntime. Actions must be executed within an ActionDock Host."
+          );
+        };
+        service.setActionInvoker?.(unsupportedInvoker);
+      } else {
+        service.setActionInvoker?.(this.pendingInvoker ?? this.options.actionInvoker);
+      }
+      this.executionSlot.instance = service;
+      return service;
+    } catch (err) {
+      // 执行准备失败：只回收执行初始化独自新建的资源，不关闭仍被状态查询使用的包存储；
+      // 在途 Promise 由 ensureExecutionService 的失败回调清空（不缓存永久失败，不后台轮询）
+      throw err;
+    }
+  }
+
+  /** 异步等待存储准备完成（供执行准备与异步入口复用；单一赋值入口） */
   private async prepareStorageAsync(): Promise<RuntimeStorage> {
     this.assertOpen();
     if (this.storageSlot.instance) {
       return this.storageSlot.instance;
     }
-    if (!this.storageSlot.initPromise) {
-      this.storageSlot.initPromise = this.ensureStorage();
-      void this.storageSlot.initPromise.catch(() => {
-        // 防止未处理拒绝告警：错误已在调用方透传
-      });
-    }
-    return this.storageSlot.initPromise;
+    return this.ensureStorage();
   }
 
   /** 获取已创建的执行服务（若存在），不触发创建 */
@@ -535,6 +560,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo> {
+    this.assertOpen();
     const actionsMap = this.getStaticActionMap();
     const playbooksMap = this.getStaticPlaybookMap();
     const actions = Array.from(actionsMap.keys());
@@ -558,6 +584,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
+    this.assertOpen();
     const map = this.getStaticActionMap();
     const summaries: ActionSummary[] = Array.from(map.values()).map((spec) => ({
       id: spec.id,
@@ -574,6 +601,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async describeAction(id: string): Promise<ActionSpec> {
+    this.assertOpen();
     const map = this.getStaticActionMap();
 
     let spec = map.get(id);
@@ -626,6 +654,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async listPlaybooks(): Promise<PlaybookSummary[]> {
+    this.assertOpen();
     const map = this.getStaticPlaybookMap();
     return Array.from(map.values()).map((spec) => ({
       id: spec.id,
@@ -637,6 +666,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
+    this.assertOpen();
     const map = this.getStaticPlaybookMap();
     const cleanId = id.replace(/\.md$/, "");
     const spec = map.get(cleanId) || map.get(id);
@@ -729,12 +759,14 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
+    this.assertOpen();
     // 历史读取复用存储能力，不创建执行服务
     const record = (await this.prepareStorageAsync()).getRun(runId);
     return record ?? undefined;
   }
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
+    this.assertOpen();
     // 包已有执行服务时交由该服务处理活动任务与取消信号；
     // 没有服务时只读取历史记录，不为了取消不存在的本地活动任务创建执行服务
     const service = this.peekExecutionService();
@@ -752,6 +784,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
+    this.assertOpen();
     // 已有执行服务时沿用其事件源；没有服务时复用注入/平台事件源，不新建执行服务
     const service = this.peekExecutionService();
     if (service) {
@@ -768,10 +801,8 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   public setActionInvoker(invoker?: ActionInvoker): void {
     // 执行服务尚未创建时只保存委托，不触发资源初始化；服务创建后使用最后一次绑定的委托
     this.pendingInvoker = invoker;
-    this.invokerBound = false;
     const service = this.peekExecutionService();
     if (service) {
-      this.invokerBound = true;
       service.setActionInvoker?.(invoker);
     }
   }
@@ -782,7 +813,9 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
    */
   public async prepareResources(): Promise<void> {
     this.assertOpen();
-    await this.prepareStorageAsync();
+    const storage = await this.prepareStorageAsync();
+    // 注入存储路径也应执行会话级恢复：持有者预热返回前恢复必须完成（含返回 Promise 的实现）
+    await this.recoverForHostSessionOnce(storage);
   }
 
   /**
@@ -790,7 +823,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
    * 延迟装配下恢复已收敛到存储准备路径，本方法确保存储已就绪后按需补一次会话恢复。
    */
   public recoverDeadSessionRuns(sessionId?: string): void {
-    const storage = this.storageSlot.instance ?? this.getStorageSync();
+    if (this.isClosed) {
+      throw new ActionDockError(
+        SERVICE_CLOSED,
+        `PackageRuntime for package '${this.packageId}' is closed`
+      );
+    }
+    const storage = this.storageSlot.instance ?? this.openStorageSync();
     if (typeof storage.recoverDeadSessionRuns === "function") {
       try {
         const result = storage.recoverDeadSessionRuns(sessionId ?? this.options.hostSessionId);
@@ -810,6 +849,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async listConfig(): Promise<ConfigValueView[]> {
+    this.assertOpen();
     const declared = this.projectConfig.config || {};
     const stored = (await this.prepareStorageAsync()).listConfig();
     const allKeys = Array.from(new Set([...Object.keys(declared), ...Object.keys(stored)]));
@@ -824,6 +864,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async getConfig(key: string): Promise<ConfigValueView> {
+    this.assertOpen();
     const itemDef = this.projectConfig.config?.[key];
     const isSecret = isSecretConfigKey(key, itemDef);
 
@@ -843,10 +884,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async setConfig(key: string, value: JsonValue): Promise<void> {
+    this.assertOpen();
     await (await this.prepareStorageAsync()).setConfig(key, value);
   }
 
   async deleteConfig(key: string): Promise<boolean> {
+    this.assertOpen();
     return await (await this.prepareStorageAsync()).deleteConfig(key);
   }
 
@@ -1093,6 +1136,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
+    this.assertOpen();
     return (await this.prepareStorageAsync()).listRuns({
       actionId: options?.actionId,
       status: options?.status,
@@ -1106,6 +1150,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     olderThanMs?: number;
     keep?: number;
   }): Promise<number> {
+    this.assertOpen();
     return (await this.prepareStorageAsync()).clearRuns({
       actionId: options?.actionId,
       status: options?.status,
@@ -1115,11 +1160,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   async cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+    this.assertOpen();
     const storage = await this.prepareStorageAsync();
     return storage.cleanExpiredRuns?.(policy) ?? 0;
   }
 
   async listStateEntries(options?: any): Promise<import("../storage/types").StateEntry[]> {
+    this.assertOpen();
     const storage = await this.prepareStorageAsync();
     if (typeof storage.listStateEntries === "function") {
       return storage.listStateEntries(options);
@@ -1159,7 +1206,6 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
         // 共享全局库由 Host 关闭；独立包自建的全局库由包关闭；外部注入存储不在此关闭
         const globalRes = this.globalStorageRes;
         this.globalStorageRes = undefined;
-        this.globalStorageInitPromise = undefined;
         if (globalRes?.kind === "own") {
           try {
             globalRes.storage.close();

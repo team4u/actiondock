@@ -12,6 +12,8 @@ import type { RuntimeStorage } from "../src/storage/types";
 import type { ProcessDriver } from "../src/process/driver";
 import type { ModuleLoader } from "../src/platform/module-loader";
 import { defineAction } from "@actiondock/sdk";
+import { SqliteRuntimeStorage } from "../src/storage/sqlite";
+import { ActionDockError, SERVICE_CLOSED } from "../src/errors";
 
 /**
  * 按需装配资源边界测试：旁观发现零资源创建、状态查询只开目标包存储、
@@ -300,5 +302,156 @@ describe("按需装配资源边界", () => {
       await import("node:fs").then((fs) => fs.readFileSync(join(projectRoot, ".actiondock", "transactions", "tx-1", "transaction.json"), "utf-8"))
     );
     assert.strictEqual(txMeta.status, "pending");
+  });
+});
+
+describe("按需装配生命周期边界", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "actiondock-lifecycle-"));
+  });
+
+  afterEach(() => {
+    if (existsSync(tempDir)) {
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
+
+  it("并发首次读取状态只创建一个包存储；并发首次执行只创建一个执行服务", async () => {
+    let created = 0;
+    const platform: RuntimePlatform = {
+      ...createNodePlatform(),
+      storage: {
+        createStorage: (packageId: string) => {
+          created++;
+          return new SqliteRuntimeStorage({ dbPath: ":memory:", packageId });
+        },
+        createGlobalStorage: () => new SqliteRuntimeStorage({ dbPath: ":memory:", packageId: "__global__" }),
+      },
+    };
+
+    const runtime = new DefaultPackageRuntime({
+      projectConfig: { id: "pkg.concurrent", name: "C", version: "1.0.0", actions: { probe: { entry: "" } } },
+      actions: { probe: defineAction({ run: () => "ok" }) },
+      platform,
+      inMemory: true,
+      recoverOrphans: false,
+    });
+
+    const reads = await Promise.all([
+      runtime.setState("k1", 1),
+      runtime.setState("k2", 2),
+      runtime.setState("k3", 3),
+      runtime.listRuns(),
+    ]);
+    assert.strictEqual(created, 1, "并发首次状态读取只允许创建一个包存储");
+
+    await Promise.all([
+      runtime.runAction("probe", {}),
+      runtime.runAction("probe", {}),
+    ]);
+    const svc1 = (runtime as any).peekExecutionService();
+    assert.notStrictEqual(svc1, undefined);
+    await runtime.runAction("probe", {});
+    assert.strictEqual((runtime as any).peekExecutionService(), svc1, "并发首次执行只创建一个执行服务");
+
+    await runtime.close();
+  });
+
+  it("存储首次创建失败修复后可重试，不缓存永久失败", async () => {
+    let failNext = true;
+    let created = 0;
+    const platform: RuntimePlatform = {
+      ...createNodePlatform(),
+      storage: {
+        createStorage: (packageId: string) => {
+          if (failNext) {
+            throw new Error("TRANSIENT_STORAGE_FAILURE");
+          }
+          created++;
+          return new SqliteRuntimeStorage({ dbPath: ":memory:", packageId });
+        },
+        createGlobalStorage: () => new SqliteRuntimeStorage({ dbPath: ":memory:", packageId: "__global__" }),
+      },
+    };
+
+    const runtime = new DefaultPackageRuntime({
+      projectConfig: { id: "pkg.retry", name: "R", version: "1.0.0" },
+      platform,
+      inMemory: true,
+      recoverOrphans: false,
+    });
+
+    await assert.rejects(runtime.setState("k", 1), /TRANSIENT_STORAGE_FAILURE/);
+    failNext = false;
+    await runtime.setState("k", 1);
+    assert.strictEqual(created, 1, "修复后重试成功创建存储");
+    assert.strictEqual(await runtime.getState("k"), 1);
+
+    await runtime.close();
+  });
+
+  it("注入存储的恢复方法返回 Promise 时被工厂等待", async () => {
+    let recoverResolved = false;
+    const recoverPromise = new Promise<number>((resolve) => {
+      setTimeout(() => {
+        recoverResolved = true;
+        resolve(0);
+      }, 30);
+    });
+
+    const injected = new SqliteRuntimeStorage({ dbPath: ":memory:", packageId: "pkg.promise-recover" });
+    injected.recoverDeadSessionRuns = () => recoverPromise as any;
+
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: { id: "pkg.promise-recover", name: "P", version: "1.0.0", actions: { probe: { entry: "" } } },
+          actions: { probe: defineAction({ run: () => "ok" }) },
+          storage: injected,
+          inMemory: true,
+        } as any,
+      ],
+      autoLoadCurrentProject: false,
+      // 默认持有者：工厂返回前预热存储并等待恢复完成
+    });
+
+    assert.strictEqual(recoverResolved, true, "持有者工厂必须在返回前等待异步恢复完成");
+    await host.close();
+  });
+
+  it("静态发现各端口关闭后返回 SERVICE_CLOSED", async () => {
+    const runtime = new DefaultPackageRuntime({
+      projectConfig: { id: "pkg.closed-ports", name: "CP", version: "1.0.0", actions: { probe: { entry: "" } } },
+      actions: { probe: defineAction({ run: () => "ok" }) },
+      platform: createNodePlatform(),
+      inMemory: true,
+      recoverOrphans: false,
+    });
+
+    await runtime.close();
+    for (const p of [
+      runtime.info(),
+      runtime.listActions(),
+      runtime.describeAction("probe"),
+      runtime.listPlaybooks(),
+      runtime.describePlaybook("x"),
+      runtime.listRuns(),
+      runtime.getRun("r"),
+      runtime.listConfig(),
+      runtime.getConfig("k"),
+      runtime.setConfig("k", 1),
+      runtime.deleteConfig("k"),
+      runtime.cancelRun("r"),
+      runtime.clearRuns(),
+      runtime.listStateKeys(),
+    ]) {
+      await assert.rejects(p, (err: any) => err instanceof ActionDockError && err.code === SERVICE_CLOSED);
+    }
+    assert.throws(() => runtime.events("r"), /is closed/);
+    assert.throws(() => (runtime as any).recoverDeadSessionRuns(), /is closed/);
   });
 });

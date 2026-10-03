@@ -60,15 +60,6 @@ export function stageSourceSkill(
       )
   );
 
-  // 仅在使用自动模板时生成默认运行参考文件；与项目声明资产同路径冲突时报错不覆盖
-  if (usedExistingSkillMd === undefined && !options.skipSkillMd) {
-    writeRuntimeReferenceFile(skillDir, {
-      dependencyStepLabel: "安装技能源码依赖",
-      relinkStepLabel: "完成安装后重新链接本技能",
-      invocationStyle: "global-ad",
-    });
-  }
-
   // 导出精简后的 actiondock.json 项目配置（项目元数据与清单的单一事实源）
   const exportedConfig = serializePlanManifest(plan, {
     omitEmptyConfig: true,
@@ -96,6 +87,16 @@ export function stageSourceSkill(
   copyPlanEntries(skillDir, plan, {
     playbookRelPath: (pb) => join(playbooksDir, basename(pb.filePath)),
   });
+
+  // 声明资产拷贝完成后再物化默认运行参考文件：仅在使用自动模板时生成；
+  // 与项目声明资产同路径冲突时报错不覆盖（拷贝在前，冲突检测能真实命中）
+  if (usedExistingSkillMd === undefined && !options.skipSkillMd) {
+    writeRuntimeReferenceFile(skillDir, {
+      dependencyStepLabel: "安装技能源码依赖",
+      relinkStepLabel: "完成安装后重新链接本技能",
+      invocationStyle: "global-ad",
+    });
+  }
 
   return usedExistingSkillMd;
 }

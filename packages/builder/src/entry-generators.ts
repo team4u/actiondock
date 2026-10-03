@@ -24,7 +24,6 @@ import {
   createNodePlatform,
 } from "@actiondock/core";
 import { serveParentIpc } from "@actiondock/core/server";
-import { dirname, join } from "node:path";
 
 // 产物包根目录：以入口文件自身位置为基准，不依赖调用者当前工作目录
 const packageRoot = import.meta.dirname;
@@ -48,8 +47,15 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
+// 复用既有命令分发结果确定访问性质：发现命令（list/describe/show）为旁观初始化，
+// 不创建数据库、不取目录锁、不收割遗留运行记录；执行与写入命令为持有者初始化
+const command = args.find((a) => !a.startsWith("-")) || "";
+const DISCOVERY_COMMANDS = new Set(["list", "describe", "show"]);
+const recoverOrphans = DISCOVERY_COMMANDS.has(command) ? false : undefined;
+
 const service = await createActionDock({
   dataDir,
+  ...(recoverOrphans === false ? { recoverOrphans: false } : {}),
   packages: [
     {
       packageRoot,

@@ -156,6 +156,20 @@ ${options.entryRelPath || "node ./entry.mjs"} run <action-id> --json --input-fil
 
 若宿主环境已全局安装 \`ad\`，亦可将其链接后统一调度。`
       : `本技能为源码型交付，通过全局安装的 \`ad\` 命令行工具执行。`;
+  const isNodeEntry = options.invocationStyle === "node-entry";
+  const probePrinciple = isNodeEntry
+    ? `默认宿主环境中已预置 Node.js 运行环境。本目录型交付直接使用自身入口执行，不依赖全局 \`ad\`；正常执行流程直接调用上述 Action 即可，严禁在任务启动前盲目进行前置环境检查或体检；仅在入口报错提示模块缺失（如 \`Cannot find package\`）或 Node.js 版本不满足时，方可按本文指引修复。`
+    : `默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，严禁在任务启动前盲目进行前置环境检查或体检；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本文指引安装初始化。`;
+  const cliInstallSection = isNodeEntry
+    ? `- **Node.js 环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。目录型交付不需要全局安装 \`ad\`；若需要接入全局调度，可另行安装：
+  \`\`\`bash
+  npm install -g @actiondock/cli
+  \`\`\``
+    : `- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
+- **全局安装 ActionDock 命令行工具**：
+  \`\`\`bash
+  npm install -g @actiondock/cli
+  \`\`\``;
   return `# ActionDock 运行时环境参考
 
 > 本文件为技能主说明的按需参考，仅在环境未就绪或报错时查阅；正常执行流程无需阅读本文。
@@ -166,27 +180,21 @@ ${invocationSection}
 
 ## 按需排查原则
 
-默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，严禁在任务启动前盲目进行前置环境检查或体检；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本文指引安装初始化。
+${probePrinciple}
 
-## 命令行工具与环境依赖未就绪时的安装指引
+## 环境依赖未就绪时的安装指引
 
-若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
+若宿主环境依赖缺失，请依次按如下步骤完成安装：
 
-- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
-- **全局安装 ActionDock 命令行工具**：
-  \`\`\`bash
-  npm install -g @actiondock/cli
-  \`\`\`
+${cliInstallSection}
 - **${options.dependencyStepLabel}**：
   若在技能目录内调用时提示模块缺失，在 \`<skill_root>\` 目录下安装生产依赖：
   \`\`\`bash
   cd "<skill_root>" && npm install --omit=dev
   \`\`\`
-- **验证工具就绪**：
-  \`\`\`bash
-  ad --version
-  \`\`\`
-- **环境诊断与体检**：
+- **验证就绪**：
+  ${isNodeEntry ? `${options.entryRelPath || "node ./entry.mjs"} list` : "ad --version"}
+- **环境诊断与体检**（仅全局接入 \`ad\` 后适用）：
   安装完成后若仍遇到异常，执行体检命令排查：
   \`\`\`bash
   ad doctor
@@ -382,11 +390,14 @@ ${binaryRelPath} state get KEY
 
 ## 故障排查与依赖自愈指引（按需查阅）
 
-若在宿主环境中执行时提示模块缺失，在技能根目录下安装生产依赖：
+本目录为 Node 目录型交付，直接使用自身入口执行，不要求全局安装 \`ad\` 命令行工具。
+若提示模块缺失，在技能根目录下安装生产依赖：
 
 \`\`\`bash
 npm install --omit=dev
 \`\`\`
+
+完整环境安装与自愈指引按需查阅：[${RUNTIME_REFERENCE_REL_PATH}](${RUNTIME_REFERENCE_REL_PATH})
 `;
 }
 

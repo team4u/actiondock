@@ -106,6 +106,17 @@ function isPackageRuntime(item: unknown): item is PackageRuntime {
   );
 }
 
+/** 并发解析运行记录归属包（公共端口查询，不新建执行服务） */
+async function findRunOwnerRuntime(
+  runtimes: readonly PackageRuntime[],
+  runId: string
+): Promise<PackageRuntime | undefined> {
+  const results = await Promise.all(
+    runtimes.map(async (rt) => ({ rt, record: await rt.getRun(runId).catch(() => undefined) }))
+  );
+  return results.find((r) => r.record !== undefined)?.rt;
+}
+
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
@@ -458,9 +469,10 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   /**
-   * 持有者预热：等待内部创建的全部包完成存储准备（含运行记录恢复）。
-   * 预热的是存储，不是执行服务、进程接口或业务模块；任一包准备失败按既有
-   * 初始化失败时机整体回滚。外部注入的 Runtime 保持既有生命周期约定，不在此预热。
+   * 持有者预热：等待内部创建的全部包完成存储准备（含运行记录恢复），
+   * 并打开共享全局存储。预热的是存储，不是执行服务、进程接口或业务模块；
+   * 任一包准备失败按既有初始化失败时机整体回滚。
+   * 外部注入的 Runtime 保持既有生命周期约定，不在此预热。
    */
   private async prewarmManagedRuntimes(): Promise<void> {
     const managed = Array.from(this.runtimes.values()).filter(
@@ -469,13 +481,9 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (managed.length === 0) {
       return;
     }
-    await Promise.all(
-      managed.map((rt) =>
-        rt.prepareResources().catch((err) => {
-          throw err;
-        })
-      )
-    );
+    await Promise.all(managed.map((rt) => rt.prepareResources()));
+    // 持有者在返回前打开共享全局存储，保留对全局库存储错误的提前发现能力
+    this.getGlobalStorage();
   }
 
   /**
@@ -1173,36 +1181,18 @@ export class DefaultActionDockHost implements ActionDockHost {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     const self = this;
-    for (const runtime of this.listRuntimes()) {
-      // 使用公共运行记录查询确认包归属，不依赖运行时私有存储字段；
-      // 查询本身复用存储能力，不新建执行服务
-      const record = runtime.getRun(runId);
-      if (record instanceof Promise) {
-        return (async function* () {
-          const resolved = await record;
-          if (resolved) {
-            yield* runtime.events(runId, options);
-            return;
-          }
-          yield* self.subscribeEventsFallback(runId, options);
-        })();
+    // 事件订阅可异步解析包归属：逐包并发查询运行记录（公共端口，不新建执行服务），
+    // 命中则使用该包事件源，全部未命中回退 Host 事件源
+    return (async function* () {
+      const runtimes = self.listRuntimes();
+      const owner = await findRunOwnerRuntime(runtimes, runId);
+      if (owner) {
+        yield* owner.events(runId, options);
+        return;
       }
-      if (record) {
-        return runtime.events(runId, options);
-      }
-    }
-    return this.subscribeEventsFallback(runId, options);
-  }
-
-  private subscribeEventsFallback(
-    runId: string,
-    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
-  ): AsyncIterable<ExecutionEvent> {
-    const firstRuntime = this.listRuntimes()[0];
-    if (firstRuntime) {
-      return firstRuntime.events(runId, options);
-    }
-    return this.eventSink.subscribe(runId, options);
+      // Host 共享事件源作为统一回退（与执行服务装配使用同一 sink，完成事件不丢失）
+      yield* self.eventSink.subscribe(runId, options);
+    })();
   }
 
   private getGlobalStorage(): RuntimeStorage {

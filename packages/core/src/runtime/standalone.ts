@@ -120,7 +120,8 @@ export class StandaloneDispatcher {
 
   private async createLocalService(
     dataDir?: string,
-    configOverrides: Record<string, unknown> = {}
+    configOverrides: Record<string, unknown> = {},
+    accessMode: "owner" | "observer" = "owner"
   ): Promise<{ service: ActionDockService; ownsService: boolean }> {
     if (this.options.service) {
       return { service: this.options.service, ownsService: false };
@@ -153,6 +154,9 @@ export class StandaloneDispatcher {
 
     const service = await createActionDock({
       runtimeOptions,
+      // 发现入口使用旁观初始化：不创建数据库、不取目录锁、不收割遗留运行记录；
+      // 执行与写入入口继续持有者初始化（默认 recoverOrphans 语义）
+      ...(accessMode === "observer" ? { recoverOrphans: false } : {}),
     });
 
     if (this.options.inMemory) {
@@ -215,7 +219,10 @@ export class StandaloneDispatcher {
     let service: ActionDockService;
     let ownsService = false;
     try {
-      const serviceRes = await this.createLocalService(dataDir, configOverrides);
+      // 复用既有命令分发结果确定访问性质：发现命令（list/describe）为旁观；
+      // 执行与写入命令（run/config/state）为持有者
+      const accessMode = command === "list" || command === "describe" || command === "show" ? "observer" : "owner";
+      const serviceRes = await this.createLocalService(dataDir, configOverrides, accessMode);
       service = serviceRes.service;
       ownsService = serviceRes.ownsService;
     } catch (err: any) {
