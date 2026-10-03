@@ -1,47 +1,20 @@
 import { STANDALONE_ASYNC_UNSUPPORTED } from "@actiondock/core";
-import { isOwnAction } from "./types";
+import { serializePlanManifest } from "./manifest";
 import type { SelectionPlan } from "./types";
 
 /**
  * 生成 Host 子进程入口脚本源码（负责运行 ActionDockHost，通过 Node IPC 暴露 Target）。
- * 与 serializePlanManifest / stageSources 的过滤条件保持一致：跨包外部 Action 不进入 import 与运行时注册，
- * 避免入口 import 清单没有的源文件产生孤儿模块（外部源码未物化进本包目录，运行时必然加载失败）。
+ *
+ * 按需装配契约：
+ * - 不再静态导入全部包内 Action（消除发现路径的业务模块顶层副作用）；
+ * - 仅携带清单元数据，执行时由现有执行服务通过清单 entry 与 NodeModuleLoader
+ *   按需加载业务实现；跨包外部 Action 不混入本包源码，依赖调用继续经 Host 路由；
+ * - 入口路径以产物包根目录为基准（import.meta.dirname），不依赖调用者当前工作目录。
  */
 export function generateNodeHostEntrySource(plan: SelectionPlan): string {
-  // 仅包自有 Action 参与 import 与注册，与产物清单保持同一事实源
-  const ownActions = plan.actions.filter((a) => isOwnAction(a));
-  const imports = ownActions
-    .map((act, idx) => `import action_${idx} from ${JSON.stringify(`./${act.entry.replace(/\\/g, "/")}`)};`)
-    .join("\n");
-
-  const actionsDict: Record<string, unknown> = {};
-  for (const a of ownActions) {
-    actionsDict[a.id] = {
-      entry: a.entry,
-      description: a.description || "",
-      inputSchema: a.inputSchema ?? null,
-      outputSchema: a.outputSchema ?? null,
-      uses: a.uses || [],
-      tags: a.tags || [],
-      annotations: a.annotations || {},
-    };
-  }
-
-  const actionItems = ownActions
-    .map((a, idx) => {
-      const entryObj = `{
-      ...(typeof action_${idx} === "function" ? { run: action_${idx} } : action_${idx}),
-      id: action_${idx}?.id || ${JSON.stringify(a.id)},
-      description: action_${idx}?.description || ${JSON.stringify(a.description || "")},
-      inputSchema: action_${idx}?.inputSchema ?? ${JSON.stringify(a.inputSchema ?? null)},
-      outputSchema: action_${idx}?.outputSchema ?? ${JSON.stringify(a.outputSchema ?? null)},
-      uses: action_${idx}?.uses || ${JSON.stringify(a.uses || [])},
-      tags: action_${idx}?.tags || ${JSON.stringify(a.tags || [])},
-      annotations: action_${idx}?.annotations || ${JSON.stringify(a.annotations || {})},
-    }`;
-      return entryObj;
-    })
-    .join(",\n    ");
+  // 复用 SelectionPlan 的清单序列化单一事实源（含包内动作筛选与 Schema 字段映射），
+  // 不单独复制一份 Schema 字段映射
+  const manifestActions = serializePlanManifest(plan).actions;
 
   return `#!/usr/bin/env node
 // AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
@@ -51,8 +24,10 @@ import {
   createNodePlatform,
 } from "@actiondock/core";
 import { serveParentIpc } from "@actiondock/core/server";
+import { dirname, join } from "node:path";
 
-${imports}
+// 产物包根目录：以入口文件自身位置为基准，不依赖调用者当前工作目录
+const packageRoot = import.meta.dirname;
 
 let dataDir;
 const configOverrides = {};
@@ -77,6 +52,7 @@ const service = await createActionDock({
   dataDir,
   packages: [
     {
+      packageRoot,
       dataDir,
       configOverrides,
       projectConfig: {
@@ -85,11 +61,8 @@ const service = await createActionDock({
         version: ${JSON.stringify(plan.version)},
         description: ${JSON.stringify(plan.description || "")},
         config: ${JSON.stringify(plan.configDefs || {})},
-        actions: ${JSON.stringify(actionsDict)},
+        actions: ${JSON.stringify(manifestActions)},
       },
-      actions: [
-        ${actionItems}
-      ],
     },
   ],
   platform: createNodePlatform({ dataDir }),
