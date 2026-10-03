@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, defineAction } from "@actiondock/sdk";
@@ -10,7 +10,6 @@ import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { SystemClock } from "../src/storage/clock";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
-import { NodeFileSystem } from "../src/platform/node-fs";
 import { NodeHttpServer } from "../src/server/http-server";
 import { NodeModuleLoader } from "../src/platform/module-loader";
 import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
@@ -32,11 +31,10 @@ describe("createNodePlatform 平台工厂测试", () => {
 
   describe("组件组装与契约校验", () => {
     it("具备标准 Node 运行时平台属性契约", () => {
-      const platform = createNodePlatform({ rootDir: tempDir });
+      const platform = createNodePlatform();
 
       assert.strictEqual(platform.name, "node");
       assert.ok(platform.clock instanceof SystemClock);
-      assert.ok(platform.files instanceof NodeFileSystem);
       assert.notStrictEqual(platform.process, undefined);
       assert.strictEqual(typeof platform.process.run, "function");
       assert.strictEqual(typeof platform.process.start, "function");
@@ -60,26 +58,6 @@ describe("createNodePlatform 平台工厂测试", () => {
       assert.ok((mono2) > mono1);
     });
 
-    it("文件系统驱动基于 NodeFileSystem 正常读写并受沙箱约束", async () => {
-      const platform = createNodePlatform({ rootDir: tempDir });
-      const testFile = join(tempDir, "sample.txt");
-
-      await platform.files.writeFile(testFile, "ActionDock Node Platform");
-      assert.strictEqual(await platform.files.exists(testFile), true);
-
-      const content = await platform.files.readFile(testFile);
-      assert.strictEqual(content, "ActionDock Node Platform");
-
-      const stat = await platform.files.stat(testFile);
-      assert.strictEqual(stat.isFile(), true);
-      assert.strictEqual(stat.isDirectory(), false);
-
-      const outsidePath = join(tempDir, "..", "outside-escape.txt");
-      await assert.rejects(async () => {
-        await platform.files.writeFile(outsidePath, "escape");
-      });
-    });
-
     it("进程执行驱动能够基于 ProcessManager 与 NodeProcessDriver 执行命令并捕获输出", async () => {
       const platform = createNodePlatform();
       const result = await platform.process.run({
@@ -98,9 +76,9 @@ describe("createNodePlatform 平台工厂测试", () => {
     });
 
     it("模块加载驱动能够基于 NodeModuleLoader 正常解析带扩展名模块并拒绝无扩展名", async () => {
-      const platform = createNodePlatform({ rootDir: tempDir });
+      const platform = createNodePlatform();
       const fooFile = join(tempDir, "foo.ts");
-      await platform.files.writeFile(fooFile, "export const val = 42;");
+      writeFileSync(fooFile, "export const val = 42;", "utf-8");
       const resolved = platform.modules.resolve?.("./foo.ts", join(tempDir, "index.ts"));
       assert.strictEqual(resolved, fooFile);
       assert.throws(() => platform.modules.resolve?.("./foo", join(tempDir, "index.ts")));

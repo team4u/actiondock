@@ -287,7 +287,6 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const platform = createNodePlatform({
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
-        rootDir: projectRoot || undefined,
       });
 
       const service = await createActionDock({

@@ -62,8 +62,6 @@ export async function startMcpStdio(
     // 标准输出物理隔离与受控限流排空转入 stderr 诊断流
     serviceToUse = new IpcActionDockService({
       childProcess,
-      maxDiagnosticBytes: 512 * 1024,
-      maxDiagnosticRate: 64 * 1024,
       diagnosticTarget: process.stderr,
     });
     // IPC 代理实例由本入口创建，生命周期归本入口的 cleanup 所有

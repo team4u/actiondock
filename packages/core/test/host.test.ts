@@ -889,7 +889,7 @@ actions:
     }
   });
 
-  it("当 project.lock 被活跃 PID 持有时，createActionDockHost 与 new DefaultActionDockHost 均抛出 PROJECT_BUSY 异常", async () => {
+  it("当 project.lock 被活跃 PID 持有时，createActionDockHost 抛出 PROJECT_BUSY 异常，且 new DefaultActionDockHost 仅执行轻量装配并给出警告", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "ad-host-lock-busy-"));
     const dummyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
       stdio: "ignore",
@@ -914,7 +914,7 @@ actions:
       };
       writeFileSync(join(lockDir, "metadata.json"), JSON.stringify(lockInfo, null, 2), "utf-8");
 
-      // 1. 验证 createActionDockHost 抛出 PROJECT_BUSY 异常
+      // 验证 createActionDockHost 抛出 PROJECT_BUSY 异常
       let createErr: any;
       try {
         await createActionDockHost({
@@ -931,22 +931,20 @@ actions:
         "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
       ));
 
-      // 2. 验证 new DefaultActionDockHost 抛出 PROJECT_BUSY 异常
-      let constructErr: any;
-      try {
-        new DefaultActionDockHost({
-          projectRoot: tempDir,
-          autoLoadCurrentProject: true,
-        });
-      } catch (err) {
-        constructErr = err;
-      }
+      // 验证 new DefaultActionDockHost 仅执行轻量装配，不触碰文件锁并记录警告
+      const warnings: string[] = [];
+      const testLogger = {
+        warn: (msg: string) => warnings.push(msg),
+      };
 
-      assert.notStrictEqual(constructErr, undefined);
-      assert.strictEqual(constructErr?.code, "PROJECT_BUSY");
-      assert.ok((constructErr?.message).includes(
-        "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-      ));
+      const minimalHost = new DefaultActionDockHost({
+        projectRoot: tempDir,
+        autoLoadCurrentProject: true,
+        logger: testLogger as any,
+      });
+
+      assert.notStrictEqual(minimalHost, undefined);
+      assert.ok(warnings.some((w) => w.includes("minimal object assembly")));
     } finally {
       try {
         dummyChild.kill("SIGKILL");
@@ -955,7 +953,7 @@ actions:
     }
   });
 
-  it("当 DefaultActionDockHost 构造函数因 PROJECT_BUSY 抛出异常时，妥善释放 dataDirLock 且后续实例可立刻获取该数据目录", async () => {
+  it("当 createActionDockHost 因 PROJECT_BUSY 抛出异常时，妥善释放 dataDirLock 且后续实例可立刻获取该数据目录", async () => {
     const tempProjDir = mkdtempSync(join(tmpdir(), "ad-host-lock-release-proj-"));
     const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-lock-release-data-"));
     const dummyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
@@ -981,27 +979,27 @@ actions:
       };
       writeFileSync(join(lockDir, "metadata.json"), JSON.stringify(lockInfo, null, 2), "utf-8");
 
-      // 构造 Host 失败（因 project.lock 被占用）
-      let constructErr: any;
+      // 初始化 Host 失败（因 project.lock 被占用）
+      let createErr: any;
       try {
-        new DefaultActionDockHost({
+        await createActionDockHost({
           projectRoot: tempProjDir,
           dataDir: tempDataDir,
           autoLoadCurrentProject: true,
         });
       } catch (err) {
-        constructErr = err;
+        createErr = err;
       }
 
-      assert.notStrictEqual(constructErr, undefined);
-      assert.strictEqual(constructErr?.code, "PROJECT_BUSY");
+      assert.notStrictEqual(createErr, undefined);
+      assert.strictEqual(createErr?.code, "PROJECT_BUSY");
 
       // 验证 tempDataDir 上的 dataDirLock 已被妥善释放，未在磁盘遗留锁目录
       const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
       assert.strictEqual(existsSync(dataLockPath), false);
 
       // 验证后续实例可以立刻获取该数据目录，绝无 DATA_DIR_IN_USE
-      const subsequentHost = new DefaultActionDockHost({
+      const subsequentHost = await createActionDockHost({
         dataDir: tempDataDir,
         autoLoadCurrentProject: false,
       });
@@ -1017,13 +1015,13 @@ actions:
     }
   });
 
-  it("当 DefaultActionDockHost 构造函数因包加载失败抛出异常时，妥善释放 dataDirLock 并安全关闭已注册子 app", async () => {
+  it("当 createActionDockHost 因包加载失败抛出异常时，妥善释放 dataDirLock 并安全关闭已注册子 app", async () => {
     const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-fail-load-data-"));
 
     try {
-      let constructErr: any;
+      let createErr: any;
       try {
-        new DefaultActionDockHost({
+        await createActionDockHost({
           dataDir: tempDataDir,
           packages: [
             {
@@ -1046,18 +1044,18 @@ actions:
           autoLoadCurrentProject: false,
         });
       } catch (err) {
-        constructErr = err;
+        createErr = err;
       }
 
-      assert.notStrictEqual(constructErr, undefined);
-      assert.ok((constructErr?.message).includes("Package ID conflict"));
+      assert.notStrictEqual(createErr, undefined);
+      assert.ok((createErr?.message).includes("Package ID conflict"));
 
       // 验证 dataDirLock 已被妥善释放
       const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
       assert.strictEqual(existsSync(dataLockPath), false);
 
       // 后续实例可立刻获取该数据目录
-      const hostOk = new DefaultActionDockHost({
+      const hostOk = await createActionDockHost({
         dataDir: tempDataDir,
         autoLoadCurrentProject: false,
       });
@@ -1068,7 +1066,56 @@ actions:
     }
   });
 
-  it("公开的 DefaultActionDockHost constructor 检查崩溃悬挂事务，拦截并抛出 PROJECT_RECOVERY_REQUIRED 错误，且释放 dataDirLock", async () => {
+  it("当直接构造 new DefaultActionDockHost 并在端口方法调用中惰性初始化失败时，统一回滚并释放数据目录排他锁", async () => {
+    const tempProjDir = mkdtempSync(join(tmpdir(), "ad-host-lazy-corrupt-proj-"));
+    const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-lazy-fail-data-"));
+
+    try {
+      // 写入损坏的 actiondock.json 配置
+      writeFileSync(join(tempProjDir, "actiondock.json"), "{ invalid json syntax", "utf-8");
+
+      // 直接实例化 Host，此时由于惰性加载不会立即报错
+      const directHost = new DefaultActionDockHost({
+        projectRoot: tempProjDir,
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: true,
+      });
+
+      // 调用端口方法触发惰性初始化，断言其捕获预期解析失败
+      await assert.rejects(
+        async () => {
+          await directHost.discovery.listActions();
+        }
+      );
+
+      // 验证数据目录排他锁已妥善释放，未残留锁文件目录
+      const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
+      assert.strictEqual(existsSync(dataLockPath), false);
+
+      // 验证失败后的实例已被置为已关闭状态，再次调用报错 SERVICE_CLOSED
+      await assert.rejects(
+        async () => {
+          await directHost.discovery.listActions();
+        },
+        (err: any) => err?.code === "SERVICE_CLOSED"
+      );
+
+      // 紧接着在同一数据目录再次创建新的 Host 实例，断言其成功获取排他锁，绝不抛出 DATA_DIR_IN_USE
+      const subsequentHost = new DefaultActionDockHost({
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: false,
+      });
+      const actions = await subsequentHost.discovery.listActions();
+      assert.ok(Array.isArray(actions));
+      await subsequentHost.close();
+      assert.strictEqual(existsSync(dataLockPath), false);
+    } finally {
+      rmSync(tempProjDir, { recursive: true, force: true });
+      rmSync(tempDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("当工程存在崩溃悬挂事务时，createActionDockHost 自动完成事务恢复并正常启动，而直接构造仅完成轻量装配", async () => {
     const tempProjDir = mkdtempSync(join(tmpdir(), "ad-host-pending-tx-proj-"));
     const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-pending-tx-data-"));
 
@@ -1102,28 +1149,21 @@ actions:
         })
       );
 
-      // 1. 直接同步 new DefaultActionDockHost 必须抛出 PROJECT_RECOVERY_REQUIRED 拦截
-      let syncErr: any;
-      try {
-        new DefaultActionDockHost({
-          projectRoot: tempProjDir,
-          dataDir: tempDataDir,
-          autoLoadCurrentProject: true,
-        });
-      } catch (err) {
-        syncErr = err;
-      }
+      // 验证直接调用 new DefaultActionDockHost 仅完成装配并发出轻量警告，不执行磁盘恢复
+      const warnings: string[] = [];
+      const testLogger = {
+        warn: (msg: string) => warnings.push(msg),
+      };
+      const directHost = new DefaultActionDockHost({
+        projectRoot: tempProjDir,
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: true,
+        logger: testLogger as any,
+      });
+      assert.notStrictEqual(directHost, undefined);
+      assert.ok(warnings.some((w) => w.includes("minimal object assembly")));
 
-      assert.notStrictEqual(syncErr, undefined);
-      assert.strictEqual(syncErr?.code, PROJECT_RECOVERY_REQUIRED);
-      assert.ok((syncErr?.message).includes("PROJECT_RECOVERY_REQUIRED"));
-      assert.ok((syncErr?.message).includes("createActionDockHost()"));
-
-      // 验证同步构造失败后 dataDirLock 正常释放，未发生锁泄漏
-      const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
-      assert.strictEqual(existsSync(dataLockPath), false);
-
-      // 2. 验证异步工厂 createActionDockHost() 能够自动完成恢复并正常启动
+      // 验证异步工厂 createActionDockHost 能够自动完成恢复并正常启动
       const host = await createActionDockHost({
         projectRoot: tempProjDir,
         dataDir: tempDataDir,
@@ -1413,6 +1453,191 @@ actions:
     } finally {
       await host.close();
     }
+  });
+
+  it("验证直接 new DefaultActionDockHost 构造后输出弃用警告与迁移引导，并在调用 host.discovery.listActions 时自动完成惰性初始化", async () => {
+    const origWarn = console.warn;
+    const consoleWarnings: string[] = [];
+    console.warn = (...args: any[]) => {
+      consoleWarnings.push(args.map(String).join(" "));
+    };
+
+    try {
+      const host = new DefaultActionDockHost({
+        packages: [
+          {
+            projectConfig: { id: "pkg.legacy-compat", name: "向后兼容包", version: "1.0.0" },
+            actions: {
+              echo: defineAction({ run: () => ({ echo: true }) }),
+            },
+            inMemory: true,
+          },
+        ],
+        autoLoadCurrentProject: false,
+      });
+
+      // 验证控制台输出了弃用告警与迁移引导
+      assert.ok(
+        consoleWarnings.some((w) => w.includes("@deprecated")),
+        "控制台必须输出包含 @deprecated 告警信息"
+      );
+
+      // 验证调用 host.discovery.listActions() 能够自动触发惰性初始化并返回动作列表
+      const actions = await host.discovery.listActions();
+      assert.strictEqual(actions.length, 1);
+      assert.strictEqual(actions[0].id, "echo");
+
+      await host.close();
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+
+  it("验证直接 new DefaultActionDockHost 构造后通过 projectRoot 自动加载当前工程并在调用 discovery 时成功解析动作", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ad-host-compat-proj-"));
+    const origWarn = console.warn;
+    const consoleWarnings: string[] = [];
+    console.warn = (...args: any[]) => {
+      consoleWarnings.push(args.map(String).join(" "));
+    };
+
+    try {
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.compat-project",
+          name: "兼容工程测试",
+          version: "1.0.0",
+          actions: {
+            greet: {
+              description: "问候动作",
+            },
+          },
+        })
+      );
+
+      const host = new DefaultActionDockHost({
+        projectRoot: tempDir,
+        autoLoadCurrentProject: true,
+        inMemory: true,
+      });
+
+      // 验证控制台输出了迁移引导警告
+      assert.ok(
+        consoleWarnings.some((w) => w.includes("@deprecated")),
+        "控制台必须输出包含 @deprecated 告警信息"
+      );
+
+      // 验证调用 host.discovery.listActions() 自动完成惰性初始化并获取动作列表
+      const actions = await host.discovery.listActions();
+      assert.strictEqual(actions.length, 1);
+      assert.strictEqual(actions[0].id, "greet");
+      assert.strictEqual(actions[0].description, "问候动作");
+
+      await host.close();
+    } finally {
+      console.warn = origWarn;
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("验证直接 new DefaultActionDockHost 构造后调用各类端口方法均触发惰性初始化正常运行", async () => {
+    const host = new DefaultActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg.multi-port",
+            name: "多端口测试包",
+            version: "1.0.0",
+            actions: {
+              ping: { entry: "actions/ping.ts", description: "Ping 测试" },
+            },
+          },
+          actions: {
+            ping: defineAction({
+              run: () => ({ pong: true }),
+            }),
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+      logger: { warn: () => {} } as any,
+    });
+
+    try {
+      // 验证 execution 端口自动触发惰性初始化
+      const res = await host.execution.run("ping", {});
+      assert.strictEqual(res.ok, true);
+
+      // 验证 runs 端口自动触发惰性初始化
+      const runList = await host.runs.list();
+      assert.ok(runList.length >= 1);
+
+      // 验证 management 端口自动触发惰性初始化
+      const configList = await host.management?.config.list("pkg.multi-port");
+      assert.ok(Array.isArray(configList));
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("验证静态工厂方法 DefaultActionDockHost.create 创建并初始化 Host 实例", async () => {
+    const host = await DefaultActionDockHost.create({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg.factory-test",
+            name: "工厂测试包",
+            version: "1.0.0",
+            actions: {
+              ping: { entry: "actions/ping.ts", description: "Ping 测试" },
+            },
+          },
+          actions: {
+            ping: defineAction({
+              run: () => ({ pong: true }),
+            }),
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+    });
+
+    try {
+      const res = await host.execution.run("ping", {});
+      assert.strictEqual(res.ok, true);
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("验证 buildStaticActionMap 直接使用规范化的清单配置快照作为单一事实源", async () => {
+    const { buildStaticActionMap } = await import("../src/package/static-index");
+    const staticMap = buildStaticActionMap({
+      packageId: "pkg.static-test",
+      projectConfig: {
+        id: "pkg.static-test",
+        name: "静态测试包",
+        version: "1.0.0",
+        actions: {
+          convert: {
+            entry: "actions/convert.ts",
+            description: "格式转换",
+            tags: ["format"],
+          },
+        },
+      },
+      actionsMap: new Map(),
+    });
+
+    assert.strictEqual(staticMap.size, 1);
+    const spec = staticMap.get("convert");
+    assert.notStrictEqual(spec, undefined);
+    assert.strictEqual(spec?.description, "格式转换");
+    assert.deepStrictEqual(spec?.tags, ["format"]);
+    assert.deepStrictEqual(spec?.uses, []);
   });
 });
 

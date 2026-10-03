@@ -3,7 +3,6 @@ import {
 } from "@actiondock/core";
 import type {
   EventSink,
-  FileSystem,
   GlobalStorageFactoryOptions,
   ModuleLoader,
   ProcessManager,
@@ -36,8 +35,6 @@ export interface TestPlatformOptions {
   processManager?: ProcessManager;
   /** 可选注入的执行事件接收器 */
   eventSink?: EventSink;
-  /** 可选注入的文件系统抽象驱动 */
-  files?: FileSystem;
   /** 可选注入的源码模块加载器 */
   modules?: ModuleLoader;
 }
@@ -49,7 +46,6 @@ export interface TestPlatformOptions {
 export interface TestPlatform extends RuntimePlatform {
   readonly name: "test";
   readonly clock: FakeClock;
-  readonly files: FileSystem;
   readonly modules: ModuleLoader;
   readonly process: MockProcessExecutor;
   readonly storage: StorageFactory;
@@ -64,7 +60,6 @@ export interface TestPlatform extends RuntimePlatform {
  * - MemoryStorage 纯内存数据库存储
  * - TestEventSink 确定性事件接收器
  * - NodeModuleLoader 动态模块加载器
- * - NodeFileSystem 文件系统
  *
  * @param options 测试平台配置选项
  */
@@ -77,8 +72,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
       processManager: options.processManager,
     });
   const eventSink = options.eventSink ?? new TestEventSink();
-  const defaultPlatform = (!options.files || !options.modules) ? createNodePlatform() : undefined;
-  const files = options.files ?? defaultPlatform!.files;
+  const defaultPlatform = !options.modules ? createNodePlatform() : undefined;
   const modules = options.modules ?? defaultPlatform!.modules;
 
   const packageStorages = new Map<string, RuntimeStorage>();
@@ -114,7 +108,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
   return {
     name: "test",
     clock,
-    files,
     modules,
     process,
     storage: storageFactory,

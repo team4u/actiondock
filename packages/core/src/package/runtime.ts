@@ -53,6 +53,88 @@ import type {
 } from "./types";
 import { applyActionSummaryFilters } from "./types";
 
+function normalizeStateReadArgs(
+  arg1: string,
+  arg2?: string | StateScopeOptions,
+  arg3?: StateScopeOptions
+): { key: string; options?: StateScopeOptions } {
+  if (typeof arg2 === "string") {
+    if (arg3?.actionId !== undefined && arg3.actionId !== arg1) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${arg1}' vs options.actionId '${arg3.actionId}'`
+      );
+    }
+    return {
+      key: arg2,
+      options: { ...arg3, actionId: arg1 },
+    };
+  }
+
+  return {
+    key: arg1,
+    options: arg2 as StateScopeOptions | undefined,
+  };
+}
+
+function normalizeStateWriteArgs<T>(
+  arg1: string,
+  arg2: any,
+  arg3?: any,
+  arg4?: StateScopeOptions,
+  argsCount?: number
+): { key: string; value: T; options?: StateScopeOptions } {
+  const isFourArgs = argsCount !== undefined ? argsCount >= 4 : arg4 !== undefined;
+  if (isFourArgs) {
+    if (arg4?.actionId !== undefined && arg4.actionId !== arg1) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${arg1}' vs options.actionId '${arg4.actionId}'`
+      );
+    }
+    return {
+      key: String(arg2),
+      value: arg3,
+      options: { ...arg4, actionId: arg1 },
+    };
+  }
+
+  if (
+    arg3 !== undefined &&
+    (typeof arg3 !== "object" || arg3 === null || Array.isArray(arg3))
+  ) {
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
+      "Invalid options provided to setState. Use setActionState(actionId, key, value, options) or 4-argument setState for action state."
+    );
+  }
+
+  return {
+    key: arg1,
+    value: arg2 as T,
+    options: arg3 as StateScopeOptions | undefined,
+  };
+}
+
+function normalizeStateScopeArgs(
+  actionIdOrOptions?: string | StateScopeOptions,
+  options?: StateScopeOptions
+): StateScopeOptions | undefined {
+  if (typeof actionIdOrOptions === "string") {
+    if (options?.actionId !== undefined && options.actionId !== actionIdOrOptions) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${actionIdOrOptions}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    return { ...options, actionId: actionIdOrOptions };
+  }
+  if (actionIdOrOptions === undefined) {
+    return options;
+  }
+  return actionIdOrOptions;
+}
+
 /**
  * ActionDock 统一包运行时默认实现。
  * 封装并管理单个 Action Package 的执行引擎、静态元数据索引、配置与状态存储生命周期。
@@ -79,7 +161,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   constructor(options: PackageRuntimeInternalOptions = {}) {
     this.options = options;
-    // 1. 确定项目根路径与配置对象
+    // - 确定项目根路径与配置对象
     let packageRoot = options.packageRoot;
     let projectConfig = options.projectConfig;
 
@@ -119,13 +201,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     this.packageInstanceId = this.identity.instanceId;
     this.generationId = this.identity.generation;
 
-    // 2. 转换 Action 集合：委托归一化单一入口
+    // - 转换 Action 集合：委托归一化单一入口
     this.actionsMap = normalizeActionCollection(options.actions).actionsMap;
 
-    // 3. 确定平台适配层
+    // - 确定平台适配层
     this.platform = options.platform ?? createNodePlatform();
 
-    // 4. 确定并初始化存储实例
+    // - 确定并初始化存储实例
     if (options.storage) {
       this.storage = options.storage;
     } else {
@@ -142,7 +224,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       this.storage = this.platform.storage.createStorage(this.packageId, storageOpts);
     }
 
-    // 5. 确定全局存储实例
+    // - 确定全局存储实例
     if (options.globalStorage) {
       this.globalStorage = options.globalStorage;
       this.injectedGlobalStorage = true;
@@ -165,7 +247,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       this.injectedGlobalStorage = false;
     }
 
-    // 6. 初始化唯一执行协调服务
+    // - 初始化唯一执行协调服务
     this.executionService = new DefaultExecutionService({
       identity: this.identity,
       hostSessionId: options.hostSessionId,
@@ -197,7 +279,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       this.executionService.setActionInvoker?.(unsupportedInvoker);
     }
 
-    // 7. 初始化配置解析器
+    // - 初始化配置解析器
     this.runtimeConfig = new RuntimeConfig(
       this.storage,
       options.configOverrides,
@@ -293,31 +375,18 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       }
     }
 
-    let liveAction = this.actionsMap.get(id) || (spec ? this.actionsMap.get(spec.id) : undefined);
-    if (!liveAction && this.executionService.getAction) {
-      liveAction =
-        this.executionService.getAction(id) ||
-        (spec ? this.executionService.getAction(spec.id) : undefined);
-    }
-    if (!liveAction && this.executionService.resolveAction) {
-      try {
-        // 仅在本包范围内解析动态动作：限定 packageId 前缀，避免全局兜底搜索把
-        // 其他包的动作误计为本包提供者（host 层据此统计候选导致 AMBIGUOUS_ACTION_REF 误报）。
-        const qualifiedId = id.includes("/") ? id : `${this.packageId}/${id}`;
-        const resolution = await this.executionService.resolveAction(qualifiedId);
-        if (resolution) {
-          liveAction = resolution;
-        }
-      } catch {
-        // 忽略动态解析异常
-      }
-    }
+    const liveAction =
+      this.actionsMap.get(id) ||
+      (spec ? this.actionsMap.get(spec.id) : undefined) ||
+      (this.executionService.getAction
+        ? this.executionService.getAction(id) || (spec ? this.executionService.getAction(spec.id) : undefined)
+        : undefined);
 
     if (liveAction) {
-      // 动态解析或第三方 Action 实例可能存在规范外的运行时元数据扩展字段
+      // 第三方 Action 实例或内存注册 Action 可能存在规范外的运行时元数据扩展字段
       const actObj = liveAction as any;
       return {
-        id: actObj.id || id,
+        id: actObj.id || spec?.id || id,
         packageId: this.packageId,
         description: actObj.description ?? spec?.description,
         inputSchema: actObj.inputSchema ?? spec?.inputSchema,
@@ -511,47 +580,87 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     }
   }
 
-  private resolveStateScope(
-    actionIdOrKey: string | undefined,
-    keyOrOptions: string | StateScopeOptions | undefined,
-    options?: StateScopeOptions
-  ): { ns: string; opts: StateScopeOptions | undefined } {
-    // 消歧规则（与原始重载语义严格一致）：仅当第二参为字符串时认定为
-    // (actionId, key, options) 形态；否则（undefined 或选项对象）认定为
-    // (key, options) 扁平调用形态，首参是状态键而非 actionId
-    if (typeof keyOrOptions === "string") {
-      return { ns: this.mergeStateScope(actionIdOrKey, options), opts: options };
-    }
-    return { ns: this.mergeStateScope(undefined, keyOrOptions), opts: keyOrOptions };
+  private hasExplicitStateScope(options?: StateScopeOptions): boolean {
+    return options?.actionId !== undefined || options?.namespace !== undefined;
   }
 
-  /**
-   * 合并位置 actionId 与 options.actionId 并计算最终命名空间（单一事实源）。
-   *
-   * - positionalActionId 非 undefined：调用形态携带位置 actionId，
-   *   options.actionId 与其冲突时抛出异常（空串同样参与冲突校验）；
-   * - positionalActionId 为 undefined：无位置 actionId 的扁平调用形态，
-   *   options.actionId 属合法显式指定，直接采纳。
-   */
-  private mergeStateScope(
-    positionalActionId: string | undefined,
-    opts?: StateScopeOptions
-  ): string {
-    let actionId: string;
-    if (positionalActionId !== undefined) {
-      actionId = positionalActionId;
-      if (opts?.actionId && opts.actionId !== actionId) {
-        throw new ActionDockError(
-          INVALID_ARGUMENT,
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
-        );
-      }
-    } else {
-      actionId = opts?.actionId ?? "";
-    }
+  private computeStateNamespace(options?: StateScopeOptions): string {
+    const actionId = options?.actionId ?? "";
     return actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? "");
+      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
+      : (options?.namespace ?? "");
+  }
+
+  private async getStateInternal<T extends JsonValue = JsonValue>(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined> {
+    const explicitScope = this.hasExplicitStateScope(options);
+    const ns = this.computeStateNamespace(options);
+    if (options?.detail) {
+      const entry = await this.storage.findState(key, explicitScope ? ns : undefined);
+      return entry as unknown as T;
+    }
+    if (explicitScope || ns) {
+      return await this.storage.getState<T>(ns, key);
+    }
+    const entry = await this.storage.findState<T>(key);
+    return entry?.value as T | undefined;
+  }
+
+  private async setStateInternal<T extends JsonValue = JsonValue>(
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void> {
+    const explicitScope = this.hasExplicitStateScope(options);
+    const ns = this.computeStateNamespace(options);
+    if (explicitScope || ns) {
+      await this.storage.setState<T>(ns, key, value, options?.ttl);
+      return;
+    }
+
+    const target = this.decodeStateKeyParts(key);
+    await this.storage.setState<T>(target.namespace, target.key, value, options?.ttl);
+  }
+
+  private async deleteStateInternal(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean> {
+    const explicitScope = this.hasExplicitStateScope(options);
+    const ns = this.computeStateNamespace(options);
+    if (explicitScope || ns) {
+      return await this.storage.deleteState(ns, key);
+    }
+
+    const target = this.decodeStateKeyParts(key);
+    return await this.storage.deleteState(target.namespace, target.key);
+  }
+
+  private async listStateKeysInternal(
+    options?: StateScopeOptions
+  ): Promise<string[]> {
+    if (options?.namespace === null) {
+      return this.storage.listStateKeys(null, options?.prefix);
+    }
+    const explicitScope = this.hasExplicitStateScope(options);
+    const ns = this.computeStateNamespace(options);
+    const targetNs = explicitScope ? ns : (ns ? ns : null);
+    return this.storage.listStateKeys(targetNs, options?.prefix);
+  }
+
+  private async clearStateInternal(
+    options?: StateScopeOptions
+  ): Promise<number> {
+    const explicitScope = this.hasExplicitStateScope(options);
+    const ns = this.computeStateNamespace(options);
+    const targetNs = options?.all ? undefined : (explicitScope ? ns : (ns ? ns : undefined));
+    return this.storage.clearState({
+      namespace: targetNs,
+      prefix: options?.prefix,
+      all: options?.all,
+    });
   }
 
   getState<T extends JsonValue = JsonValue>(
@@ -564,22 +673,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     options?: StateScopeOptions
   ): Promise<T | undefined>;
   async getState<T extends JsonValue = JsonValue>(
-    actionIdOrKey: string,
-    keyOrOptions?: string | StateScopeOptions,
-    options?: StateScopeOptions
+    arg1: string,
+    arg2?: string | StateScopeOptions,
+    arg3?: StateScopeOptions
   ): Promise<T | undefined> {
-    const { ns, opts } = this.resolveStateScope(actionIdOrKey, keyOrOptions, options);
-    const key = typeof keyOrOptions === "string" ? keyOrOptions : actionIdOrKey;
-
-    if (opts?.detail) {
-      const entry = await this.storage.findState(key, ns || undefined);
-      return entry as unknown as T;
-    }
-    if (ns) {
-      return await this.storage.getState<T>(ns, key);
-    }
-    const entry = await this.storage.findState<T>(key);
-    return entry?.value as T | undefined;
+    const { key, options } = normalizeStateReadArgs(arg1, arg2, arg3);
+    return this.getStateInternal<T>(key, options);
   }
 
   setState<T extends JsonValue = JsonValue>(
@@ -591,56 +690,22 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     actionId: string,
     key: string,
     value: T,
-    options: StateScopeOptions
+    options?: StateScopeOptions
   ): Promise<void>;
   async setState<T extends JsonValue = JsonValue>(
-    actionIdOrKey: string,
-    keyOrValue: any,
-    valueOrOptions?: any,
-    options?: StateScopeOptions
+    arg1: string,
+    arg2: any,
+    arg3?: any,
+    arg4?: StateScopeOptions
   ): Promise<void> {
-    let key: string;
-    let value: T;
-    let opts: StateScopeOptions | undefined;
-    // 携带位置 actionId 的调用形态标记：undefined 表示扁平 (key, value[, options]) 形态
-    let positionalActionId: string | undefined;
-
-    // 消歧规则（与原始重载语义严格一致）：按实参个数区分三形态
-    if (arguments.length >= 4) {
-      positionalActionId = actionIdOrKey;
-      key = keyOrValue;
-      value = valueOrOptions;
-      opts = options;
-    } else if (arguments.length === 2) {
-      key = actionIdOrKey;
-      value = keyOrValue;
-      opts = undefined;
-    } else {
-      if (
-        valueOrOptions !== undefined &&
-        (typeof valueOrOptions !== "object" || valueOrOptions === null || Array.isArray(valueOrOptions))
-      ) {
-        throw new ActionDockError(
-          INVALID_ARGUMENT,
-          "Invalid options provided to setState. Use setActionState(actionId, key, value, options) or 4-argument setState for action state."
-        );
-      }
-
-      key = actionIdOrKey;
-      value = keyOrValue as T;
-      opts = valueOrOptions as StateScopeOptions | undefined;
-    }
-
-    // 作用域解析与命名空间计算统一委托 mergeStateScope 单一事实源
-    const ns = this.mergeStateScope(positionalActionId, opts);
-
-    if (ns) {
-      await this.storage.setState<T>(ns, key, value, opts?.ttl);
-      return;
-    }
-
-    const target = this.decodeStateKeyParts(key);
-    await this.storage.setState<T>(target.namespace, target.key, value, opts?.ttl);
+    const { key, value, options } = normalizeStateWriteArgs<T>(
+      arg1,
+      arg2,
+      arg3,
+      arg4,
+      arguments.length
+    );
+    return this.setStateInternal<T>(key, value, options);
   }
 
   deleteState(
@@ -653,19 +718,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     options?: StateScopeOptions
   ): Promise<boolean>;
   async deleteState(
-    actionIdOrKey: string,
-    keyOrOptions?: string | StateScopeOptions,
-    options?: StateScopeOptions
+    arg1: string,
+    arg2?: string | StateScopeOptions,
+    arg3?: StateScopeOptions
   ): Promise<boolean> {
-    const { ns } = this.resolveStateScope(actionIdOrKey, keyOrOptions, options);
-    const key = typeof keyOrOptions === "string" ? keyOrOptions : actionIdOrKey;
-
-    if (ns) {
-      return await this.storage.deleteState(ns, key);
-    }
-
-    const target = this.decodeStateKeyParts(key);
-    return await this.storage.deleteState(target.namespace, target.key);
+    const { key, options } = normalizeStateReadArgs(arg1, arg2, arg3);
+    return this.deleteStateInternal(key, options);
   }
 
   async getActionState<T extends JsonValue = JsonValue>(
@@ -673,12 +731,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
-    const { ns, opts } = this.resolveStateScope(actionId, key, options);
-    if (opts?.detail) {
-      const entry = await this.storage.findState(key, ns || undefined);
-      return entry as unknown as T;
+    if (options?.actionId !== undefined && options.actionId !== actionId) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
     }
-    return await this.storage.getState<T>(ns, key);
+    return this.getStateInternal<T>(key, { ...options, actionId });
   }
 
   async setActionState<T extends JsonValue = JsonValue>(
@@ -687,8 +746,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
-    const { ns, opts } = this.resolveStateScope(actionId, key, options);
-    await this.storage.setState<T>(ns, key, value, opts?.ttl);
+    if (options?.actionId !== undefined && options.actionId !== actionId) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    return this.setStateInternal<T>(key, value, { ...options, actionId });
   }
 
   async deleteActionState(
@@ -696,65 +760,43 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
-    const { ns } = this.resolveStateScope(actionId, key, options);
-    return await this.storage.deleteState(ns, key);
+    if (options?.actionId !== undefined && options.actionId !== actionId) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    return this.deleteStateInternal(key, { ...options, actionId });
   }
 
   listStateKeys(
     options?: StateScopeOptions
   ): Promise<string[]>;
   listStateKeys(
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<string[]>;
   async listStateKeys(
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<string[]> {
-    // 重载消歧：首参为字符串时是 (actionId, options) 调用（完成冲突校验后取其域）；
-    // 否则首参本身就是选项对象（或未传），取 options.actionId 或 namespace 扁平域
-    let ns: string;
-    if (typeof actionIdOrOptions === "string") {
-      ns = this.resolveStateScope(actionIdOrOptions, "", options).ns;
-    } else {
-      const opts = actionIdOrOptions;
-      ns = opts?.actionId
-        ? (opts.namespace ? `${opts.actionId}:${opts.namespace}` : opts.actionId)
-        : (opts?.namespace ?? "");
-    }
-    const opts = typeof actionIdOrOptions === "string" ? options : actionIdOrOptions;
-    return this.storage.listStateKeys(ns ? ns : null, opts?.prefix);
+    const normalizedOptions = normalizeStateScopeArgs(actionIdOrOptions, options);
+    return this.listStateKeysInternal(normalizedOptions);
   }
 
   clearState(
     options?: StateScopeOptions
   ): Promise<number>;
   clearState(
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<number>;
   async clearState(
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<number> {
-    // 首参为字符串时是 (actionId, options) 调用：以伪 key 消费冲突校验后取其 actionId 域；
-    // 否则首参本身就是选项对象（或未传），直接走扁平分支
-    if (typeof actionIdOrOptions === "string") {
-      const { ns } = this.resolveStateScope(actionIdOrOptions, "", options);
-      const finalNs = ns || (options?.namespace ?? "");
-      return this.storage.clearState({
-        namespace: finalNs ? finalNs : undefined,
-        prefix: options?.prefix,
-        all: options?.all,
-      });
-    }
-    const opts = actionIdOrOptions;
-    const ns = opts?.namespace;
-    return this.storage.clearState({
-      namespace: ns ? ns : undefined,
-      prefix: opts?.prefix,
-      all: opts?.all,
-    });
+    const normalizedOptions = normalizeStateScopeArgs(actionIdOrOptions, options);
+    return this.clearStateInternal(normalizedOptions);
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {

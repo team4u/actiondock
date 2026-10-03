@@ -46,16 +46,6 @@ export function safeReleaseLock(
 }
 
 /**
- * 历史机制向后兼容空桩。
- */
-export function cleanStaleQuarantines(): void {}
-export function safeRemoveStaleReclaimGuard(): void {}
-export function safeRollbackLock(): void {}
-export function parseQuarantineTimestamp(): { operatorPid?: number; timestamp?: number } {
-  return {};
-}
-
-/**
  * 数据目录排他文件锁管理器。
  * 负责在数据目录下维护 .actiondock.data.lock 排他文件锁，记录宿主进程与子进程运行状态，
  * 防止多个无协调宿主并发冲突，并在非正常退出时提供故障恢复检测。

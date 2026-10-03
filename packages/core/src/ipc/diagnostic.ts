@@ -4,16 +4,10 @@ import type { Readable, Writable } from "node:stream";
  * 诊断日志转发器配置选项。
  */
 export interface DiagnosticForwarderOptions {
-  /** 允许转发的累计最大字节数（保留配置兼容） */
-  maxBytes?: number;
-  /** 每秒允许转发的最大字节速率（保留配置兼容） */
-  maxRateBytesPerSec?: number;
   /** 目标输出流（默认 process.stderr） */
   target?: Writable;
   /** 诊断流标识前缀 */
   prefix?: string;
-  /** 触发超限截断时的回调通知（保留配置兼容） */
-  onTruncated?: (reason: "size_limit" | "rate_limit") => void;
   /** 写入错误处理回调 */
   onError?: (err: Error) => void;
 }

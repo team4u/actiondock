@@ -2,7 +2,6 @@ import {
   fetchRemoteConfig,
 } from "@actiondock/core/profile";
 import {
-  findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";
 import {
@@ -10,9 +9,6 @@ import {
   isSecretConfigKey,
   maskSecretValue,
 } from "@actiondock/core/project";
-import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { packageNotFoundError } from "../../errors";
 import { renderConfigList, renderResult } from "../../renderer";
@@ -24,6 +20,7 @@ import {
   remoteTargetLabel,
   resolveFallbackStrategy,
   resolveIntent,
+  resolveLocalPackageRoot,
   resolveTargetFromOptions,
   withService,
 } from "../../utils";
@@ -111,7 +108,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
       // 本地分支（通过 Service 门面统一访问）
       await withService(options, context, async (service) => {
-        const root = options.package ? resolvePackageRoot(options.package) : findProjectRoot();
+        const root = resolveLocalPackageRoot(options.package);
 
         // 全局作用域分支：显式 --global 或无工程回退时仅列举全局配置
         if (options.global || !root) {

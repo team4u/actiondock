@@ -432,7 +432,7 @@ export async function handleState(ctx: CommandContext, subArgs: string[]): Promi
   if (sub === "list") {
     const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
     const keys = await ctx.service.management.state.list(ctx.options.packageId, "", {
-      namespace,
+      namespace: (namespace !== undefined ? namespace : null) as any,
       prefix: prefix || undefined,
       all: isAll,
     });
@@ -506,7 +506,14 @@ export async function handleState(ctx: CommandContext, subArgs: string[]): Promi
       ctx.writeErr("Error: state key required");
       return ExitCode.INVALID_ARGUMENT;
     }
-    const deleted = await ctx.service.management.state.delete(ctx.options.packageId, "", key, { namespace });
+    let ns = namespace;
+    let actualKey = key;
+    if (ns === undefined) {
+      const decoded = decodeStateKeyArg(key);
+      ns = decoded.namespace || undefined;
+      actualKey = decoded.key;
+    }
+    const deleted = await ctx.service.management.state.delete(ctx.options.packageId, "", actualKey, { namespace: ns });
     if (deleted) {
       ctx.writeOut(`State '${key}' deleted`);
       return ExitCode.SUCCESS;

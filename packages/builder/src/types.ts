@@ -221,6 +221,26 @@ export interface BuildOptions {
 }
 
 /**
+ * 基于已规划依赖图的目录型交付产物生成选项。
+ */
+export interface BuildProjectWithPlanOptions {
+  /** 目标项目根目录绝对路径（可选，缺省时使用规划内 projectRoot） */
+  projectRoot?: string;
+  /** 产物输出目录路径（默认输出至 dist 目录） */
+  outDir?: string;
+  /** 输出路径别名 */
+  outfile?: string;
+  /** 是否生成标准 zip 压缩归档交付产物 */
+  archive?: boolean;
+  /** 是否在干净暂存目录中物化锁定的生产依赖 */
+  vendorDeps?: boolean;
+  /** 是否允许执行依赖安装生命周期脚本（默认 false） */
+  allowInstallScripts?: boolean;
+  /** 是否强制要求构建可复现（默认 false） */
+  requireReproducible?: boolean;
+}
+
+/**
  * 目录型构建产物结果描述。
  */
 export interface BuildResult {
@@ -377,28 +397,6 @@ export interface SkillExportResult {
  * 导出 Skill 结果契约（对齐标准接口命名）。
  */
 export type ExportSkillResult = SkillExportResult;
-
-/**
- * 批量 Skill 导出选项。
- */
-export interface BatchSkillExportOptions extends Omit<SkillExporterOptions, "projectRoot"> {
-  /** 待导出的项目根目录绝对路径列表 */
-  projectRoots: string[];
-}
-
-/**
- * 批量 Skill 导出结果。
- */
-export interface BatchSkillExportResult {
-  /** 各包独立导出结果列表 */
-  results: SkillExportResult[];
-  /** 批量导出根目录 */
-  outDir: string;
-  /** 导出的总 Action 数量 */
-  totalActions: number;
-  /** 导出的总 Playbook 数量 */
-  totalPlaybooks: number;
-}
 
 /**
  * 复合 Skill 套件导出选项。

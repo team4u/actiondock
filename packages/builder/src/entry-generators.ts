@@ -187,8 +187,6 @@ const child = spawn(process.execPath, [...warningFlags, hostScript, ...argv], {
 
 const service = new IpcActionDockService({
   childProcess: child,
-  maxDiagnosticBytes: 512 * 1024,
-  maxDiagnosticRate: 64 * 1024,
   diagnosticTarget: process.stderr,
 });
 

@@ -12,6 +12,10 @@ export type SkillActionItem =
   | ActionSpec
   | { id: string; description?: string; inputSchema?: any; outputSchema?: any; annotations?: any };
 
+export type SkillPlaybookItem =
+  | PlaybookDefinition
+  | { id: string; filePath: string; name?: string; description?: string; actions?: string[] };
+
 function getCleanSkillMetadata(config: ProjectConfig) {
   const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
   const desc = config.description || `AI Agent skill for ${config.name} (${config.id})`;
@@ -57,7 +61,7 @@ function renderActionListMarkdown(
 }
 
 function renderPlaybookSectionMarkdown(
-  playbooks: PlaybookDefinition[],
+  playbooks: SkillPlaybookItem[],
   playbooksDir = "playbooks"
 ): string {
   if (playbooks.length === 0) return "";
@@ -178,7 +182,7 @@ function renderTroubleshootingSection(options: {
 export function generateSourceSkillMd(
   config: ProjectConfig,
   actions: SkillActionItem[],
-  playbooks: PlaybookDefinition[]
+  playbooks: SkillPlaybookItem[]
 ): string {
   const { cleanName, desc } = getCleanSkillMetadata(config);
   const pkgId = config.id;
@@ -279,7 +283,7 @@ ${renderTroubleshootingSection({
 export function generateStandaloneSkillMd(
   config: ProjectConfig,
   actions: SkillActionItem[],
-  playbooks: PlaybookDefinition[],
+  playbooks: SkillPlaybookItem[],
   binaryRelPath = "./bin/action-bin"
 ): string {
   const { cleanName, desc } = getCleanSkillMetadata(config);

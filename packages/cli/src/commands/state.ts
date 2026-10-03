@@ -2,7 +2,6 @@ import {
   decodeStateKey,
 } from "@actiondock/sdk";
 import {
-  findProjectRoot,
   loadProjectConfig,
   type ActionDockService,
 } from "@actiondock/core";
@@ -11,12 +10,11 @@ import {
 } from "@actiondock/core/project";
 import {
   listLinkedPackages,
-  resolvePackageRoot,
 } from "@actiondock/core/registry";
 import type { ResolvedTarget } from "@actiondock/core/profile";
 import { existsSync } from "node:fs";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, NO_PROJECT_NO_LINKED_MESSAGE, packageNotFoundError } from "../errors";
+import { ArgumentError, ExecutionError, NO_PROJECT_NO_LINKED_MESSAGE } from "../errors";
 import { renderResult, renderStateList, writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import {
@@ -24,8 +22,10 @@ import {
   getEffectiveOptions,
   getTargetRoot,
   remoteTargetLabel,
+  requirePackageRoot,
   resolveFallbackStrategy,
   resolveIntent,
+  resolveLocalPackageRoot,
   resolveTargetFromOptions,
   withService,
 } from "../utils";
@@ -315,15 +315,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       }
 
       // 本地工程与链接包模式：按目标根目录决策输出范围
-      let targetRoot: string | null = null;
-      if (options.package) {
-        targetRoot = resolvePackageRoot(options.package);
-        if (!targetRoot) {
-          throw packageNotFoundError(options.package);
-        }
-      } else {
-        targetRoot = findProjectRoot();
-      }
+      const targetRoot = options.package
+        ? requirePackageRoot(options.package).root
+        : resolveLocalPackageRoot();
 
       if (targetRoot) {
         await renderProjectScopedStateList({

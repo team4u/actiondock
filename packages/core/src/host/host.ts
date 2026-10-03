@@ -124,6 +124,8 @@ export class DefaultActionDockHost implements ActionDockHost {
   private graph: PackageGraph;
   private catalog: ActionCatalog;
   private globalStorage?: RuntimeStorage;
+  private initPromise?: Promise<void>;
+  private isInitialized = false;
 
   public readonly discovery: DiscoveryPort;
   public readonly execution: ExecutionPort;
@@ -139,7 +141,20 @@ export class DefaultActionDockHost implements ActionDockHost {
     return this;
   }
 
-  constructor(options: ActionDockHostOptions = {}, internalOptions?: { deferInit?: boolean }) {
+  /**
+   * @deprecated 直接使用 new DefaultActionDockHost() 构造已弃用，请迁移至 createActionDockHost() 异步工厂函数以完成完整的生命周期初始化。
+   */
+  constructor(options: ActionDockHostOptions = {}, internalOptions?: { fromFactory?: boolean }) {
+    if (!internalOptions?.fromFactory) {
+      const warnMsg =
+        "[Host] Direct instantiation via new DefaultActionDockHost() is @deprecated and only performs minimal object assembly. Use createActionDockHost() for full lifecycle initialization.";
+      if (options.logger?.warn) {
+        options.logger.warn(warnMsg);
+      } else {
+        console.warn(warnMsg);
+      }
+    }
+
     this.hostSessionId = randomUUID();
     this.options = options;
     this.maxCallDepth = options.maxCallDepth ?? 16;
@@ -154,33 +169,31 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.graph = new DefaultPackageGraph(new Map());
     this.catalog = new DefaultActionCatalog(this.graph);
 
-    // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
-    if (options.dataDir && !options.inMemory) {
-      this.dataDirLock = DataDirLock.acquire(options.dataDir, {
-        hostSessionId: this.hostSessionId,
-      });
-    }
-
     const self = this;
 
     this.discovery = {
       async listPackages(): Promise<PackageInfo[]> {
+        await self.ensureInitialized();
         return self.info();
       },
 
       async listActions(opts?: ListActionsOptions): Promise<ActionSummary[]> {
+        await self.ensureInitialized();
         return self.listActions(opts);
       },
 
       async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
+        await self.ensureInitialized();
         return self.describeAction(ref);
       },
 
       async listPlaybooks(opts?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+        await self.ensureInitialized();
         return self.listPlaybooks(opts);
       },
 
       async describePlaybook(id: string): Promise<PlaybookSpec> {
+        await self.ensureInitialized();
         return self.describePlaybook(id);
       },
     };
@@ -191,6 +204,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         input?: unknown,
         opts?: RunOptions
       ): Promise<ExecutionResult> {
+        await self.ensureInitialized();
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         const cleanOpts: RunOptions = {
           signal: opts?.signal,
@@ -206,6 +220,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         input?: unknown,
         opts?: RunOptions
       ): Promise<ExecutionTicket> {
+        await self.ensureInitialized();
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         const cleanOpts: RunOptions = {
           signal: opts?.signal,
@@ -219,22 +234,27 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     this.runs = {
       async list(query?: ListRunsOptions): Promise<RunRecord[]> {
+        await self.ensureInitialized();
         return self.listRuns(query);
       },
 
       async get(runId: string): Promise<RunRecord | undefined> {
+        await self.ensureInitialized();
         return self.getRun(runId);
       },
 
       async cancel(runId: string, reason?: string): Promise<CancelResult> {
+        await self.ensureInitialized();
         return self.cancelRun(runId, reason);
       },
 
       async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number; keep?: number }): Promise<number> {
+        await self.ensureInitialized();
         return self.clearRuns(opts);
       },
 
       async cleanExpired(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+        await self.ensureInitialized();
         return self.cleanExpiredRuns(policy);
       },
     };
@@ -243,14 +263,20 @@ export class DefaultActionDockHost implements ActionDockHost {
       runId: string,
       opts?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
     ): AsyncIterable<ExecutionEvent> => {
-      return self.subscribeEvents(runId, opts);
+      return (async function* () {
+        await self.ensureInitialized();
+        yield* self.subscribeEvents(runId, opts);
+      })();
     }) as HostEventsPort;
 
     eventsFn.events = (
       runId: string,
       opts?: RunEventSubscriptionOptions
     ): AsyncIterable<ExecutionEvent> => {
-      return self.subscribeEvents(runId, opts);
+      return (async function* () {
+        await self.ensureInitialized();
+        yield* self.subscribeEvents(runId, opts);
+      })();
     };
 
     this.events = eventsFn;
@@ -259,18 +285,22 @@ export class DefaultActionDockHost implements ActionDockHost {
       this.management = {
         config: {
           async get(packageId: string, key: string): Promise<ConfigValueView> {
+            await self.ensureInitialized();
             return self.getConfig(packageId, key);
           },
 
           async set(packageId: string, key: string, value: JsonValue): Promise<void> {
+            await self.ensureInitialized();
             return self.setConfig(packageId, key, value);
           },
 
           async delete(packageId: string, key: string): Promise<boolean> {
+            await self.ensureInitialized();
             return self.deleteConfig(packageId, key);
           },
 
           async list(packageId: string): Promise<ConfigValueView[]> {
+            await self.ensureInitialized();
             return self.listConfig(packageId);
           },
         },
@@ -282,6 +312,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             key: string,
             opts?: StateScopeOptions
           ): Promise<T | undefined> {
+            await self.ensureInitialized();
             return self.getState<T>(packageId, actionId, key, opts);
           },
 
@@ -292,6 +323,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             value: T,
             opts?: StateScopeOptions
           ): Promise<void> {
+            await self.ensureInitialized();
             return self.setState<T>(packageId, actionId, key, value, opts);
           },
 
@@ -301,22 +333,25 @@ export class DefaultActionDockHost implements ActionDockHost {
             key: string,
             opts?: StateScopeOptions
           ): Promise<boolean> {
+            await self.ensureInitialized();
             return self.deleteState(packageId, actionId, key, opts);
           },
 
           async list(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<string[]> {
+            await self.ensureInitialized();
             return self.listStateKeys(packageId, actionId, opts);
           },
 
           async clear(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<number> {
+            await self.ensureInitialized();
             return self.clearState(packageId, actionId, opts);
           },
 
@@ -324,103 +359,107 @@ export class DefaultActionDockHost implements ActionDockHost {
             packageId: string,
             opts?: any
           ): Promise<StateEntry[]> {
+            await self.ensureInitialized();
             return self.listStateEntries(packageId, opts);
           },
         },
       };
     }
 
-    if (internalOptions?.deferInit) {
-      return;
-    }
+  }
 
+  /**
+   * 静态工厂方法：创建并初始化 ActionDockHost 宿主容器。
+   */
+  public static async create(
+    options: ActionDockHostOptions = {}
+  ): Promise<ActionDockHost> {
+    let createdHost: DefaultActionDockHost | undefined;
     try {
-      this.initializeSync();
+      createdHost = new DefaultActionDockHost(options, { fromFactory: true });
+      await createdHost.ensureInitialized();
+      return createdHost;
     } catch (err) {
-      this.rollbackSync();
+      if (createdHost) {
+        try {
+          await createdHost.rollbackInitialization();
+        } catch {
+          // 忽略宿主回滚异常，确保抛出原始异常
+        }
+      }
       throw err;
     }
   }
 
-  private initializeSync(): void {
-    // 阶段一：注册显式传入的 packages 列表
-    this.registerExplicitPackages(this.options);
-
-    // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
-    if (this.options.autoLoadCurrentProject !== false) {
-      this.loadCurrentProject(this.options);
+  /**
+   * 确保宿主容器已完成异步生命周期初始化。
+   * 当通过 ActionDockHost.create() / createActionDockHost() 创建时在工厂阶段预先就绪；
+   * 当直接通过 new DefaultActionDockHost() 构造时，在首次异步调用时惰性触发加载。
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.isInitialized) {
+      return;
     }
-
-    // 阶段三：扫描已软链接的外部包并注册至 Host
-    if (this.options.scanLinkedPackages) {
-      this.registerLinkedPackages(this.options);
+    if (this.isClosed) {
+      throw new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closed");
     }
-
-    this.rebuildGraphAndCatalog();
+    if (!this.initPromise) {
+      this.initPromise = this.performInitialization();
+    }
+    await this.initPromise;
   }
 
-  public async initializeAsync(): Promise<void> {
-    // 阶段一：注册显式传入的 packages 列表
-    this.registerExplicitPackages(this.options);
-
-    // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
-    if (this.options.autoLoadCurrentProject !== false) {
-      const root = resolveProjectRoot(this.options, () => findProjectRoot());
-      if (root) {
-        if (isProjectLockHeld(root)) {
-          throw new ActionDockError(
-            PROJECT_BUSY,
-            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-          );
-        }
-        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
-        if (hasPendingTransactions(root)) {
-          await recoverPendingTransactions(root, { frozenInstall: true });
-        }
+  private async performInitialization(): Promise<void> {
+    try {
+      // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
+      if (this.options.dataDir && !this.options.inMemory && !this.dataDirLock) {
+        this.dataDirLock = DataDirLock.acquire(this.options.dataDir, {
+          hostSessionId: this.hostSessionId,
+        });
       }
-      this.loadCurrentProject(this.options);
-    }
 
-    // 阶段三：扫描已软链接的外部包并注册至 Host
-    if (this.options.scanLinkedPackages) {
-      this.registerLinkedPackages(this.options);
-    }
+      // 阶段一：注册显式传入的 packages 列表
+      this.registerExplicitPackages(this.options);
 
-    this.rebuildGraphAndCatalog();
+      // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
+      if (this.options.autoLoadCurrentProject !== false) {
+        await this.loadCurrentProject(this.options);
+      }
+
+      // 阶段三：扫描已软链接的外部包并注册至 Host
+      if (this.options.scanLinkedPackages) {
+        this.registerLinkedPackages(this.options);
+      }
+
+      this.rebuildGraphAndCatalog();
+      this.isInitialized = true;
+    } catch (err) {
+      this.initPromise = undefined;
+      try {
+        await this.rollbackInitialization();
+      } catch {
+        // 吞没回滚自身的副错误以确保向上抛出原始的初始化异常
+      }
+      throw err;
+    }
   }
 
   /**
-   * 安全回滚初始化失败时所占用的资源。
-   *
-   * 同步语境（构造函数路径）下对 runtime.close() 采用 fire-and-forget：
-   * 仅附加吞没异常的 catch 处理器，不 await，避免构造链路引入异步;
-   * 异步语境下逐个 await 全部 runtime.close() 后再依次释放全局存储与目录锁。
+   * 异步安全回滚初始化失败时所占用的资源。
    */
-  private async rollbackResources(sync: boolean): Promise<void> {
-    if (sync) {
-      // 安全关闭宿主管理的所有 Runtime 实例（同步语境 fire-and-forget）
-      for (const runtime of this.runtimes.values()) {
+  public async rollbackInitialization(): Promise<void> {
+    this.isInitialized = false;
+    this.initPromise = undefined;
+    const allRuntimes = Array.from(this.runtimes.values());
+    await Promise.all(
+      allRuntimes.map(async (runtime) => {
         try {
-          const closePromise = runtime.close();
-          if (closePromise && typeof closePromise.catch === "function") {
-            closePromise.catch(() => {});
-          }
+          await runtime.close();
         } catch {
-          // 忽略 runtime 关闭异常
+          // 忽略 Runtime 关闭异常
         }
-      }
-    } else {
-      const allRuntimes = Array.from(this.runtimes.values());
-      await Promise.all(
-        allRuntimes.map(async (runtime) => {
-          try {
-            await runtime.close();
-          } catch {
-            // 忽略 Runtime 关闭异常
-          }
-        })
-      );
-    }
+      })
+    );
     this.runtimes.clear();
 
     try {
@@ -437,17 +476,6 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.dataDirLock = undefined;
     this.isClosed = true;
-  }
-
-  /**
-   * 异步安全回滚初始化失败时所占用的资源。
-   */
-  public async rollbackInitialization(): Promise<void> {
-    await this.rollbackResources(false);
-  }
-
-  private rollbackSync(): void {
-    void this.rollbackResources(true);
   }
 
   /**
@@ -493,7 +521,7 @@ export class DefaultActionDockHost implements ActionDockHost {
    * - 自动探测场景（未传 projectRoot，由 findProjectRoot 发现）失败时记录实例诊断
    *   failedAutoLoad 并在创建时输出单行告警，保持宿主其余能力可用但绝不无声。
    */
-  private loadCurrentProject(options: ActionDockHostOptions): void {
+  private async loadCurrentProject(options: ActionDockHostOptions): Promise<void> {
     const explicitRoot = options.projectRoot;
     const root = resolveProjectRoot(options, () => findProjectRoot());
     if (!root) {
@@ -501,18 +529,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     if (isProjectLockHeld(root)) {
-      const err: any = new Error(
+      throw new ActionDockError(
+        PROJECT_BUSY,
         "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
       );
-      err.code = PROJECT_BUSY;
-      throw err;
     }
     if (hasPendingTransactions(root)) {
-      const err: any = new Error(
-        `PROJECT_RECOVERY_REQUIRED: Project directory '${root}' has pending transactions requiring recovery; use async createActionDockHost() to recover automatically`
-      );
-      err.code = PROJECT_RECOVERY_REQUIRED;
-      throw err;
+      await recoverPendingTransactions(root, { frozenInstall: true });
     }
 
     try {
@@ -853,10 +876,12 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async info(): Promise<PackageInfo[]> {
+    await this.ensureInitialized();
     return collectPackageInfos(this.listRuntimes());
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
+    await this.ensureInitialized();
     // 外层完成可见性筛选与跨包限定名改写后，统一委托共享过滤函数完成检索
     const results: ActionSummary[] = [];
     const runtimes = this.listRuntimes();
@@ -881,6 +906,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
+    await this.ensureInitialized();
     return describeActionAcrossRuntimes(
       ref,
       this.listRuntimes(),
@@ -892,6 +918,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+    await this.ensureInitialized();
     let pbs = await listVisiblePlaybooks(this.listRuntimes(), this.visibility());
     if (options?.package) {
       pbs = pbs.filter((p) => p.packageId === options.package);
@@ -908,6 +935,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
+    await this.ensureInitialized();
     return describeVisiblePlaybook(this.listRuntimes(), id, this.visibility());
   }
 
@@ -916,6 +944,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     input: JsonValue,
     options: RunOptions = {}
   ): Promise<ExecutionResult> {
+    await this.ensureInitialized();
     const ticket = await this.startAction(ref, input, options);
     if (!ticket.result) {
       throw new ActionDockError(EXECUTION_FAILED, `Execution ticket for run '${ticket.runId}' has no result Promise`);
@@ -928,6 +957,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     input: JsonValue,
     options: RunOptions = {}
   ): Promise<ExecutionTicket> {
+    await this.ensureInitialized();
     if (this.isClosed) {
       throw new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closed: new tasks rejected");
     }
@@ -1027,6 +1057,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
+    await this.ensureInitialized();
     for (const runtime of this.listRuntimes()) {
       const record = await runtime.getRun(runId);
       if (record) return record;
@@ -1035,6 +1066,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async listRuns(query?: ListRunsOptions): Promise<RunRecord[]> {
+    await this.ensureInitialized();
     const runtimes = query?.packageId
       ? [this.getRuntime(query.packageId)].filter(Boolean) as PackageRuntime[]
       : this.listRuntimes();
@@ -1071,6 +1103,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     olderThanMs?: number;
     keep?: number;
   }): Promise<number> {
+    await this.ensureInitialized();
     const runtimes = options?.packageId
       ? [this.getRuntime(options.packageId)].filter(Boolean) as PackageRuntime[]
       : this.listRuntimes();
@@ -1083,6 +1116,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+    await this.ensureInitialized();
     let total = 0;
     for (const runtime of this.listRuntimes()) {
       if (typeof runtime.cleanExpiredRuns === "function") {
@@ -1094,6 +1128,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
+    await this.ensureInitialized();
     for (const runtime of this.listRuntimes()) {
       const res = await runtime.cancelRun(runId, reason);
       if (res.outcome !== "not_found") {
@@ -1172,6 +1207,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
+    await this.ensureInitialized();
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
       const val = globalStorage.getConfig(key);
@@ -1190,6 +1226,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
+    await this.ensureInitialized();
     if (packageId === "global") {
       await this.getGlobalStorage().setConfig(key, value);
       return;
@@ -1198,6 +1235,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
+    await this.ensureInitialized();
     if (packageId === "global") {
       return await this.getGlobalStorage().deleteConfig(key);
     }
@@ -1205,6 +1243,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
+    await this.ensureInitialized();
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
       const all = globalStorage.listConfig();
@@ -1229,6 +1268,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
+    await this.ensureInitialized();
     return this.requireRuntime(packageId).getState<T>(actionId, key, options);
   }
 
@@ -1239,8 +1279,9 @@ export class DefaultActionDockHost implements ActionDockHost {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
+    await this.ensureInitialized();
     const runtime = this.requireRuntime(packageId);
-    if (actionId) {
+    if (actionId !== undefined) {
       await runtime.setActionState<T>(actionId, key, value, options);
     } else {
       await runtime.setState<T>(key, value, options);
@@ -1253,22 +1294,25 @@ export class DefaultActionDockHost implements ActionDockHost {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
+    await this.ensureInitialized();
     return this.requireRuntime(packageId).deleteState(actionId, key, options);
   }
 
   async listStateKeys(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<string[]> {
+    await this.ensureInitialized();
     return this.requireRuntime(packageId).listStateKeys(actionId, options);
   }
 
   async clearState(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<number> {
+    await this.ensureInitialized();
     return this.requireRuntime(packageId).clearState(actionId, options);
   }
 
@@ -1276,6 +1320,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     packageId: string,
     options?: any
   ): Promise<StateEntry[]> {
+    await this.ensureInitialized();
     const runtime = this.resolveRuntime(packageId);
     if (!runtime) {
       throw new ActionDockError(
@@ -1332,19 +1377,5 @@ export class DefaultActionDockHost implements ActionDockHost {
 export async function createActionDockHost(
   options: ActionDockHostOptions = {}
 ): Promise<ActionDockHost> {
-  let createdHost: DefaultActionDockHost | undefined;
-  try {
-    createdHost = new DefaultActionDockHost(options, { deferInit: true });
-    await createdHost.initializeAsync();
-    return createdHost;
-  } catch (err) {
-    if (createdHost) {
-      try {
-        await createdHost.rollbackInitialization();
-      } catch {
-        // 忽略宿主回滚异常，确保抛出原始异常
-      }
-    }
-    throw err;
-  }
+  return DefaultActionDockHost.create(options);
 }

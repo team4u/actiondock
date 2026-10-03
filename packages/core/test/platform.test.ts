@@ -18,7 +18,6 @@ import {
 import { createInvocationContext } from "../src/execution/types";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
-import { NodeFileSystem } from "../src/platform/node-fs";
 
 describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
   let tempDir: string;
@@ -35,72 +34,12 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
     }
   });
 
-  describe("NodeFileSystem 文件系统实现", () => {
-    it("支持基础文件读写、元数据读取与目录枚举", async () => {
-      const fs = new NodeFileSystem({ rootDir: tempDir });
-
-      const filePath = join(tempDir, "hello.txt");
-      assert.strictEqual(await fs.exists(filePath), false);
-
-      await fs.writeFile(filePath, "Hello ActionDock!");
-      assert.strictEqual(await fs.exists(filePath), true);
-
-      const content = await fs.readFile(filePath);
-      assert.strictEqual(content, "Hello ActionDock!");
-
-      const stat = await fs.stat(filePath);
-      assert.strictEqual(stat.isFile(), true);
-      assert.strictEqual(stat.isDirectory(), false);
-      assert.strictEqual(stat.size, 17);
-
-      const subDir = join(tempDir, "sub-dir");
-      await fs.mkdir(subDir);
-      assert.strictEqual(await fs.exists(subDir), true);
-
-      const dirStat = await fs.stat(subDir);
-      assert.strictEqual(dirStat.isDirectory(), true);
-
-      const entries = await fs.readdir(tempDir);
-      assert.ok((entries).includes("hello.txt"));
-      assert.ok((entries).includes("sub-dir"));
-    });
-
-    it("支持文件与目录拷贝及删除", async () => {
-      const fs = new NodeFileSystem({ rootDir: tempDir });
-      const srcFile = join(tempDir, "source.txt");
-      const destFile = join(tempDir, "dest.txt");
-
-      await fs.writeFile(srcFile, "Source Content");
-      await fs.copy(srcFile, destFile);
-
-      assert.strictEqual(await fs.exists(destFile), true);
-      assert.strictEqual(await fs.readFile(destFile), "Source Content");
-
-      await fs.rm(srcFile);
-      assert.strictEqual(await fs.exists(srcFile), false);
-      assert.strictEqual(await fs.exists(destFile), true);
-    });
-
-    it("当配置 rootDir 沙箱时严格拦截越界路径逃逸与空字节路径", async () => {
-      const sandboxDir = join(tempDir, "sandbox");
-      const fs = new NodeFileSystem({ rootDir: sandboxDir });
-      await fs.mkdir(sandboxDir);
-
-      const outsideFile = join(tempDir, "outside.txt");
-      await assert.rejects(fs.writeFile(outsideFile, "hacked"), /escapes boundary/);
-      await assert.rejects(fs.readFile(outsideFile), /escapes boundary/);
-
-      await assert.rejects(fs.readFile("test\0bad.txt"), /null byte/);
-    });
-  });
-
   describe("createNodePlatform 平台组装与显式注入测试", () => {
     it("具备标准 RuntimePlatform 属性契约并默认使用 Node 原生驱动", () => {
       const platform = createNodePlatform({ name: "test" });
       assert.strictEqual(platform.name, "test");
       assert.notStrictEqual(platform.clock, undefined);
       assert.ok(platform.clock.now() instanceof Date);
-      assert.notStrictEqual(platform.files, undefined);
       assert.notStrictEqual(platform.modules, undefined);
       assert.notStrictEqual(platform.process, undefined);
       assert.notStrictEqual(platform.storage, undefined);
@@ -224,7 +163,6 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
           monotonic: () => 1000,
           sleep: async () => {},
         },
-        files: new NodeFileSystem(),
         modules: {
           load: async <T = any>() => ({}) as unknown as T,
         },
@@ -282,7 +220,6 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
           monotonic: () => 5000,
           sleep: async () => {},
         },
-        files: new NodeFileSystem(),
         modules: {
           load: async <T = any>() => ({}) as unknown as T,
         },

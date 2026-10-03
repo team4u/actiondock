@@ -154,7 +154,6 @@ export async function resolveService(
     platform = createNodePlatform({
       customHome: options.customHome,
       dataDir: options.dataDir,
-      rootDir: projectRoot,
     });
   }
 

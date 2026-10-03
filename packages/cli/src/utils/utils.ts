@@ -1,7 +1,4 @@
 import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
-import {
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";
@@ -12,6 +9,7 @@ import {
 } from "@actiondock/core/project";
 import { resolve } from "node:path";
 import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError, wrapAsExecutionError } from "../errors";
+import { resolveLocalPackageRoot } from "./target";
 
 /**
  * 「未显式指定包且当前目录无工程」的统一补救提示（单一事实源）。
@@ -140,14 +138,7 @@ export function getTargetRoot(
     effectiveKey = keyHint.slice(slashIdx + 1);
   }
 
-  const root = resolvePackageRoot(targetPackage) || (targetPackage ? null : findProjectRoot());
-  if (!root) {
-    if (targetPackage) {
-      throw packageNotFoundError(targetPackage);
-    } else {
-      throw notInProjectError(PACKAGE_HINT_MESSAGE);
-    }
-  }
+  const { root } = requirePackageRoot(targetPackage);
   return { root, key: effectiveKey };
 }
 
@@ -193,7 +184,7 @@ export function requirePackageRoot(
   packageOption: string | undefined,
   options?: { loadConfig?: boolean; hint?: string }
 ): PackageRootScope | PackageRootWithConfigScope {
-  const root = packageOption ? resolvePackageRoot(packageOption) : findProjectRoot();
+  const root = resolveLocalPackageRoot(packageOption);
   if (!root) {
     if (packageOption) {
       throw packageNotFoundError(packageOption);

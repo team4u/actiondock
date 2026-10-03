@@ -2,14 +2,12 @@ import { copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from 
 import { dirname, join, resolve } from "node:path";
 import {
   getPackageSlug,
-  type PlaybookDefinition,
   type ProjectConfig,
 } from "@actiondock/core/project";
 import {
   COMPOSITE_CUSTOM_DECLARATION_FILE,
   parseCustomSkillDeclaration,
   type CompositeCustomDeclaration,
-  type SkillActionItem,
 } from "./skill";
 import { BuilderError } from "./errors";
 import type { CompositeSkillExportOptions, SelectionPlan } from "./types";
@@ -20,23 +18,6 @@ import type { CompositeSkillExportOptions, SelectionPlan } from "./types";
  * 职责单一聚焦：定位项目中已有的 SKILL.md（单包与复合套件两种检索策略）、
  * 解析自定义说明书声明，并将规划产物适配为模板生成所需视图。
  */
-
-/** 供模板生成使用的 SkillActionItem 兼容视图 */
-type PlanActionView = SkillActionItem;
-
-/**
- * 将规划产物中的 Action 列表适配为模板所需的 SkillActionItem 视图。
- */
-export function toSkillActionItems(actions: SelectionPlan["actions"]): PlanActionView[] {
-  return actions;
-}
-
-/**
- * 将规划产物中的 Playbook 列表适配为模板所需的 PlaybookDefinition 视图。
- */
-export function toPlaybookDefinitions(playbooks: SelectionPlan["playbooks"]): PlaybookDefinition[] {
-  return playbooks as unknown as PlaybookDefinition[];
-}
 
 /**
  * 检索单个 Action 项目目录中已存在的 SKILL.md 文件。

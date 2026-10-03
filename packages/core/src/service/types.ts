@@ -245,13 +245,13 @@ export interface StatePort {
   /** 列出指定包指定动作在存储中的状态键名列表 */
   list(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<string[]>;
   /** 清空指定包指定动作在存储中的状态条目 */
   clear(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<number>;
   /** 列出指定包在存储中的状态条目（含完整元数据） */

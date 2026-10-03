@@ -7,13 +7,14 @@
 export { BuilderError, PlannerError } from "./errors";
 
 // 构建、打包与导出主接口
-export { buildProject } from "./build";
+export { buildProject, buildProjectWithPlan } from "./build";
 export { packProject } from "./pack";
 export {
   exportCompositeSkill,
   exportSkill,
   SkillExporter,
 } from "./exporter";
+export { allocatePackageDirName } from "./manifest";
 
 // 构建规划器
 export { SelectionPlanner } from "./planner";
@@ -23,6 +24,7 @@ export type {
   ArchiveFormat,
   BuildOptions,
   BuildPlan,
+  BuildProjectWithPlanOptions,
   BuildResult,
   CompositeSkillExportOptions,
   CompositeSkillExportResult,

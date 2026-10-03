@@ -85,9 +85,9 @@ export function resolveTargetFromOptions(
  * 回调获得创建好的 service 与解析后的目标拓扑信息；无论回调成功或抛出，
  * 都保证 service 资源被正确释放，业务异常原样透传。
  *
- * 默认旁观打开：内部创建的本地 Host 以非收割模式打开存储（不置 recoverOrphans），
+ * 默认旁观打开：内部创建的本地 Host 以非收割模式打开存储（显式指定 recoverOrphans: false），
  * 供 ad state / ad runs / ad config 等查询命令与运行中的 serve 进程并发访问同一库；
- * 需要持有者语义的执行命令通过 localOptions.ownDataDir 显式声明。
+ * 需要持有者语义的执行命令通过 localOptions.ownDataDir 显式声明启用收割。
  *
  * @param options 命令选项视图（profile/server/token/package/dataDir/insecure/allowInsecureHttp）
  * @param context CLI 上下文
@@ -109,6 +109,10 @@ export async function withService(
      * 保持缺省 false，避免误收割并发 serve 进程的在途运行记录。
      */
     ownDataDir?: boolean;
+    /**
+     * 是否显式指定孤儿运行收割策略；缺省依据 ownDataDir 决策（仅 ownDataDir 为 true 时启用收割，查询旁观模式显式关闭）
+     */
+    recoverOrphans?: boolean;
     /**
      * 是否强制要求远端目标：true 时 local 分支直接抛 ArgumentError（如 ad runs cancel），
      * 替代原 withRemoteService 的专用实现。
@@ -132,6 +136,9 @@ export async function withService(
         undefined
       : undefined;
 
+  const recoverOrphans =
+    localOptions?.recoverOrphans ?? (localOptions?.ownDataDir === true);
+
   const service =
     resolved.type === "remote"
       ? await connectActionDock({
@@ -148,12 +155,11 @@ export async function withService(
           platform: createNodePlatform({
             customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
-            rootDir: localRoot,
           }),
           ...(localOptions?.scanLinkedPackages !== undefined
             ? { scanLinkedPackages: localOptions.scanLinkedPackages }
             : undefined),
-          ...(localOptions?.ownDataDir === true ? { recoverOrphans: true } : undefined),
+          recoverOrphans,
         });
 
   try {

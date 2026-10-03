@@ -70,7 +70,8 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
   if (subpath === "/state" && req.method === "GET") {
     try {
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || "";
+      const rawAction = url.searchParams.get("action") ?? url.searchParams.get("actionId");
+      const actionParam = rawAction !== null ? rawAction : undefined;
       const nsParam = url.searchParams.get("namespace") ?? undefined;
       const prefix = url.searchParams.get("prefix") || "";
 
@@ -110,8 +111,14 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
     try {
       const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes }).catch(() => ({}));
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || body.package || undefined;
-      const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || body.action || body.actionId || "";
-      const baseNs = body.namespace ?? (url.searchParams.get("namespace") || undefined);
+      const rawAction =
+        url.searchParams.get("action") ??
+        url.searchParams.get("actionId") ??
+        body.action ??
+        body.actionId;
+      const actionParam = rawAction !== null && rawAction !== undefined ? rawAction : undefined;
+      const rawNs = body.namespace ?? url.searchParams.get("namespace");
+      const baseNs = rawNs !== null && rawNs !== undefined ? rawNs : undefined;
 
       const pkgs = await service.discovery.listPackages();
       const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
@@ -151,15 +158,24 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
     try {
       const key = decodeURIComponent(stateKeyMatch[1]);
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || "";
-      const nsParam = url.searchParams.get("namespace") || undefined;
+      const rawAction = url.searchParams.get("action") ?? url.searchParams.get("actionId");
+      const actionParam = rawAction !== null ? rawAction : undefined;
+      const nsParam = url.searchParams.get("namespace") ?? undefined;
 
       const pkgs = await service.discovery.listPackages();
       const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
 
       if (req.method === "GET") {
-        const entry = await service.management.state.get(targetPackageId, actionParam, key, {
-          namespace: nsParam,
+        let actualKey = key;
+        let ns = nsParam;
+        if (actionParam === undefined && nsParam === undefined) {
+          const decoded = decodeStateKey(key);
+          ns = decoded.namespace;
+          actualKey = decoded.key;
+        }
+
+        const entry = await service.management.state.get(targetPackageId, actionParam ?? "", actualKey, {
+          namespace: ns,
           detail: true,
         });
         if (!entry || (typeof entry === "object" && (entry as any).value === undefined)) {
@@ -171,13 +187,13 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         }
         const data = typeof entry === "object" && "value" in entry
           ? entry
-          : { key, namespace: nsParam || "", value: entry, expiresAt: undefined };
+          : { key: actualKey, namespace: ns ?? "", value: entry, expiresAt: undefined };
         return jsonResponse(
           {
             ok: true,
             packageId: targetPackageId,
-            key: (data as any).key || key,
-            namespace: (data as any).namespace ?? nsParam ?? "",
+            key: (data as any).key ?? actualKey,
+            namespace: (data as any).namespace ?? ns ?? "",
             value: (data as any).value,
             expiresAt: (data as any).expiresAt,
           },
@@ -190,31 +206,44 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
         const val = body.value !== undefined ? body.value : body;
         const ttl = typeof body.ttl === "number" ? body.ttl : undefined;
-        const bodyAction = body.action || body.actionId || actionParam;
-        const explicitNs = body.namespace || nsParam;
+        const rawActionFromReq =
+          url.searchParams.get("action") ??
+          url.searchParams.get("actionId") ??
+          body.action ??
+          body.actionId;
+        const bodyAction = rawActionFromReq !== null && rawActionFromReq !== undefined ? rawActionFromReq : undefined;
+        const explicitNs = body.namespace ?? nsParam;
 
         let actualKey = key;
         let ns = explicitNs;
-        if (!bodyAction && !explicitNs) {
+        if (bodyAction === undefined && explicitNs === undefined) {
           const decoded = decodeStateKey(key);
           ns = decoded.namespace;
           actualKey = decoded.key;
         }
 
-        await service.management.state.set(targetPackageId, bodyAction, actualKey, val, {
+        await service.management.state.set(targetPackageId, bodyAction ?? "", actualKey, val, {
           namespace: ns,
           ttl,
         });
         return jsonResponse(
-          { ok: true, packageId: targetPackageId, key: actualKey, namespace: ns || bodyAction || "", message: "updated" },
+          { ok: true, packageId: targetPackageId, key: actualKey, namespace: ns ?? bodyAction ?? "", message: "updated" },
           200,
           corsHeaders
         );
       }
 
       if (req.method === "DELETE") {
-        const deleted = await service.management.state.delete(targetPackageId, actionParam, key, {
-          namespace: nsParam,
+        let actualKey = key;
+        let ns = nsParam;
+        if (actionParam === undefined && nsParam === undefined) {
+          const decoded = decodeStateKey(key);
+          ns = decoded.namespace;
+          actualKey = decoded.key;
+        }
+
+        const deleted = await service.management.state.delete(targetPackageId, actionParam ?? "", actualKey, {
+          namespace: ns,
         });
         if (!deleted) {
           return jsonResponse(
@@ -223,7 +252,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
             corsHeaders
           );
         }
-        return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted: true }, 200, corsHeaders);
+        return jsonResponse({ ok: true, packageId: targetPackageId, key: actualKey, deleted: true }, 200, corsHeaders);
       }
     } catch (err: any) {
       if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {

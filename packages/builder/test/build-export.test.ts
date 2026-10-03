@@ -4,8 +4,9 @@ import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildProject } from "../src/build";
+import { buildProject, buildProjectWithPlan } from "../src/build";
 import { exportSkill } from "../src/exporter";
+import { SelectionPlanner } from "../src/planner";
 import { initProject } from "@actiondock/core";
 
 const deferredCleanupDirs = new Set<string>();
@@ -365,6 +366,32 @@ export default defineAction({
     const listData = JSON.parse(listProc.stdout.toString());
     assert.strictEqual(listData.items.length, 1);
     assert.strictEqual(listData.items[0].id, "sample.greet");
+  });
+
+  it("builds project with precomputed plan directly via buildProjectWithPlan", async () => {
+    const plan = SelectionPlanner.plan({
+      projectRoot: tempDir,
+    });
+
+    const outDir = join(tempDir, "dist", "direct-plan-build");
+    const result = await buildProjectWithPlan(plan, {
+      projectRoot: tempDir,
+      outDir,
+    });
+
+    assert.strictEqual(result.outputDir, resolve(outDir));
+    assert.strictEqual(existsSync(result.entrypointPath), true);
+    assert.strictEqual(existsSync(result.metadataPath), true);
+
+    const metadata = JSON.parse(readFileSync(result.metadataPath, "utf-8"));
+    assert.strictEqual(metadata.packageId, "test.sample-tools");
+
+    // 验证未显式提供 options.projectRoot 时回退采用 plan.projectRoot
+    const fallbackResult = await buildProjectWithPlan(plan, {
+      outDir: join(tempDir, "dist", "fallback-plan-build"),
+    });
+    assert.strictEqual(fallbackResult.outputDir, resolve(tempDir, "dist", "fallback-plan-build"));
+    assert.strictEqual(existsSync(fallbackResult.entrypointPath), true);
   });
 });
 

@@ -21,14 +21,13 @@ import { vendorDependencies } from "./vendor";
 import { generateStandaloneSkillMd } from "./skill/templates";
 import {
   buildConfigForTemplates,
-  toPlaybookDefinitions,
-  toSkillActionItems,
   writeSkillMd,
 } from "./skill-md";
 import { createArchive, resolveArchiveFormat } from "./export-archive";
 export { copyPlanEntries } from "./stage-sources";
 import type {
   BuildOptions,
+  BuildProjectWithPlanOptions,
   BuildResult,
   ExternalDependency,
   SelectionPlan,
@@ -203,22 +202,26 @@ function writeEntrypoints(stagingDir: string, plan: SelectionPlan): void {
 }
 
 /**
- * 构建 Node.js 目录型交付产物。
- * 主流程仅做编排，各阶段职责由独立函数承担。
+ * 基于预先计算的 SelectionPlan 方案直接构建 Node.js 目录型交付产物。
  *
- * @param options 构建选项
+ * 核心构建管线涵盖可复现性检查、暂存区构建、清单与入口脚本生成、生产依赖物化及归档打包。
+ *
+ * 规划方案复用场景：
+ * - 当调用方已通过 SelectionPlanner.plan 计算出依赖与资产规划方案（例如技能导出 exportSkill、复合技能导出 exportCompositeSkill 或定制资产选择）时，直接消费 buildProjectWithPlan 核心管线，无需且严禁再次重复规划。
+ *
+ * 路径冲突仲裁策略：
+ * - 若 options.projectRoot 显式提供，则以 options.projectRoot 为准覆盖。
+ * - 若未提供，则兜底回退采用 plan.projectRoot。
+ *
+ * @param plan 已规划的依赖与资产选择方案
+ * @param options 构建执行选项
  * @returns 构建产物结果描述
  */
-export async function buildProject(options: BuildOptions): Promise<BuildResult> {
-  const root = resolve(options.projectRoot);
-  const plan = SelectionPlanner.plan({
-    projectRoot: root,
-    config: options.config,
-    manifest: options.manifest,
-    actions: options.actions,
-    playbooks: options.playbooks,
-    skipDependencyValidation: options.skipDependencyValidation,
-  });
+export async function buildProjectWithPlan(
+  plan: SelectionPlan,
+  options: BuildProjectWithPlanOptions = {}
+): Promise<BuildResult> {
+  const root = resolve(options.projectRoot || plan.projectRoot);
 
   if (plan.actions.length === 0) {
     throw new BuilderError("No actions resolved for build");
@@ -350,8 +353,38 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
 }
 
 /**
+ * 构建 Node.js 目录型交付产物。
+ * 委托 SelectionPlanner 执行构建规划，随后直接消费核心构建管线 buildProjectWithPlan。
+ *
+ * @param options 构建选项
+ * @returns 构建产物结果描述
+ */
+export async function buildProject(options: BuildOptions): Promise<BuildResult> {
+  const root = resolve(options.projectRoot);
+  const plan = SelectionPlanner.plan({
+    projectRoot: root,
+    config: options.config,
+    manifest: options.manifest,
+    actions: options.actions,
+    playbooks: options.playbooks,
+    skipDependencyValidation: options.skipDependencyValidation,
+  });
+
+  return buildProjectWithPlan(plan, {
+    projectRoot: root,
+    outDir: options.outDir,
+    outfile: options.outfile,
+    archive: options.archive,
+    vendorDeps: options.vendorDeps,
+    allowInstallScripts: options.allowInstallScripts,
+    requireReproducible: options.requireReproducible,
+  });
+}
+
+/**
  * 执行 Node 目录型 Skill 导出。
- * 复用 Node 目录型构建产出可执行交付目录，并在目录内生成调用该入口的 SKILL.md 说明书。
+ * 复用传入的 SelectionPlan 方案与 buildProjectWithPlan 核心构建管线，
+ * 产出可执行交付目录，并在目录内生成调用该入口的 SKILL.md 说明书。
  */
 export async function exportNodeSkill(
   root: string,
@@ -360,14 +393,10 @@ export async function exportNodeSkill(
   options: SkillExporterOptions,
   pkgSlug: string
 ): Promise<SkillExportResult> {
-  await buildProject({
+  await buildProjectWithPlan(plan, {
     projectRoot: root,
     outDir: targetSkillDir,
-    actions: options.actions,
-    playbooks: options.playbooks,
-    config: options.config,
-    manifest: options.manifest,
-    vendorDeps: Boolean(options.vendorDeps),
+    vendorDeps: options.vendorDeps,
     allowInstallScripts: options.allowInstallScripts,
     requireReproducible: options.requireReproducible,
   });
@@ -385,8 +414,8 @@ export async function exportNodeSkill(
       );
       return generateStandaloneSkillMd(
         configForTemplates,
-        toSkillActionItems(plan.actions),
-        toPlaybookDefinitions(plan.playbooks),
+        plan.actions,
+        plan.playbooks,
         "node ./entry.mjs"
       );
     }

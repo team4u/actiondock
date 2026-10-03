@@ -20,12 +20,10 @@ import {
   fetchRemotePlaybookShow,
 } from "@actiondock/core/profile";
 import {
-  findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";
 import {
   listLinkedPackages,
-  resolvePackageRoot,
 } from "@actiondock/core/registry";
 import { Command } from "commander";
 import {
@@ -33,8 +31,6 @@ import {
   CliError,
   ExecutionError,
   NO_PROJECT_NO_LINKED_MESSAGE,
-  notInProjectError,
-  packageNotFoundError,
   wrapAsExecutionError,
 } from "../errors";
 import {
@@ -48,8 +44,10 @@ import {
   applyTargetOptions,
   getEffectiveOptions,
   remoteTargetSuffix,
+  requirePackageRoot,
   resolveFallbackStrategy,
   resolveIntent,
+  resolveLocalPackageRoot,
   resolveTargetFromOptions,
 } from "../utils";
 
@@ -118,15 +116,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
 
       // 2. 本地工程模式
-      let targetRoot: string | null = null;
-      if (options.package) {
-        targetRoot = resolvePackageRoot(options.package);
-        if (!targetRoot) {
-          throw packageNotFoundError(options.package);
-        }
-      } else {
-        targetRoot = findProjectRoot();
-      }
+      const targetRoot = options.package
+        ? requirePackageRoot(options.package).root
+        : resolveLocalPackageRoot();
 
       if (targetRoot) {
         const config = loadProjectConfig(targetRoot);
@@ -336,17 +328,14 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       // 2. 本地项目模式
       let showTarget = id;
       if (options.package && !id.includes("/")) {
-        const pkgRoot = resolvePackageRoot(options.package);
-        if (!pkgRoot) {
-          throw packageNotFoundError(options.package);
-        }
+        requirePackageRoot(options.package);
         showTarget = `${options.package}/${id}`;
       }
 
       let resolved;
       try {
         const graph = new PackageGraphBuilder({
-          root: findProjectRoot() || undefined,
+          root: resolveLocalPackageRoot() || undefined,
           customHome: context?.customHome,
           allowDevLinks: true,
         }).buildSync();
@@ -386,15 +375,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
     .action(async (id: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
 
-      let root: string | null = null;
-      if (options.package) {
-        root = resolvePackageRoot(options.package);
-        if (!root) {
-          throw packageNotFoundError(options.package);
-        }
-      } else {
-        root = findProjectRoot();
-      }
+      const root = options.package
+        ? requirePackageRoot(options.package).root
+        : resolveLocalPackageRoot();
 
       const targets: Array<{ root: string; packageId: string; playbooks: PlaybookDefinition[] }> = [];
 
@@ -414,7 +397,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         let resolved;
         try {
           const graph = new PackageGraphBuilder({
-            root: findProjectRoot() || undefined,
+            root: resolveLocalPackageRoot() || undefined,
             customHome: context?.customHome,
             allowDevLinks: true,
           }).buildSync();
@@ -450,7 +433,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
       const results: Array<{ id: string; packageId: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
       const graph = new PackageGraphBuilder({
-        root: findProjectRoot() || undefined,
+        root: resolveLocalPackageRoot() || undefined,
         customHome: context?.customHome,
         allowDevLinks: true,
       }).buildSync();
@@ -547,10 +530,7 @@ export function handlePlaybookCreate(
   options: any,
   context?: CliContext
 ): void {
-  const root = findProjectRoot();
-  if (!root) {
-    throw notInProjectError();
-  }
+  const { root } = requirePackageRoot(undefined);
   try {
     const config = loadProjectConfig(root);
     const pbDir = resolve(root, config.playbooksDir || "playbooks");

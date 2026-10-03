@@ -17,8 +17,6 @@ import { copyPlanEntries } from "./stage-sources";
 import type { SelectionPlan, SkillExporterOptions } from "./types";
 import {
   buildConfigForTemplates,
-  toPlaybookDefinitions,
-  toSkillActionItems,
   writeSkillMd,
 } from "./skill-md";
 
@@ -52,8 +50,8 @@ export function stageSourceSkill(
     () =>
       generateSourceSkillMd(
         configForTemplates,
-        toSkillActionItems(plan.actions),
-        toPlaybookDefinitions(plan.playbooks)
+        plan.actions,
+        plan.playbooks
       )
   );
 

@@ -1,6 +1,9 @@
 import { existsSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import {
+  ActionDockError,
+  ACTION_NOT_FOUND,
+  UNDECLARED_ACTION_DEPENDENCY,
   loadProjectConfig,
 } from "@actiondock/core";
 import {
@@ -304,63 +307,58 @@ export class SelectionPlanner {
       let entryRoot = root;
 
       if (!entry) {
-        try {
-          const resolved = resolveAction(currentId, { graph, catalog, caller: config?.id });
-          const extNode = graph.packages.get(resolved.package.id);
-          if (extNode && existsSync(extNode.root)) {
-            const extRoot = extNode.root;
-            let extConfig: ProjectConfigWithDeclarations;
-            try {
-              extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
-            } catch {
-              extConfig = {
-                id: resolved.package.id,
-                name: resolved.package.id,
-                version: "0.1.0",
-              };
-            }
-            const externalManifest = loadManifest(extRoot);
-            let externalEntry =
-              externalManifest?.actions?.[resolved.ref.actionId] ||
-              extConfig?.actions?.[resolved.ref.actionId];
-            if (!externalEntry) {
-              const staticManifest = generateFallbackManifest(
-                extRoot,
-                extConfig.actionsDir || "actions",
-                extConfig
-              );
-              externalEntry = staticManifest.actions?.[resolved.ref.actionId];
-            }
-            if (externalEntry) {
-              entry = externalEntry;
-              entryRoot = extRoot;
+        const resolved = resolveAction(currentId, { graph, catalog, caller: config?.id });
+        const resolvedPkgId = resolved.package.id;
+        const resolvedActionId = resolved.ref.actionId;
 
-              // 依赖包 actiondock.json 中声明的传递依赖闭包（入队前查重，避免重复膨胀）
-              const extPkgUses = extConfig?.uses;
-              if (Array.isArray(extPkgUses)) {
-                for (const u of extPkgUses) {
-                  const trimmedUse = typeof u === "string" ? u.trim() : "";
-                  if (
-                    trimmedUse &&
-                    !resolvedActionIds.has(trimmedUse) &&
-                    !queued.has(trimmedUse)
-                  ) {
-                    queued.add(trimmedUse);
-                    queue.push(trimmedUse);
-                  }
-                }
+        const extNode = graph.packages.get(resolvedPkgId);
+        if (extNode && existsSync(extNode.root)) {
+          const extRoot = extNode.root;
+          let extConfig: ProjectConfigWithDeclarations;
+          try {
+            extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
+          } catch {
+            extConfig = {
+              id: resolvedPkgId,
+              name: resolvedPkgId,
+              version: "0.1.0",
+            };
+          }
+          const externalManifest = loadManifest(extRoot);
+          const externalEntry =
+            externalManifest?.actions?.[resolvedActionId] ||
+            extConfig?.actions?.[resolvedActionId];
+          if (!externalEntry) {
+            throw new ActionDockError(
+              UNDECLARED_ACTION_DEPENDENCY,
+              `UNDECLARED_ACTION_DEPENDENCY: Action '${resolvedActionId}' is not declared in package '${resolvedPkgId}' manifest`
+            );
+          }
+          entry = externalEntry;
+          entryRoot = extRoot;
+
+          // 依赖包 actiondock.json 中声明的传递依赖闭包（入队前查重，避免重复膨胀）
+          const extPkgUses = extConfig?.uses;
+          if (Array.isArray(extPkgUses)) {
+            for (const u of extPkgUses) {
+              const trimmedUse = typeof u === "string" ? u.trim() : "";
+              if (
+                trimmedUse &&
+                !resolvedActionIds.has(trimmedUse) &&
+                !queued.has(trimmedUse)
+              ) {
+                queued.add(trimmedUse);
+                queue.push(trimmedUse);
               }
             }
           }
-        } catch {
-          // 外部包解析失败时交由下方缺失依赖报错统一透传
         }
       }
 
       if (!entry) {
-        throw new PlannerError(
-          `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest or linked packages`,
-          "MISSING_DEPENDENCY"
+        throw new ActionDockError(
+          ACTION_NOT_FOUND,
+          `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest or linked packages`
         );
       }
 

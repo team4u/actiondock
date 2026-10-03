@@ -5,7 +5,6 @@ import {
   listLinkedPackages,
   resolvePackageRoot,
 } from "@actiondock/core/registry";
-import { getPackageSlug } from "@actiondock/core/project";
 import {
   findProjectRoot,
   loadProjectConfig,
@@ -120,7 +119,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
       const isMachine = Boolean(options.json);
 
       try {
-        const { exportCompositeSkill, exportSkill } = await import("@actiondock/builder");
+        const { allocatePackageDirName, exportCompositeSkill, exportSkill } = await import("@actiondock/builder");
         if (options.bundle !== undefined) {
           const bundleName =
             typeof options.bundle === "string" && options.bundle.trim()
@@ -177,21 +176,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
 
           for (const projectRoot of roots) {
             const config = loadProjectConfig(projectRoot);
-            let pkgSlug = getPackageSlug(config.id);
-            if (usedDirNames.has(pkgSlug)) {
-              pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
-            }
-            if (!pkgSlug) {
-              pkgSlug = getPackageSlug(config.id) || "package";
-            }
-            if (usedDirNames.has(pkgSlug)) {
-              let suffix = 2;
-              while (usedDirNames.has(`${pkgSlug}-${suffix}`)) {
-                suffix++;
-              }
-              pkgSlug = `${pkgSlug}-${suffix}`;
-            }
-            usedDirNames.add(pkgSlug);
+            const pkgSlug = allocatePackageDirName(usedDirNames, config.id);
 
             const pkgOutDir = join(baseOutDir, `${pkgSlug}-skill`);
             const res = await exportSkill({

@@ -230,6 +230,23 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       assert.ok((listA.map((c) => c.actionId)).includes("shared"));
       assert.ok((listA.map((c) => c.actionId)).includes("dynamicAction"));
     });
+
+    it("does not index undeclared actions in disk actions directory", () => {
+      const actionsDir = join(pkgADir, "actions");
+      mkdirSync(actionsDir, { recursive: true });
+      writeFileSync(join(actionsDir, "undeclared.ts"), "export default {};");
+
+      const discovery = new PackageDiscovery({
+        currentProjectRoot: pkgADir,
+        packageRoots: [pkgBDir, pkgCDir],
+      });
+      const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+      const catalog = new DefaultActionCatalog(graph);
+
+      assert.strictEqual(catalog.get("pkg-a", "undeclared"), undefined);
+      const listA = catalog.list("pkg-a");
+      assert.strictEqual(listA.some((c) => c.actionId === "undeclared"), false);
+    });
   });
 
   describe("resolveAction", () => {

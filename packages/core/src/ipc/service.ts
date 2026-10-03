@@ -111,8 +111,6 @@ export class IpcActionDockService implements ActionDockService {
 
   constructor(options: IpcServiceOptions) {
     this.forwarder = new DiagnosticForwarder({
-      maxBytes: options.maxDiagnosticBytes,
-      maxRateBytesPerSec: options.maxDiagnosticRate,
       target: options.diagnosticTarget,
     });
 
@@ -328,7 +326,7 @@ export class IpcActionDockService implements ActionDockService {
 
           async list(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<string[]> {
             return forward<string[]>("listStateKeys", [packageId, actionId, opts]);
@@ -336,7 +334,7 @@ export class IpcActionDockService implements ActionDockService {
 
           async clear(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<number> {
             return forward<number>("clearState", [packageId, actionId, opts]);

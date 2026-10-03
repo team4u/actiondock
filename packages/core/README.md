@@ -83,7 +83,6 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 - 受管进程平台驱动 `NodeProcessDriver`：实现完整的受管进程治理体系。基于管道彻底切断子进程与宿主标准流的物理连通；支持跨平台独立进程组管理与信号派发；提供独占控制权租约、逐流增量读取与优雅终止。
 - 原生网络服务容器 `NodeHttpServer`：基于 Node.js 原生 `node:http` 承载 RESTful 微服务与 Server-Sent Events 事件流。
 - 原生模块加载器 `NodeModuleLoader`：基于 Node.js 原生类型擦除机制直接加载 TypeScript 源码，免除前置编译转译开销。
-- 原生文件系统抽象 `NodeFileSystem`：提供跨平台文件读写与原子文件事务保障。
 
 ---
 

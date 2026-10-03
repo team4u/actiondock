@@ -1,5 +1,4 @@
 import {
-  findProjectRoot,
   loadProjectConfig,
   parseDuration,
 } from "@actiondock/core";
@@ -8,14 +7,12 @@ import {
 } from "@actiondock/core/project";
 import {
   listLinkedPackages,
-  resolvePackageRoot,
 } from "@actiondock/core/registry";
 import { Command } from "commander";
 import {
   ArgumentError,
   ExecutionError,
   NO_PROJECT_NO_LINKED_MESSAGE,
-  packageNotFoundError,
 } from "../errors";
 import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
 import type { CliContext } from "../types";
@@ -26,6 +23,7 @@ import {
   requirePackageRoot,
   resolveFallbackStrategy,
   resolveIntent,
+  resolveLocalPackageRoot,
   withService,
 } from "../utils";
 
@@ -38,10 +36,7 @@ function resolveLocalRunScope(packageOption?: string): {
   projConfig: any;
 } {
   if (packageOption) {
-    const root = resolvePackageRoot(packageOption);
-    if (!root) {
-      throw packageNotFoundError(packageOption);
-    }
+    const { root } = requirePackageRoot(packageOption);
     try {
       return { targetPackageRoot: root, projConfig: loadProjectConfig(root) };
     } catch {
@@ -50,7 +45,7 @@ function resolveLocalRunScope(packageOption?: string): {
     }
   }
 
-  const root = findProjectRoot();
+  const root = resolveLocalPackageRoot();
   if (!root) {
     return { targetPackageRoot: undefined, projConfig: null };
   }

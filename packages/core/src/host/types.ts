@@ -194,14 +194,14 @@ export interface ActionDockHost extends ActionDockService {
   /** 列出状态项键名 */
   listStateKeys(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<string[]>;
 
   /** 清理状态项 */
   clearState(
     packageId: string,
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<number>;
 
@@ -223,3 +223,4 @@ export interface ActionDockHost extends ActionDockService {
   /** 优雅关闭宿主容器。统一完整关闭所管理的所有 Runtime 实例并安全释放底层资源。 */
   close(options?: { timeoutMs?: number; graceMs?: number }): Promise<void>;
 }
+

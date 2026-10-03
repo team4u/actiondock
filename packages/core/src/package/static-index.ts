@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { loadPlaybooks } from "../project/loader";
-import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
+import { MANIFEST_FILE_NAME } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";
 import type { ActionSpec, PlaybookSpec } from "./types";
 
@@ -11,11 +11,11 @@ import type { ActionSpec, PlaybookSpec } from "./types";
  * 入参不可变（同实例内复用解析结果的前提），字段与 App 实例的运行时只读状态一一对应。
  */
 export interface StaticIndexInput {
-  /** 包根目录（磁盘清单来源；缺省时仅聚合配置与内存注入来源） */
+  /** 包根目录（缺省时仅聚合配置与内存注入来源） */
   packageRoot?: string;
   /** 包唯一标识 */
   packageId: string;
-  /** 项目配置（Manifest v2 声明来源） */
+  /** 项目配置（规范化清单配置快照，单一事实源） */
   projectConfig: ProjectConfig;
 }
 
@@ -33,7 +33,7 @@ export interface StaticActionIndexInput extends StaticIndexInput {
  * - 派生字段（filePath）：由声明 entry 与包根目录计算，声明缺失时回退既有值。
  */
 interface MergeFieldPolicy {
-  /** 数组字段：声明值存在时拷贝副本（磁盘清单与内存注入层启用，配置声明层直传引用） */
+  /** 数组字段：声明值存在时拷贝副本（配置清单与内存注入层启用） */
   arrayCopy?: boolean;
   /** 数组字段列表 */
   arrayFields?: Array<"tags" | "uses">;
@@ -100,60 +100,26 @@ function mergeSpec(
  * 不产生全量模块导入与执行副作用。
  *
  * 聚合优先级（后者覆盖前者同名字段，缺省字段回退前者）：
- * - 磁盘声明式清单文件（actiondock.json）；
- * - 项目配置中声明的 actions（Manifest v2 格式）；
+ * - 项目清单配置快照中声明的 actions（Manifest v2 格式，单一事实源）；
  * - 内存显式注入的 Action 定义。
- *
- * 清单文件不存在属于合法空态；解析失败（损坏 JSON 等）输出告警并跳过清单部分。
  */
 export function buildStaticActionMap(input: StaticActionIndexInput): Map<string, ActionSpec> {
   const { packageRoot, packageId, projectConfig, actionsMap } = input;
   const map = new Map<string, ActionSpec>();
 
-  // 读取声明式清单文件 (actiondock.json)
-  if (packageRoot) {
-    const manifestPath = join(packageRoot, MANIFEST_FILE_NAME);
-    // 文件不存在属于合法空态（无清单包）；解析失败（损坏 JSON 等）则输出告警并跳过清单部分
-    if (!existsSync(manifestPath)) {
-      // 合法空态：无清单文件，仅依赖后续配置与内存注入来源
-    } else {
-      try {
-        const manifest = loadManifest(packageRoot);
-        if (manifest?.actions) {
-          for (const [id, item] of Object.entries(manifest.actions)) {
-            // 磁盘清单为最底层来源：无更低层可回退，tags 与 uses 缺省时归一为空数组
-            map.set(
-              id,
-              mergeSpec(undefined, id, packageId, {
-                ...item,
-                tags: item.tags ?? [],
-                uses: item.uses ?? [],
-              }, packageRoot, {
-                arrayFields: ["tags", "uses"],
-                deriveFilePath: true,
-              })
-            );
-          }
-        }
-      } catch (err: any) {
-        console.warn(
-          `[App] Failed to load manifest for package '${packageId}' from '${manifestPath}': ${err?.message || String(err)}`
-        );
-      }
-    }
-  }
-
-  // 读取项目配置文件中声明的 actions (Manifest v2 格式)
+  // 读取规范化清单配置快照中声明的 actions (Manifest v2 格式)
   if (projectConfig && projectConfig.actions) {
     const rawActions = projectConfig.actions;
     if (typeof rawActions === "object" && rawActions !== null) {
       for (const [id, item] of Object.entries(rawActions as Record<string, any>)) {
-        // 配置声明层：覆盖磁盘清单层，entry 变化时重算物理路径；数组字段直传引用
         map.set(
           id,
-          mergeSpec(map.get(id), id, packageId, item, packageRoot, {
+          mergeSpec(undefined, id, packageId, {
+            ...item,
+            tags: item.tags ?? [],
+            uses: item.uses ?? [],
+          }, packageRoot, {
             arrayFields: ["tags", "uses"],
-            arrayCopy: false,
             deriveFilePath: true,
           })
         );
@@ -170,7 +136,7 @@ export function buildStaticActionMap(input: StaticActionIndexInput): Map<string,
         continue;
       }
     }
-    // 内存注入层：保留磁盘层解析出的 entry 与 filePath，仅覆盖动态定义相关字段
+    // 内存注入层：保留清单层解析出的 entry 与 filePath，仅覆盖动态定义相关字段
     map.set(
       id,
       mergeSpec(map.get(id), id, packageId, act as any, packageRoot, {
@@ -197,7 +163,8 @@ export function buildStaticPlaybookMap(input: StaticIndexInput): Map<string, Pla
   if (packageRoot) {
     const playbooksDir = projectConfig?.playbooksDir || "playbooks";
     const dirPath = join(packageRoot, playbooksDir);
-    if (existsSync(dirPath)) {
+    const manifestPath = join(packageRoot, MANIFEST_FILE_NAME);
+    if (existsSync(manifestPath) || existsSync(dirPath)) {
       try {
         const loaded = loadPlaybooks(packageRoot, playbooksDir);
         for (const [id, def] of loaded) {

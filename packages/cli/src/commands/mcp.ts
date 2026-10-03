@@ -176,7 +176,6 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
         const platform = createNodePlatform({
           customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
-          rootDir: projectRoots?.[0],
         });
         const { startMcpHttpServer } = await import("@actiondock/mcp");
         const server = await startMcpHttpServer({

@@ -26,7 +26,6 @@ export type {
 // 运行时平台与进程驱动契约
 export type {
   RuntimePlatform,
-  FileSystem,
   StorageFactory,
   StorageFactoryOptions,
   GlobalStorageFactoryOptions,

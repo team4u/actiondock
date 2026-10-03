@@ -685,4 +685,46 @@ Execute build and then deploy artifact.
     assert.strictEqual((app as any).platform, defaultPlatform);
     await app.close();
   });
+
+  it("describeAction 仅只读查询静态快照与已注册实例，彻底剥离 resolveAction 动态解析与执行回退", async () => {
+    let resolveActionCalled = false;
+    const app = await createPackageRuntime({
+      projectConfig: {
+        id: "test.static.describe",
+        name: "Static Describe App",
+        version: "1.0.0",
+        actions: {
+          "static-act": {
+            entry: "actions/dummy.ts",
+            description: "Static action description",
+          },
+        },
+      },
+      inMemory: true,
+    });
+
+    const execService = (app as any).executionService;
+    if (execService) {
+      const origResolve = execService.resolveAction?.bind(execService);
+      execService.resolveAction = async (...args: any[]) => {
+        resolveActionCalled = true;
+        return origResolve ? origResolve(...args) : undefined;
+      };
+    }
+
+    // 查询已声明静态动作：成功返回元数据，且不触发 resolveAction
+    const spec = await app.describeAction("static-act");
+    assert.strictEqual(spec.id, "static-act");
+    assert.strictEqual(spec.description, "Static action description");
+    assert.strictEqual(resolveActionCalled, false);
+
+    // 查询未声明动作：直接抛出 ACTION_NOT_FOUND，不触发 resolveAction 动态回退
+    await assert.rejects(
+      app.describeAction("dynamic-or-unregistered"),
+      /Action 'dynamic-or-unregistered' not found in package 'test\.static\.describe'/
+    );
+    assert.strictEqual(resolveActionCalled, false);
+
+    await app.close();
+  });
 });

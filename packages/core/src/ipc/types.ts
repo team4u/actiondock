@@ -49,10 +49,6 @@ export interface IpcServiceOptions {
   cwd?: string;
   /** 环境变量 */
   env?: NodeJS.ProcessEnv;
-  /** 诊断流最大缓冲字节数 */
-  maxDiagnosticBytes?: number;
-  /** 诊断流每秒最大字节速率 */
-  maxDiagnosticRate?: number;
   /** 诊断流目标输出 */
   diagnosticTarget?: any;
   /** 是否启用管理端口（默认 true） */

@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import {
   initProject,
   startActionDockServer,
+  connectActionDock,
   ACTIONDOCK_VERSION,
 } from "../src";
 import {
@@ -831,6 +832,201 @@ Follow these steps to greet a user.
       const ambiguousData = await ambiguousRes.json();
       assert.strictEqual(ambiguousData.ok, false);
       assert.strictEqual(ambiguousData.error.code, "INVALID_ARGUMENT");
+    });
+
+    test("State Endpoints > GET /state 默认状态列表覆盖根状态与 Action 状态且 all 清理全量生效", async () => {
+      // 写入根状态
+      await setRemoteStateKey(serverUrl, "root_flag", "root_value", SECRET_TOKEN);
+
+      // 写入 Action 状态
+      await setRemoteStateKey(serverUrl, "action_item", "worker_value", SECRET_TOKEN, {
+        action: "worker",
+      });
+
+      // 默认未指定 action 时的列表查询（GET /api/v2/state）：必须同时列出根状态与全部 Action 状态
+      const listRes = await fetchRemoteStateList(serverUrl, SECRET_TOKEN);
+      assert.strictEqual(listRes.ok, true);
+      assert.ok(listRes.keys.includes("root_flag"));
+      assert.ok(listRes.keys.includes("worker:action_item"));
+
+      // 指定 action 时的列表查询（GET /api/v2/state?action=worker）：仅列出该 Action 状态
+      const actionListRes = await fetchRemoteStateList(serverUrl, SECRET_TOKEN, {
+        action: "worker",
+      });
+      assert.strictEqual(actionListRes.ok, true);
+      assert.ok(!actionListRes.keys.includes("root_flag"));
+      assert.ok(actionListRes.keys.includes("action_item"));
+
+      // 带 all: true 清空状态（POST /api/v2/state/clear）：断言全包所有状态（根状态与 Action 状态）均被清空
+      const clearRes = await clearRemoteState(serverUrl, SECRET_TOKEN, { all: true });
+      assert.strictEqual(clearRes.ok, true);
+      assert.ok((clearRes.clearedCount ?? 0) >= 2);
+
+      // 再次查询默认状态列表，断言所有状态均已清空
+      const afterClearRes = await fetchRemoteStateList(serverUrl, SECRET_TOKEN);
+      assert.strictEqual(afterClearRes.ok, true);
+      assert.ok(!afterClearRes.keys.includes("root_flag"));
+      assert.ok(!afterClearRes.keys.includes("worker:action_item"));
+    });
+
+    test("State Endpoints > 本地服务与远端服务在显式空作用域下列表结果严格一致", async () => {
+      const localService = serverInstance.service;
+      const remoteService = await connectActionDock({
+        serverUrl,
+        token: SECRET_TOKEN,
+      });
+
+      const pkgId = "test.profile-app";
+
+      try {
+        // 先清理该包下的所有状态，确保初始状态干净
+        await remoteService.management!.state.clear(pkgId, undefined, { all: true });
+
+        // 写入根状态 root-item 与 Action 状态 worker:action-item
+        await remoteService.management!.state.set(pkgId, "", "root-item", "root_value");
+        await remoteService.management!.state.set(pkgId, "worker", "action-item", "worker_value");
+
+        // 分别在本地服务和远端服务上调用 state.list(pkg, "")，断言两端均严格只返回根状态 ["root-item"]
+        const localRootKeys = await localService.management!.state.list(pkgId, "");
+        const remoteRootKeys = await remoteService.management!.state.list(pkgId, "");
+
+        assert.deepStrictEqual(localRootKeys, ["root-item"]);
+        assert.deepStrictEqual(remoteRootKeys, ["root-item"]);
+        assert.deepStrictEqual(localRootKeys, remoteRootKeys);
+
+        // 分别在本地服务和远端服务上调用 state.list(pkg, undefined)，断言两端均返回全部状态 ["root-item", "worker:action-item"]
+        const localAllKeys = await localService.management!.state.list(pkgId, undefined);
+        const remoteAllKeys = await remoteService.management!.state.list(pkgId, undefined);
+
+        const expectedAll = ["root-item", "worker:action-item"].sort();
+        assert.deepStrictEqual([...localAllKeys].sort(), expectedAll);
+        assert.deepStrictEqual([...remoteAllKeys].sort(), expectedAll);
+        assert.deepStrictEqual([...localAllKeys].sort(), [...remoteAllKeys].sort());
+
+        // 清理测试状态
+        await remoteService.management!.state.clear(pkgId, undefined, { all: true });
+      } finally {
+        await remoteService.close();
+      }
+    });
+
+    test("State Endpoints > 显式空命名空间读写删往返支持包含冒号的字面键", async () => {
+      // 1. 在显式空命名空间下写入包含冒号的字面键 literal:key
+      const putRes = await fetch(`${serverUrl}/api/v2/state/literal:key?namespace=`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+        body: JSON.stringify({ value: "literal_value" }),
+      });
+      assert.strictEqual(putRes.status, 200);
+      const putData = await putRes.json();
+      assert.strictEqual(putData.ok, true);
+      assert.strictEqual(putData.key, "literal:key");
+      assert.strictEqual(putData.namespace, "");
+
+      // 2. 通过 GET /state/literal:key?namespace= 读取该键，验证成功返回 200 且值正确，绝不返回 404
+      const getRes = await fetch(`${serverUrl}/api/v2/state/literal:key?namespace=`, {
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+      });
+      assert.strictEqual(getRes.status, 200);
+      const getData = await getRes.json();
+      assert.strictEqual(getData.ok, true);
+      assert.strictEqual(getData.key, "literal:key");
+      assert.strictEqual(getData.namespace, "");
+      assert.strictEqual(getData.value, "literal_value");
+
+      // 通过 getRemoteStateKey 辅助函数读取验证同样返回正确结果
+      const helperGetRes = await getRemoteStateKey(serverUrl, "literal:key", SECRET_TOKEN, {
+        namespace: "",
+      });
+      assert.strictEqual(helperGetRes.key, "literal:key");
+      assert.strictEqual(helperGetRes.namespace, "");
+      assert.strictEqual(helperGetRes.value, "literal_value");
+
+      // 3. 通过 DELETE /state/literal:key?namespace= 删除该键，验证成功返回 200 且 deleted: true，绝不返回 404
+      const deleteRes = await fetch(`${serverUrl}/api/v2/state/literal:key?namespace=`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+      });
+      assert.strictEqual(deleteRes.status, 200);
+      const deleteData = await deleteRes.json();
+      assert.strictEqual(deleteData.ok, true);
+      assert.strictEqual(deleteData.key, "literal:key");
+      assert.strictEqual(deleteData.deleted, true);
+
+      // 4. 再次 GET 验证已删除（404）
+      const getAfterDeleteRes = await fetch(`${serverUrl}/api/v2/state/literal:key?namespace=`, {
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+      });
+      assert.strictEqual(getAfterDeleteRes.status, 404);
+      const getAfterDeleteData = await getAfterDeleteRes.json();
+      assert.strictEqual(getAfterDeleteData.ok, false);
+      assert.strictEqual(getAfterDeleteData.error.code, "STATE_KEY_NOT_FOUND");
+
+      // 再次 DELETE 验证已删除（404）
+      const deleteAgainRes = await fetch(`${serverUrl}/api/v2/state/literal:key?namespace=`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+      });
+      assert.strictEqual(deleteAgainRes.status, 404);
+
+      // 5. 验证客户端代理通过 remoteService.management.state 传入 opts: { namespace: "" } 的等价读写删往返调用正常
+      const remoteService = await connectActionDock({
+        serverUrl,
+        token: SECRET_TOKEN,
+      });
+      const pkgId = "test.profile-app";
+
+      try {
+        // 客户端代理写入
+        await remoteService.management!.state.set(pkgId, "", "proxy-literal:key", "proxy_literal_value", {
+          namespace: "",
+        });
+
+        // 客户端代理普通读取与 detail 读取
+        const clientVal = await remoteService.management!.state.get(pkgId, "", "proxy-literal:key", {
+          namespace: "",
+        });
+        assert.strictEqual(clientVal, "proxy_literal_value");
+
+        const clientDetail = await remoteService.management!.state.get(pkgId, "", "proxy-literal:key", {
+          namespace: "",
+          detail: true,
+        });
+        assert.strictEqual((clientDetail as any).value, "proxy_literal_value");
+        assert.strictEqual((clientDetail as any).key, "proxy-literal:key");
+        assert.strictEqual((clientDetail as any).namespace, "");
+
+        // 客户端代理删除
+        const clientDeleted = await remoteService.management!.state.delete(pkgId, "", "proxy-literal:key", {
+          namespace: "",
+        });
+        assert.strictEqual(clientDeleted, true);
+
+        // 客户端代理再次读取验证返回 undefined
+        const clientAfterDelete = await remoteService.management!.state.get(pkgId, "", "proxy-literal:key", {
+          namespace: "",
+        });
+        assert.strictEqual(clientAfterDelete, undefined);
+
+        // 客户端代理再次删除验证返回 false
+        const clientDeleteAgain = await remoteService.management!.state.delete(pkgId, "", "proxy-literal:key", {
+          namespace: "",
+        });
+        assert.strictEqual(clientDeleteAgain, false);
+      } finally {
+        await remoteService.close();
+      }
     });
 
     test("Config Endpoints > supports list, set, delete, and env verification", async () => {

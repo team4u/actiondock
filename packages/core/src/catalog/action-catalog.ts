@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ActionContract, ActionRef } from "@actiondock/sdk";
 import type { PackageIdentity } from "../runtime/identity";
@@ -128,7 +128,7 @@ export class DefaultActionCatalog implements ActionCatalog {
       const packageId = node.identity.id;
       const manifest = node.manifest;
 
-      // 1. 清单显式 actions 声明优先索引
+      // - 清单显式 actions 声明优先索引
       if (manifest?.actions && typeof manifest.actions === "object") {
         for (const [actionId, item] of Object.entries(manifest.actions)) {
           const entry =
@@ -153,7 +153,7 @@ export class DefaultActionCatalog implements ActionCatalog {
         }
       }
 
-      // 2. 内存动态注入动作索引（测试或 Host 注册场景）
+      // - 内存动态注入动作索引（测试或 Host 注册场景）
       if (actionsProvider) {
         const dynActions = actionsProvider(packageId);
         if (dynActions && typeof dynActions.entries === "function") {
@@ -172,36 +172,6 @@ export class DefaultActionCatalog implements ActionCatalog {
               this.addCandidate(candidate);
             }
           }
-        }
-      }
-
-      // 3. actions 目录回退扫描
-      const actionsDir = join(node.root, manifest?.actionsDir || "actions");
-      if (existsSync(actionsDir)) {
-        try {
-          const files = readdirSync(actionsDir);
-          for (const file of files) {
-            if (file.endsWith(".ts") || file.endsWith(".js")) {
-              if (file.endsWith(".d.ts") || file.endsWith(".test.ts") || file.endsWith(".spec.ts")) {
-                continue;
-              }
-              const actionId = file.replace(/\.(ts|js)$/, "");
-              const qualifiedKey = `${packageId}/${actionId}`;
-              if (!this.byPackageAndAction.has(qualifiedKey)) {
-                const candidate: ActionCandidate = {
-                  packageId,
-                  packageIdentity: node.identity,
-                  actionId,
-                  contract: { id: actionId },
-                  entry: join(manifest?.actionsDir || "actions", file),
-                  packageRoot: node.root,
-                };
-                this.addCandidate(candidate);
-              }
-            }
-          }
-        } catch {
-          // 忽略扫描目录异常
         }
       }
     }

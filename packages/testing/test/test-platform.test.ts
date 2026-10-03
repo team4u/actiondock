@@ -24,8 +24,6 @@ describe("createTestPlatform 测试平台工厂测试", () => {
 
       assert.strictEqual(platform.name, "test");
       assert.ok(platform.clock instanceof FakeClock);
-      assert.notStrictEqual(platform.files, undefined);
-      assert.strictEqual(typeof platform.files.readFile, "function");
       assert.notStrictEqual(platform.modules, undefined);
       assert.strictEqual(typeof platform.modules.load, "function");
       assert.ok(platform.process instanceof MockProcessExecutor);

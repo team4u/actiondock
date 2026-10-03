@@ -545,7 +545,7 @@ export class RemoteActionDockService implements ActionDockService {
             try {
               const res = await getRemoteStateKey(self.serverUrl, key, self.token, {
                 package: packageId || undefined,
-                action: actionId || undefined,
+                action: actionId ?? undefined,
                 namespace: opts?.namespace,
                 allowInsecureHttp: self.allowInsecureHttp,
                 insecure: self.insecure,
@@ -575,7 +575,7 @@ export class RemoteActionDockService implements ActionDockService {
             try {
               await setRemoteStateKey(self.serverUrl, key, value, self.token, {
                 package: packageId || undefined,
-                action: actionId || undefined,
+                action: actionId ?? undefined,
                 namespace: opts?.namespace,
                 ttl: opts?.ttl,
                 allowInsecureHttp: self.allowInsecureHttp,
@@ -597,7 +597,7 @@ export class RemoteActionDockService implements ActionDockService {
             try {
               const res = await deleteRemoteStateKey(self.serverUrl, key, self.token, {
                 package: packageId || undefined,
-                action: actionId || undefined,
+                action: actionId ?? undefined,
                 namespace: opts?.namespace,
                 allowInsecureHttp: self.allowInsecureHttp,
                 insecure: self.insecure,
@@ -614,14 +614,14 @@ export class RemoteActionDockService implements ActionDockService {
 
           async list(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<string[]> {
             self.assertNotClosed();
             try {
               const res = await fetchRemoteStateList(self.serverUrl, self.token, {
                 package: packageId || undefined,
-                action: actionId || undefined,
+                action: actionId ?? undefined,
                 namespace: opts?.namespace,
                 prefix: opts?.prefix,
                 allowInsecureHttp: self.allowInsecureHttp,
@@ -636,14 +636,14 @@ export class RemoteActionDockService implements ActionDockService {
 
           async clear(
             packageId: string,
-            actionId: string,
+            actionId?: string,
             opts?: StateScopeOptions
           ): Promise<number> {
             self.assertNotClosed();
             try {
               const res = await clearRemoteState(self.serverUrl, self.token, {
                 package: packageId || undefined,
-                action: actionId || undefined,
+                action: actionId ?? undefined,
                 namespace: opts?.namespace,
                 prefix: opts?.prefix,
                 all: opts?.all,

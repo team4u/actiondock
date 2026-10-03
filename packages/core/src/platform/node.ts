@@ -15,10 +15,8 @@ import {
   type RuntimeStorage,
   type SqliteDriver,
 } from "../storage";
-import { NodeFileSystem } from "./node-fs";
 import type { EventSink } from "../runtime/events";
 import type {
-  FileSystem,
   GlobalStorageFactoryOptions,
   RuntimePlatform,
   StorageFactory,
@@ -35,7 +33,10 @@ export interface NodePlatformOptions {
   dataDir?: string;
   /** 自定义家目录路径 */
   customHome?: string;
-  /** 文件系统安全沙箱根路径 */
+  /**
+   * 历史兼容保留属性（已废弃：文件系统抽象已由原生模块接管）。
+   * @deprecated 文件系统抽象已清理，该字段已无实际效果。
+   */
   rootDir?: string;
   /** 自定义 SQLite 驱动工厂函数（必须返回满足同步契约的 SqliteDriver，默认实例化 NodeSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
@@ -47,8 +48,6 @@ export interface NodePlatformOptions {
   processManager?: ProcessManager;
   /** 自定义源码加载驱动（默认实例化 NodeModuleLoader） */
   modules?: ModuleLoader;
-  /** 自定义文件系统实现（默认实例化 NodeFileSystem） */
-  files?: FileSystem;
   /** 自定义时钟驱动（默认实例化 SystemClock） */
   clock?: Clock;
   /** 自定义存储工厂（默认基于 NodeSqliteDriver 构造） */
@@ -87,7 +86,6 @@ function ensureDirectoryForDb(dbPath: string): void {
  * - NodeSqliteDriver 同步持久化存储驱动
  * - NodeProcessDriver 原生进程驱动与 ProcessManager 受管进程引擎
  * - NodeModuleLoader 原生源码加载器
- * - NodeFileSystem 文件系统
  * - SystemClock 系统时钟
  *
  * @param options 平台配置选项
@@ -96,7 +94,6 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   registerModuleLoaderHook();
   const platformName: "node" | "test" = options.name ?? "node";
   const clock: Clock = options.clock ?? new SystemClock();
-  const files: FileSystem = options.files ?? new NodeFileSystem({ rootDir: options.rootDir });
   const modules: ModuleLoader = options.modules ?? new NodeModuleLoader();
   const processDriver = options.processDriver ?? new NodeProcessDriver();
   const processManager = options.processManager ?? new ProcessManager({ driver: processDriver });
@@ -154,7 +151,6 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   return {
     name: platformName,
     clock,
-    files,
     modules,
     process,
     storage,

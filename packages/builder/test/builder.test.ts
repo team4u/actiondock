@@ -1998,10 +1998,11 @@ export default defineAction({
       }
     });
 
-    it("resolves external linked action in SelectionPlanner when linked package has default actiondock.json", async () => {
+    it("引用外部包未在清单声明的隐藏动作时，规划阶段直接报错拦截杜绝幽灵动作混入", async () => {
       const extDir = mkdtempSync(join(tmpdir(), "ext-pkg-"));
       try {
         initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
+        // 在外部包 actions 目录下创建未在清单中显式声明的隐藏动作文件
         writeFileSync(
           join(extDir, "actions", "calc.ts"),
           `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "calc", uses: [], run: () => 42 });`
@@ -2009,7 +2010,42 @@ export default defineAction({
         await linkPackage(extDir);
 
         const planner = new SelectionPlanner({ projectRoot: tempDir });
-        const plan = planner.plan({
+        // 引用外部包未声明动作时直接拦截报错
+        assert.throws(
+          () => {
+            planner.plan({
+              projectRoot: tempDir,
+              manifest: {
+                schemaVersion: 1,
+                id: "test.builder-fixture",
+                actions: {
+                  "sample.greet": {
+                    entry: "actions/greet.ts",
+                    uses: ["test.ext-tools/calc"],
+                  },
+                },
+              },
+            });
+          },
+          (err: any) => {
+            return (
+              err.code === "ACTION_NOT_FOUND" ||
+              err.code === "UNDECLARED_ACTION_DEPENDENCY"
+            );
+          }
+        );
+
+        // 外部包显式补全清单声明后，规划应正常通过
+        const extConfigPath = join(extDir, "actiondock.json");
+        const extCfg = JSON.parse(readFileSync(extConfigPath, "utf-8"));
+        extCfg.actions = extCfg.actions || {};
+        extCfg.actions["calc"] = {
+          entry: "actions/calc.ts",
+          uses: [],
+        };
+        writeFileSync(extConfigPath, JSON.stringify(extCfg, null, 2), "utf-8");
+
+        const validPlan = planner.plan({
           projectRoot: tempDir,
           manifest: {
             schemaVersion: 1,
@@ -2023,7 +2059,7 @@ export default defineAction({
           },
         });
 
-        assert.strictEqual(plan.actions.some((a) => a.id === "test.ext-tools/calc"), true);
+        assert.strictEqual(validPlan.actions.some((a) => a.id === "test.ext-tools/calc"), true);
       } finally {
         safeCleanDir(extDir);
       }

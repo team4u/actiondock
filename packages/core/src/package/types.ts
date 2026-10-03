@@ -383,7 +383,7 @@ export interface PackageRuntime {
     actionId: string,
     key: string,
     value: T,
-    options: StateScopeOptions
+    options?: StateScopeOptions
   ): Promise<void>;
 
   /** 删除指定持久化状态项 */
@@ -424,7 +424,7 @@ export interface PackageRuntime {
     options?: StateScopeOptions
   ): Promise<string[]>;
   listStateKeys(
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<string[]>;
 
@@ -433,7 +433,7 @@ export interface PackageRuntime {
     options?: StateScopeOptions
   ): Promise<number>;
   clearState(
-    actionId: string,
+    actionId?: string,
     options?: StateScopeOptions
   ): Promise<number>;
 
