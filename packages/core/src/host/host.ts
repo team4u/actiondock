@@ -411,8 +411,14 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   private async performInitialization(): Promise<void> {
     try {
-      // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
-      if (this.options.dataDir && !this.options.inMemory && !this.dataDirLock) {
+      // 当指定非内存 dataDir 且以持有者身份打开时获取排他目录锁，防止并发冲突；
+      // 旁观 Host（recoverOrphans: false）不获取执行宿主的排他锁，也不创建数据目录
+      if (
+        this.options.dataDir &&
+        !this.options.inMemory &&
+        this.recoverOrphans &&
+        !this.dataDirLock
+      ) {
         this.dataDirLock = DataDirLock.acquire(this.options.dataDir, {
           hostSessionId: this.hostSessionId,
         });
@@ -564,6 +570,14 @@ export class DefaultActionDockHost implements ActionDockHost {
       );
     }
     if (hasPendingTransactions(root)) {
+      // 旁观路径（recoverOrphans: false）不自动恢复待恢复事务：
+      // 不触发依赖安装或清单回滚，直接报告恢复需求，由持有者入口完成恢复
+      if (!this.recoverOrphans) {
+        throw new ActionDockError(
+          PROJECT_RECOVERY_REQUIRED,
+          `PROJECT_RECOVERY_REQUIRED: Project at '${root}' has pending transactions requiring recovery. Run an owner command (e.g. 'ad add' or 'ad run') to complete recovery before querying.`
+        );
+      }
       await recoverPendingTransactions(root, { frozenInstall: true });
     }
 
