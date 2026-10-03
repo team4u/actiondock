@@ -4,8 +4,13 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
 import { generateSourceSkillMd } from "./skill";
+import {
+  RUNTIME_REFERENCE_REL_PATH,
+  renderRuntimeReferenceContent,
+} from "./skill/templates";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
 import {
@@ -55,6 +60,15 @@ export function stageSourceSkill(
       )
   );
 
+  // 仅在使用自动模板时生成默认运行参考文件；与项目声明资产同路径冲突时报错不覆盖
+  if (usedExistingSkillMd === undefined && !options.skipSkillMd) {
+    writeRuntimeReferenceFile(skillDir, {
+      dependencyStepLabel: "安装技能源码依赖",
+      relinkStepLabel: "完成安装后重新链接本技能",
+      invocationStyle: "global-ad",
+    });
+  }
+
   // 导出精简后的 actiondock.json 项目配置（项目元数据与清单的单一事实源）
   const exportedConfig = serializePlanManifest(plan, {
     omitEmptyConfig: true,
@@ -87,8 +101,23 @@ export function stageSourceSkill(
 }
 
 /**
- * 生成源码型 Skill 的 package.json（依赖清洗统一复用 manifest 的 sanitizeExportDependencies 单一入口）。
+ * 写出运行参考文件 references/actiondock-runtime.md。
+ * 与项目声明资产同路径冲突时报告错误，不覆盖用户文件。
  */
+export function writeRuntimeReferenceFile(
+  destDir: string,
+  options: Parameters<typeof renderRuntimeReferenceContent>[0]
+): void {
+  const referencePath = join(destDir, RUNTIME_REFERENCE_REL_PATH);
+  if (existsSync(referencePath)) {
+    throw new BuilderError(
+      `Runtime reference file conflict: '${referencePath}' already exists (declared asset or user file). Refusing to overwrite user files.`
+    );
+  }
+  mkdirSync(dirname(referencePath), { recursive: true });
+  writeFileSync(referencePath, renderRuntimeReferenceContent(options), "utf-8");
+}
+
 function writeSourceSkillPkgJson(
   root: string,
   skillDir: string,

@@ -213,9 +213,15 @@ describe("Build & Skill Export Contract", () => {
     assert.ok((skillMd).includes("test.sample-tools/sample.greet"));
     assert.ok((skillMd).includes("Playbook SOPs"));
     assert.ok((skillMd).includes("故障排查与环境安装指引"));
-    assert.ok((skillMd).includes("npm install -g @actiondock/cli"));
-    assert.ok((skillMd).includes("npm install --omit=dev"));
-    assert.ok((skillMd).includes("ad doctor"));
+    // 主说明不展开完整安装教程：只保留按需参考链接
+    assert.ok((skillMd).includes("references/actiondock-runtime.md"));
+    assert.ok(!(skillMd).includes("npm install -g @actiondock/cli"));
+    // 完整安装与自愈指引落在运行参考文件，且路径可读取
+    const referenceMd = readFileSync(join(exportRes.skillDir, "references", "actiondock-runtime.md"), "utf-8");
+    assert.ok((referenceMd).includes("npm install -g @actiondock/cli"));
+    assert.ok((referenceMd).includes("npm install --omit=dev"));
+    assert.ok((referenceMd).includes("ad doctor"));
+    assert.ok((referenceMd).includes("ad link"));
   });
 
   it("exports Source Skill package including dependent lib files and non-action helpers", async () => {

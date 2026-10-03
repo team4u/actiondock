@@ -15,7 +15,8 @@ import {
   loadManifest,
   loadPlaybooks,
 } from "@actiondock/core/project";
-import { generateCompositeSkillMd, type CompositeSkillPackageInfo } from "./skill";
+import { generateCompositeSkillMd, RUNTIME_REFERENCE_REL_PATH, type CompositeSkillPackageInfo } from "./skill";
+import { writeRuntimeReferenceFile } from "./export-source";
 import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
 import { allocatePackageDirName, sanitizeExportDependencies } from "./manifest";
@@ -189,6 +190,16 @@ export async function exportCompositeImpl(
       if (existsSync(targetFile)) {
         console.warn(`[WARN] Existing SKILL.md will be overwritten: ${targetFile}`);
       }
+      // 就地重生成只修改 SKILL.md：若参考文件尚未物化则同步写出，避免产生悬空链接
+      const referencePath = join(dirname(targetFile), RUNTIME_REFERENCE_REL_PATH);
+      if (!existsSync(referencePath)) {
+        writeRuntimeReferenceFile(dirname(targetFile), {
+          dependencyStepLabel: "安装复合技能聚合依赖",
+          relinkStepLabel: "完成安装后重新链接复合技能",
+          compositeLinkNote: true,
+          invocationStyle: "global-ad",
+        });
+      }
       writeFileSync(targetFile, compositeSkillMd, "utf-8");
 
       return {
@@ -210,6 +221,13 @@ export async function exportCompositeImpl(
       }
     } else {
       writeFileSync(join(stagingDir!, "SKILL.md"), compositeSkillMd, "utf-8");
+      // 仅在使用自动模板时生成复合运行参考文件（含复合链接语义说明）
+      writeRuntimeReferenceFile(stagingDir!, {
+        dependencyStepLabel: "安装复合技能聚合依赖",
+        relinkStepLabel: "完成安装后重新链接复合技能",
+        compositeLinkNote: true,
+        invocationStyle: "global-ad",
+      });
     }
 
     // 聚合所有子包依赖生成复合根目录 package.json

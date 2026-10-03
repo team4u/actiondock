@@ -1875,9 +1875,13 @@ export default defineAction({
         assert.ok((skillMd).includes("test.builder-fixture"));
         assert.ok((skillMd).includes("test.second-package"));
         assert.ok((skillMd).includes("packages/second-package/playbooks/deploy.md"));
-        assert.ok((skillMd).includes("ad link"));
         assert.ok((skillMd).includes("故障排查与环境安装指引"));
-        assert.ok((skillMd).includes("npm install --omit=dev"));
+        // 主说明不展开完整安装教程；详细指引与复合链接语义落在参考文件
+        assert.ok((skillMd).includes("references/actiondock-runtime.md"));
+        const compositeRef = readFileSync(join(compositeRes.skillDir, "references", "actiondock-runtime.md"), "utf-8");
+        assert.ok((compositeRef).includes("ad link"));
+        assert.ok((compositeRef).includes("npm install --omit=dev"));
+        assert.ok((compositeRef).includes("复合技能"));
 
         // 验证归档产物
         assert.notStrictEqual(compositeRes.archivePath, undefined);

@@ -1,7 +1,6 @@
 import { basename } from "node:path";
 import type { ActionSpec, ProjectConfig } from "@actiondock/core";
 import type { PlaybookDefinition } from "@actiondock/core/project";
-import { formatInputSchema, formatOutputSchema } from "./schema-doc";
 import type {
   CompositeCustomSlot,
   CompositeCustomSection,
@@ -22,6 +21,10 @@ function getCleanSkillMetadata(config: ProjectConfig) {
   return { cleanName, desc };
 }
 
+/**
+ * 动作摘要列表渲染：只承载能力路由信息（标识、原始业务描述、只读或破坏性标注），
+ * 不展开完整输入输出 Schema；完整契约由 describe 命令按需调阅。
+ */
 function renderActionListMarkdown(
   actions: SkillActionItem[],
   options: { packageId?: string } = {}
@@ -35,7 +38,7 @@ function renderActionListMarkdown(
 
       const lines: string[] = [`- ${idLabel}${aDesc}`];
 
-      // 标注元数据解析
+      // 标注元数据解析（安全标注不得从主说明移走）
       if (a.annotations && typeof a.annotations === "object") {
         const annoList: string[] = [];
         if ((a.annotations as any).readOnly === true) {
@@ -48,12 +51,6 @@ function renderActionListMarkdown(
           lines.push(`  - 属性标注: ${annoList.join(", ")}`);
         }
       }
-
-      // 输入参数模式解析
-      lines.push(...formatInputSchema(a.inputSchema));
-
-      // 输出字段模式解析
-      lines.push(...formatOutputSchema(a.outputSchema));
 
       return lines.join("\n");
     })
@@ -129,28 +126,49 @@ function renderJsonEnvelopeSection(wording: JsonEnvelopeWording, options?: { wit
 }
 
 /**
- * 渲染「故障排查与环境安装指引」整节：source 与 composite 共用完整安装指引，
- * 差异点（依赖安装步骤标题、重新链接步骤标题、复合链接语义说明）通过参数分化。
+ * 渲染完整「运行时环境参考」正文：写入导出目录 references/actiondock-runtime.md，
+ * 由主说明按需链接调阅，不在每个技能正文重复展开整套安装与框架管理教程。
  */
-function renderTroubleshootingSection(options: {
+export function renderRuntimeReferenceContent(options: {
   /** 依赖安装步骤标题：source 为安装技能源码依赖，composite 为安装复合技能聚合依赖 */
   dependencyStepLabel: string;
   /** 重新链接步骤标题 */
   relinkStepLabel: string;
-  /** 是否在重新链接步骤末尾附加复合技能注册语义说明 */
+  /** 是否在重新链接步骤末尾附加复合链接语义说明 */
   compositeLinkNote?: boolean;
+  /** 调用方式说明：源码型与 Node 目录型分化（如是否需要全局 ad） */
+  invocationStyle: "global-ad" | "node-entry";
+  /** Node 目录型的入口相对路径（invocationStyle 为 node-entry 时使用） */
+  entryRelPath?: string;
 }): string {
   const relinkNote = options.compositeLinkNote
-    ? `\n  \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。`
+    ? `\`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。`
     : "";
-  return `---
+  const invocationSection =
+    options.invocationStyle === "node-entry"
+      ? `本技能为 Node 目录型交付，可直接使用自身入口执行，不要求全局安装 \`ad\` 命令行工具：
 
-## 故障排查与环境安装指引（按需查阅）
+\`\`\`bash
+${options.entryRelPath || "node ./entry.mjs"} list
+${options.entryRelPath || "node ./entry.mjs"} describe <action-id>
+${options.entryRelPath || "node ./entry.mjs"} run <action-id> --json --input-file input.json
+\`\`\`
 
-> [!NOTE]
-> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本节指引安装初始化。
+若宿主环境已全局安装 \`ad\`，亦可将其链接后统一调度。`
+      : `本技能为源码型交付，通过全局安装的 \`ad\` 命令行工具执行。`;
+  return `# ActionDock 运行时环境参考
 
-### 命令行工具与环境依赖未就绪时的安装指引
+> 本文件为技能主说明的按需参考，仅在环境未就绪或报错时查阅；正常执行流程无需阅读本文。
+
+## 调用方式
+
+${invocationSection}
+
+## 按需排查原则
+
+默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，严禁在任务启动前盲目进行前置环境检查或体检；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本文指引安装初始化。
+
+## 命令行工具与环境依赖未就绪时的安装指引
 
 若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
 
@@ -176,8 +194,26 @@ function renderTroubleshootingSection(options: {
 - **${options.relinkStepLabel}**：
   \`\`\`bash
   ad link "<skill_root>"
-  \`\`\`${relinkNote}`;
+  \`\`\`
+${relinkNote ? `  ${relinkNote}\n` : ""}`;
 }
+
+/**
+ * 渲染主说明中的「故障排查」精简入口：仅保留按需排查原则与参考文件链接。
+ */
+function renderTroubleshootingSection(referenceRelPath: string): string {
+  return `---
+
+## 故障排查与环境安装指引（按需查阅）
+
+> [!NOTE]
+> **按需排查原则**：默认宿主环境中已预置运行环境与依赖，正常执行流程直接调用上述 Action 即可，严禁在任务启动前盲目进行前置环境检查或体检。
+
+仅在报错提示命令不存在或依赖缺失时，按需查阅完整安装与自愈指引：[${referenceRelPath}](${referenceRelPath})`;
+}
+
+/** 运行时参考文件的导出目录内相对路径（单一事实源） */
+export const RUNTIME_REFERENCE_REL_PATH = "references/actiondock-runtime.md";
 
 export function generateSourceSkillMd(
   config: ProjectConfig,
@@ -204,9 +240,9 @@ ${desc}
 
 本技能为 **ActionDock 源码型技能包**。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
 
-### 注册与链接
+### 注册与链接（全局调用）
 
-在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\` 并完成注册：
+本技能面向全局挂载使用：在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\` 并完成注册链接，之后可在任意工作目录通过完全限定 ID 全局调用：
 
 \`\`\`bash
 ad link "<skill_root>"
@@ -242,13 +278,6 @@ ad run ${pkgId}/${firstAction} --json -- ASSIGNMENT...
 ad run ${pkgId}/${firstAction} --json --input-file input.json
 \`\`\`
 
-> 免注册本地执行：
-> 若工作目录已位于本技能根目录，亦可直接免 link 执行：
-> \`\`\`bash
-> cd <skill_root>
-> ad run ${firstAction} --json
-> \`\`\`
-
 ${renderJsonEnvelopeSection("envelope")}
 ${playbookSection}
 ---
@@ -273,10 +302,7 @@ ad state list --package ${pkgId}
 ad state get KEY --package ${pkgId}
 \`\`\`
 
-${renderTroubleshootingSection({
-  dependencyStepLabel: "安装技能源码依赖",
-  relinkStepLabel: "完成安装后重新链接本技能",
-})}
+${renderTroubleshootingSection(RUNTIME_REFERENCE_REL_PATH)}
 `;
 }
 
@@ -468,11 +494,7 @@ ad run ${sampleActionId} --json --input-file input.json
 
 ${renderJsonEnvelopeSection("envelope", { withDescriptions: false })}`;
 
-  const sTroubleshooting = renderTroubleshootingSection({
-    dependencyStepLabel: "安装复合技能聚合依赖",
-    relinkStepLabel: "完成安装后重新链接复合技能",
-    compositeLinkNote: true,
-  });
+  const sTroubleshooting = renderTroubleshootingSection(RUNTIME_REFERENCE_REL_PATH);
 
   const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
     { slot: "intro", text: sIntro },

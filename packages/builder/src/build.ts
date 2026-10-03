@@ -19,6 +19,7 @@ import { copyPlanEntries } from "./stage-sources";
 import { generateNodeHostEntrySource, generateNodeSupervisorEntrySource } from "./entry-generators";
 import { vendorDependencies } from "./vendor";
 import { generateStandaloneSkillMd } from "./skill/templates";
+import { writeRuntimeReferenceFile } from "./export-source";
 import {
   buildConfigForTemplates,
   writeSkillMd,
@@ -420,6 +421,16 @@ export async function exportNodeSkill(
       );
     }
   );
+
+  // 仅在使用自动模板时生成默认运行参考文件；Node 目录型使用自身入口，不要求全局安装 ad
+  if (usedExistingSkillMd === undefined && !options.skipSkillMd) {
+    writeRuntimeReferenceFile(targetSkillDir, {
+      dependencyStepLabel: "安装技能运行目录依赖",
+      relinkStepLabel: "完成安装后重新链接本技能",
+      invocationStyle: "node-entry",
+      entryRelPath: "node ./entry.mjs",
+    });
+  }
 
   let archivePath: string | undefined;
   if (options.archive) {
