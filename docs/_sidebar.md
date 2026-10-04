@@ -40,3 +40,4 @@
 - **底层架构解密**
   - [Runtime 执行引擎与分层架构](/architecture/runtime.md)
   - [安全加固与防御模型](/architecture/security.md)
+  - [版本发布与分发规范](/release.md)
