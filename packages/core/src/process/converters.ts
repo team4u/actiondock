@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ProcessInfo } from "@actiondock/sdk";
-import { ACCESS_DENIED, INPUT_VALIDATION_FAILED, ProcessError } from "../errors";
+import { ACCESS_DENIED, ProcessError } from "../errors";
 import type { ProcessOwnerFilter, StoredProcessRecord } from "./metadata-store";
 import type { ProcessOwner } from "./managed-record";
 
@@ -111,15 +111,4 @@ export function toStoredProcessRecord(
     effectiveLimits: info.effectiveLimits as any,
     startRequestId,
   };
-}
-
-/**
- * 校验正整数毫秒时长参数，非法时抛出参数错误。
- */
-export function checkPositiveDurationMs(value: number, field: string): void {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new ProcessError(INPUT_VALIDATION_FAILED, `Invalid ${field}: must be a positive integer (milliseconds)`, {
-      [field]: value,
-    });
-  }
 }

@@ -48,7 +48,6 @@ export class RunExecutor {
       },
     };
 
-    const runProcessId = `run-${crypto.randomUUID()}`;
     const chunks: OutputChunk[] = [];
     let totalBytes = 0;
     let truncated = false;

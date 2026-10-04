@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.js";
+import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.ts";
 
 const rootDir = resolve(import.meta.dirname, "..");
 const rootPkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));

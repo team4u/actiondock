@@ -1,52 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { discoverWorkspacePackages, type WorkspacePackage } from "./lib/discover-workspace-packages.ts";
 
 const rootDir = resolve(import.meta.dirname, "..");
 const tscBin = join(rootDir, "node_modules", "typescript", "bin", "tsc");
 
-interface PackageMeta {
-  name: string;
-  shortName: string;
-  dir: string;
-  dependencies: string[];
-}
-
-function discoverPackages(): PackageMeta[] {
-  const rootPkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf-8"));
-  const workspaces: string[] = rootPkg.workspaces || ["packages/*"];
-  const packages: PackageMeta[] = [];
-
-  for (const pattern of workspaces) {
-    if (pattern.endsWith("/*")) {
-      const baseDir = join(rootDir, pattern.slice(0, -2));
-      if (!existsSync(baseDir)) continue;
-      for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const pkgDir = join(baseDir, entry.name);
-        const pkgJsonPath = join(pkgDir, "package.json");
-        if (existsSync(pkgJsonPath)) {
-          const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
-          if (pkgJson.name && pkgJson.name.startsWith("@actiondock/")) {
-            const deps = Object.keys(pkgJson.dependencies || {}).filter((d) => d.startsWith("@actiondock/"));
-            packages.push({
-              name: pkgJson.name,
-              shortName: entry.name,
-              dir: pkgDir,
-              dependencies: deps,
-            });
-          }
-        }
-      }
-    }
-  }
-  return packages;
-}
-
-function topologicalSort(packages: PackageMeta[]): PackageMeta[] {
-  const packageMap = new Map<string, PackageMeta>(packages.map((p) => [p.name, p]));
+function topologicalSort(packages: WorkspacePackage[]): WorkspacePackage[] {
+  const packageMap = new Map<string, WorkspacePackage>(packages.map((p) => [p.name, p]));
   const visited = new Set<string>();
-  const sorted: PackageMeta[] = [];
+  const sorted: WorkspacePackage[] = [];
 
   function visit(pkgName: string, path: Set<string>) {
     if (path.has(pkgName)) {
@@ -129,8 +92,7 @@ function rewriteDistImports(dir: string): void {
 }
 
 function buildAll(): void {
-  const discovered = discoverPackages();
-  const sortedPackages = topologicalSort(discovered);
+  const sortedPackages = topologicalSort(discoverWorkspacePackages(rootDir));
 
   console.log(`[BUILD] Discovered and topologically sorted ${sortedPackages.length} packages:`);
   for (const p of sortedPackages) {

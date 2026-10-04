@@ -10,10 +10,12 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { bumpSemver, parseSemver } from "./lib/semver.js";
+import { spawnSync } from "node:child_process";
+import { bumpSemver, parseSemver } from "./lib/semver.ts";
+import { createCommandRunner } from "./lib/run-command.ts";
 
 const rootDir = resolve(import.meta.dirname, "..");
+const runCmd = createCommandRunner(rootDir);
 
 interface ReleaseOptions {
   version?: string;
@@ -26,28 +28,6 @@ interface ReleaseOptions {
   customNotes?: string;
   overview?: string;
   overviewFile?: string;
-}
-
-function runCmd(
-  cmd: string,
-  args: string[],
-  options: { cwd?: string; allowFailure?: boolean; captureOutput?: boolean } = {}
-): SpawnSyncReturns<string> {
-  const result = spawnSync(cmd, args, {
-    cwd: options.cwd || rootDir,
-    encoding: "utf8",
-    stdio: options.captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
-    shell: process.platform === "win32",
-  });
-
-  if (result.status !== 0 && !options.allowFailure) {
-    const errorMsg = options.captureOutput
-      ? (result.stderr || result.stdout || "").trim()
-      : `命令执行失败，退出码: ${result.status}`;
-    throw new Error(`执行失败: ${cmd} ${args.join(" ")}\n${errorMsg}`);
-  }
-
-  return result;
 }
 
 function getCurrentVersion(): string {

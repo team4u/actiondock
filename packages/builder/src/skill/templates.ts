@@ -4,7 +4,6 @@ import type { PlaybookDefinition } from "@actiondock/core/project";
 import type {
   CompositeCustomSlot,
   CompositeCustomSection,
-  CompositeCustomDeclaration,
 } from "./custom-parser";
 
 export type SkillActionItem =

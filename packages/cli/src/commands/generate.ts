@@ -5,7 +5,7 @@ import {
 import {
   writeActionTypes,
 } from "@actiondock/core/project";
-import { ArgumentError, notInProjectError, wrapAsExecutionError } from "../errors";
+import { notInProjectError, wrapAsExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";

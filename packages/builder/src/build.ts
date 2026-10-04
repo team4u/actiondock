@@ -405,7 +405,6 @@ export async function exportNodeSkill(
   const usedExistingSkillMd = writeSkillMd(
     root,
     targetSkillDir,
-    plan,
     { skipSkillMd: options.skipSkillMd, skillMdPath: options.skillMdPath, pkgSlug },
     () => {
       const configForTemplates = buildConfigForTemplates(

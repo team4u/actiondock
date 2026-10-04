@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { Capabilities, LaunchSpec } from "@actiondock/sdk";
 import type {
   ProcessDriver,
-  ProcessDriverCallbacks,
   ProcessDriverHandle,
   ProcessHandle,
   ProcessObserver,

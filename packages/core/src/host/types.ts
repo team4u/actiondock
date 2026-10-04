@@ -27,15 +27,9 @@ import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
 import type {
   ActionDockService,
-  ConfigPort,
   ConfigValueView,
-  DiscoveryPort,
   EventsPort,
-  ExecutionPort,
   ListRunsOptions,
-  RunEventSubscriptionOptions,
-  RunsPort,
-  StatePort,
   StateScopeOptions,
 } from "../service/types";
 import type { StateEntry } from "../storage/types";

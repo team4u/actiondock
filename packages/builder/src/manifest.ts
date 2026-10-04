@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { ACTION_ID_REGEX, getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";

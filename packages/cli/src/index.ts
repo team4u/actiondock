@@ -1,6 +1,6 @@
 import { CommanderError } from "commander";
 import { StandaloneDispatcher } from "@actiondock/core/server";
-import { createCliProgram, CLI_VERSION, isNodeArgv } from "./commands/index";
+import { createCliProgram, isNodeArgv } from "./commands/index";
 import { formatError, SigintError } from "./errors";
 import { renderError } from "./renderer";
 import { ExitCode, type InvocationControl, type CliContext, type StandaloneOptions } from "./types";

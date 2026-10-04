@@ -11,7 +11,7 @@ import {
   PATH_TRAVERSAL,
 } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
-import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
+import { isSecretConfigKey, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
 import {
   getSubPath,

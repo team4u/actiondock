@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { ActionDockError, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
+import { UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
 import { STORAGE_SCHEMA_VERSION, type SqliteDriver } from "./types";
 
 /**

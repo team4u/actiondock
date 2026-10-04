@@ -1,7 +1,6 @@
 import {
   PROCESS_TIMEOUT,
   PROCESS_CANCELLED,
-  PROCESS_FAILED,
   ProcessError,
 } from "@actiondock/core";
 import {
@@ -404,26 +403,6 @@ export class MockProcessExecutor implements ProcessExecutor {
     if (this.driver instanceof FakeProcessDriver) {
       this.driver.reset();
     }
-  }
-
-  /**
-   * 渲染已注册匹配器列表，辅助定位拼写失误。
-   */
-  private describeMatchers(): string {
-    if (this.mocks.length === 0) {
-      return "(no registered matchers)";
-    }
-    return this.mocks
-      .map((m) => {
-        const desc =
-          typeof m.matcher === "string"
-            ? `"${m.matcher}"`
-            : m.matcher instanceof RegExp
-            ? `/${m.matcher.source}/${m.matcher.flags}`
-            : "[Function]";
-        return `- ${desc}`;
-      })
-      .join("\n");
   }
 
   private findMock(

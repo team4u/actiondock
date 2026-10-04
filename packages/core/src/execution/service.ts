@@ -68,7 +68,7 @@ import {
   type InitialRunRecordInput,
   type RunFinalizer,
 } from "../runtime/run-persistence";
-import { createActionContext, StderrLogger } from "../runtime/context";
+import { createActionContext } from "../runtime/context";
 import type { ProcessOwner } from "../process";
 import { validateActionInputValue, validateJsonValue } from "../value-validator";
 import { validateSchemaOnly } from "../schema/validator";
@@ -146,7 +146,6 @@ export class DefaultExecutionService implements ExecutionService {
   private clock: Clock;
   private process?: ProcessAPI;
   private actionInvoker?: ActionInvoker;
-  private customHome?: string;
   private registry: ActionRegistry;
   private activeRuns = new Map<string, ActiveRun>();
   private isClosing = false;
@@ -178,7 +177,6 @@ export class DefaultExecutionService implements ExecutionService {
     this.globalStorage = options.globalStorage;
     this.clock = options.clock ?? new SystemClock();
     this.process = options.process;
-    this.customHome = options.customHome;
     this.registry = new ActionRegistry(options.actions);
   }
 

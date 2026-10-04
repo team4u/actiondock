@@ -161,7 +161,6 @@ export function resolveCustomSkillDeclaration(
 export function writeSkillMd(
   root: string,
   destDir: string,
-  plan: SelectionPlan,
   options: { skipSkillMd?: boolean; skillMdPath?: string; pkgSlug: string },
   generate: () => string
 ): string | undefined {

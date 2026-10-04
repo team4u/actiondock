@@ -13,8 +13,6 @@ import {
   type ActionManifestEntry,
   loadManifest,
   loadPlaybooks,
-  type PlaybookDefinition,
-  type ProjectConfig,
   validateManifest,
 } from "@actiondock/core/project";
 import {
@@ -28,8 +26,6 @@ import type {
   ActionDependency,
   AssetDependency,
   BuildPlanDependencies,
-  ExternalDependency,
-  LockfileInfo,
   PlaybookPlanEntry,
   SelectionPlan,
   SelectionPlannerOptions,

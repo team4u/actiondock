@@ -1,6 +1,5 @@
 import type {
   ActionDefinition,
-  ActionRef,
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
@@ -11,7 +10,6 @@ import type {
 import type {
   ActionInvoker,
   CancelResult,
-  ExecutionService,
   ExecutionTicket,
   LocalActionResolver,
 } from "../execution/types";

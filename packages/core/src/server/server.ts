@@ -32,7 +32,6 @@ import type {
   EffectiveServerPolicy,
   ServerOptions,
   ServerTlsOptions,
-  ServerViewOptions,
 } from "./types";
 
 /**

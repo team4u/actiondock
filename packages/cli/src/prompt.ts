@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { readStdinBounded } from "@actiondock/core/project";
 import { ArgumentError, SigintError } from "./errors";
 import type { CliContext } from "./types";
 
@@ -164,22 +165,13 @@ export async function readStreamLine(stream: NodeJS.ReadableStream): Promise<str
 
 /**
  * 从流中完整读取所有数据，并移除末尾的换行符。
+ *
+ * 委托 readStdinBounded 统一收集：保留宽松 UTF-8 解码与 BOM，
+ * 补齐默认 10MB 上限保护，流错误通过 INPUT_FILE_READ_FAILED 透传。
  */
 export async function readEntireStdin(stream: NodeJS.ReadableStream = process.stdin): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on("data", (chunk) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-    stream.once("end", () => {
-      const content = Buffer.concat(chunks).toString("utf-8");
-      resolve(content.replace(/[\r\n]+$/, ""));
-    });
-    stream.once("error", reject);
-    if ("resume" in stream && typeof (stream as any).resume === "function") {
-      (stream as any).resume();
-    }
-  });
+  const content = await readStdinBounded(stream, { strictUtf8: false });
+  return content.replace(/[\r\n]+$/, "");
 }
 
 /**

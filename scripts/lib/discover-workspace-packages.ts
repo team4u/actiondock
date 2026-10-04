@@ -2,7 +2,7 @@
  * 工作区子包发现的单一事实源。
  *
  * 读取根 package.json 的 workspaces 声明并按 @actiondock 前缀过滤，
- * 替代 bump-version / publish / pack-smoke-test 三个脚本各自硬编码的
+ * 替代 bump-version / publish / pack-smoke-test / build 各脚本各自硬编码的
  * 子包清单，新增或更名子包时无需逐一同步。
  */
 
@@ -15,6 +15,8 @@ export interface WorkspacePackage {
   /** 包目录短名（即 packages/ 下的目录名） */
   shortName: string;
   dir: string;
+  /** 本包声明的 @actiondock/ 前缀内部依赖包名（不含版本） */
+  dependencies: string[];
 }
 
 /**
@@ -60,6 +62,7 @@ export function discoverWorkspacePackages(
           name: pkgJson.name,
           shortName: entry.name,
           dir: pkgDir,
+          dependencies: Object.keys(pkgJson.dependencies || {}).filter((d) => d.startsWith(prefix)),
         });
       }
     }

@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { extractPrereleaseTag } from "./lib/semver.js";
-import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.js";
+import { extractPrereleaseTag } from "./lib/semver.ts";
+import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.ts";
+import { createCommandRunner } from "./lib/run-command.ts";
 
 const rootDir = resolve(import.meta.dirname, "..");
+const runCmd = createCommandRunner(rootDir);
 
 /**
  * 拓扑顺序定义的子包发布清单（依赖拓扑顺序硬编码，成员来自工作区发现单一事实源）
@@ -21,23 +22,6 @@ const PUBLISH_ORDER = ["sdk", "core", "testing", "builder", "mcp", "cli"];
 const PUBLISH_PACKAGES: PackageInfo[] = discoverWorkspacePackages(rootDir)
   .filter((pkg) => PUBLISH_ORDER.includes(pkg.shortName))
   .sort((a, b) => PUBLISH_ORDER.indexOf(a.shortName) - PUBLISH_ORDER.indexOf(b.shortName));
-
-function runCmd(cmd: string, args: string[], options: { cwd?: string; allowFailure?: boolean; captureOutput?: boolean } = {}) {
-  const result = spawnSync(cmd, args, {
-    cwd: options.cwd || rootDir,
-    encoding: "utf8",
-    stdio: options.captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
-  });
-
-  if (result.status !== 0 && !options.allowFailure) {
-    const errorMsg = options.captureOutput
-      ? (result.stderr || result.stdout || "").trim()
-      : `Command failed with code ${result.status}`;
-    throw new Error(`Failed to execute: ${cmd} ${args.join(" ")}\n${errorMsg}`);
-  }
-
-  return result;
-}
 
 function resolveTargetVersion(): string {
   const corePkg = JSON.parse(readFileSync(join(rootDir, "packages", "core", "package.json"), "utf8"));
@@ -199,14 +183,12 @@ async function main() {
         if (remoteInfo.exists && remoteInfo.shasum === localTarballs[pkg.name].shasum) {
           console.log(`  版本已存在于远端且摘要一致，跳过上传`);
         } else {
-          let published = false;
           const maxPublishRetries = 3;
           for (let pAttempt = 1; pAttempt <= maxPublishRetries; pAttempt++) {
             try {
               runCmd("npm", publishArgs, {
                 cwd: pkg.dir,
               });
-              published = true;
               break;
             } catch (publishErr) {
               if (pAttempt < maxPublishRetries) {

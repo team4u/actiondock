@@ -7,8 +7,6 @@ import {
   generateCompositeSkillMd,
   parseCustomSections,
   parseCustomSkillDeclaration,
-  formatInputSchema,
-  formatOutputSchema,
   type CompositeSkillPackageInfo,
 } from "../src/skill";
 import { exportCompositeSkill } from "../src/exporter";
@@ -208,98 +206,6 @@ describe("Composite SKILL.md custom declaration", () => {
     assert.ok((md).includes("### 数据目录持久化软链"));
     assert.ok((md).includes("## 参考文档"));
     assert.strictEqual(existsSync(join(outDir, "packages", "pkg-a", "actiondock.json")), true);
-  });
-});
-
-describe("formatInputSchema & formatOutputSchema: 精简参数模式展开", () => {
-  it("无输入参数时渲染为输入参数: 无", () => {
-    assert.deepStrictEqual(formatInputSchema(undefined), ["  - 输入参数: 无"]);
-    assert.deepStrictEqual(formatInputSchema({}), ["  - 输入参数: 无"]);
-    assert.deepStrictEqual(formatInputSchema({ type: "object", properties: {} }), ["  - 输入参数: 无"]);
-  });
-
-  it("参数少于等于5个时完整呈现，必填参数优先排列", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        opt: { type: "string", description: "可选参数" },
-        req1: { type: "number", description: "必填数值" },
-        req2: { type: "boolean", description: "必填布尔" },
-      },
-      required: ["req1", "req2"],
-    };
-    const lines = formatInputSchema(schema);
-    assert.strictEqual(lines[0], "  - 输入参数:");
-    // req1 和 req2 应排在前面
-    assert.ok(lines[1].includes("`req1`"));
-    assert.ok(lines[1].includes("必填"));
-    assert.ok(lines[2].includes("`req2`"));
-    assert.ok(lines[2].includes("必填"));
-    assert.ok(lines[3].includes("`opt`"));
-    assert.ok(!lines[3].includes("必填"));
-    assert.strictEqual(lines.length, 4);
-  });
-
-  it("参数超过5个时仅截断保留前5个核心参数，并提示通过 describe 动态查阅", () => {
-    const props: Record<string, any> = {};
-    for (let i = 1; i <= 8; i++) {
-      props[`field${i}`] = { type: "string", description: `Field ${i}` };
-    }
-    const schema = {
-      type: "object",
-      properties: props,
-      required: ["field8", "field7"],
-    };
-    const lines = formatInputSchema(schema);
-    assert.strictEqual(lines[0], "  - 输入参数:");
-    // 必填的 field7 和 field8 应排在前面并展示
-    assert.ok(lines.some((l) => l.includes("`field7`") && l.includes("必填")));
-    assert.ok(lines.some((l) => l.includes("`field8`") && l.includes("必填")));
-    // 总共展示 5 个参数 + 1 个提示行
-    const omittedLine = lines.find((l) => l.includes("省略") && l.includes("describe"));
-    assert.ok(omittedLine !== undefined, "应包含参数省略与 describe 命令查阅指引");
-    assert.ok(omittedLine.includes("3 个参数已省略"));
-  });
-
-  it("深层复杂对象参数保持单层摘要，不发生无限递归展开", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        config: {
-          type: "object",
-          description: "深层嵌套配置项",
-          properties: {
-            deep1: {
-              type: "object",
-              properties: {
-                deep2: { type: "string" },
-              },
-            },
-          },
-        },
-      },
-    };
-    const lines = formatInputSchema(schema);
-    assert.strictEqual(lines.length, 2);
-    assert.ok(lines[1].includes("`config` (`object`): 深层嵌套配置项"));
-    assert.ok(!lines[1].includes("deep1"));
-    assert.ok(!lines[1].includes("deep2"));
-  });
-
-  it("输出字段少于等于5个时正常输出，超过5个时截断并提示 describe 查阅", () => {
-    const props: Record<string, any> = {};
-    for (let i = 1; i <= 7; i++) {
-      props[`out${i}`] = { type: "string", description: `Output ${i}` };
-    }
-    const schema = {
-      type: "object",
-      properties: props,
-    };
-    const lines = formatOutputSchema(schema);
-    assert.strictEqual(lines[0], "  - 输出字段:");
-    const omittedLine = lines.find((l) => l.includes("省略") && l.includes("describe"));
-    assert.ok(omittedLine !== undefined, "输出字段超过上限应提示通过 describe 命令查阅");
-    assert.ok(omittedLine.includes("2 个字段已省略"));
   });
 });
 

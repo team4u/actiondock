@@ -1,7 +1,7 @@
 import { parseActionRef } from "../catalog/resolve-action";
 import { ActionDockError, ACTION_FORBIDDEN, PACKAGE_NOT_ALLOWED } from "../errors";
 import type { McpEndpointHandler } from "./mcp-endpoint";
-import { extractBearerToken, safeEqual } from "./security";
+import { safeEqual } from "./security";
 import type { EffectiveServerPolicy, ServerOptions, ServerViewOptions } from "./types";
 
 export { extractBearerToken } from "./security";

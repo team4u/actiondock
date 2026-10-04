@@ -1,4 +1,3 @@
-import { runCommandSync, whichExecutable } from "../../../scripts/lib/spawn-helper.mjs";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
@@ -9,22 +8,7 @@ import { initProject } from "@actiondock/core";
 import pkg from "../package.json";
 import { runCliAsync } from "./helpers/run-cli";
 
-const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
-
 let customHome: string | undefined;
-
-function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
-  return runCommandSync(["bun", cliPath, ...args], {
-    cwd,
-    env: {
-      ...process.env,
-      ...(customHome ? { ACTIONDOCK_HOME: customHome } : {}),
-      ...env,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-}
 
 describe("CLI Review - Commands & Arguments Regression", () => {
   let tempDir: string;

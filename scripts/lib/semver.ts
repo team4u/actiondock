@@ -1,8 +1,8 @@
 /**
- * scripts 域共享的语义化版本纯函数库。
- * 核心解析能力复用 packages/core/src/utils/index.ts 中的 parseSemVer 单一事实源。
+ * 工程脚本共享的语义化版本纯函数库。
+ * 直接复用核心纯函数模块，不依赖构建产物或加载钩子。
  */
-import { parseSemVer, type SemVer } from "../../packages/core/src/utils/index.ts";
+import { parseSemVer, type SemVer } from "../../packages/core/src/utils/semver.ts";
 
 export type Semver = SemVer;
 

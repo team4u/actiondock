@@ -18,7 +18,6 @@ import type {
   ExecutionResult,
   JsonValue,
   Logger,
-  RuntimeError,
   StateStore,
 } from "@actiondock/sdk";
 import { ActionRuntimeError } from "@actiondock/sdk";

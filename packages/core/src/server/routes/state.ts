@@ -14,7 +14,6 @@ import {
 } from "../../errors";
 import { readJsonBody } from "../body";
 import {
-  assertPackageAllowed,
   getSubPath,
   isManagementAllowedByPolicy,
   jsonResponse,

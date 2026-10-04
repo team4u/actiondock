@@ -6,7 +6,6 @@ import type {
   JsonValue,
   Logger,
   ProcessAPI,
-  ProgressReporter,
   RunRecord,
   RunStatus,
 } from "@actiondock/sdk";

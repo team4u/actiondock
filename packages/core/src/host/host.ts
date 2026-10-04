@@ -37,7 +37,6 @@ import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import {
   ActionDockError,
-  ACTION_CALL_CYCLE,
   ACTION_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_SUBRUN_LIMIT,
@@ -61,11 +60,9 @@ import {
   type ActionCatalog,
   type DiscoveredPackage,
   type PackageGraph,
-  type PackageNode,
   type ResolvedAction,
 } from "../catalog";
 import { parseActionRef } from "../catalog/resolve-action";
-import { createPackageIdentity } from "../runtime/identity";
 import {
   buildRuntimeError,
   collectPackageInfos,

@@ -50,7 +50,6 @@ export function stageSourceSkill(
   const usedExistingSkillMd = writeSkillMd(
     root,
     skillDir,
-    plan,
     { skipSkillMd: options.skipSkillMd, skillMdPath: options.skillMdPath, pkgSlug },
     () =>
       generateSourceSkillMd(

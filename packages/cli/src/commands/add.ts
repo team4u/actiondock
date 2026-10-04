@@ -16,7 +16,6 @@ import {
   type ActionDockManifest,
 } from "@actiondock/core/project";
 import { Command } from "commander";
-import { ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {

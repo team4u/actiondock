@@ -1,7 +1,6 @@
 import type {
   Bytes,
   OutputChunk,
-  ProcessAPI,
 } from "./types";
 
 /**

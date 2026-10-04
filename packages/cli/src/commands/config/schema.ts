@@ -3,7 +3,7 @@ import {
 } from "@actiondock/core/project";
 import type { Command } from "commander";
 import { notInProjectError } from "../../errors";
-import { renderConfigSchema, renderResult, writeStdout } from "../../renderer";
+import { renderConfigSchema, renderResult } from "../../renderer";
 import { buildMergedConfigEntries } from "../../services/config-merge";
 import type { CliContext } from "../../types";
 import { applyTargetOptions, getEffectiveOptions, requirePackageRoot, withService } from "../../utils";

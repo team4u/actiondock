@@ -1,4 +1,4 @@
-import type { ActionDefinition, ActionRef } from "@actiondock/sdk";
+import type { ActionDefinition } from "@actiondock/sdk";
 
 /**
  * Action 注册表（单一职责模块）。
@@ -98,25 +98,6 @@ export class ActionRegistry {
   public listActions(): ActionDefinition[] {
     return Array.from(this.actions.values());
   }
-}
-
-/**
- * 本地注册表阶梯检索：跨包引用查 "pkg/action"，本包引用依次查短标识与限定标识。
- */
-export function findLocalAction(
-  actions: Map<string, ActionDefinition>,
-  parsed: ActionRef,
-  currentPackageId: string
-): ActionDefinition | undefined {
-  const targetActionId = parsed.actionId;
-  const targetPackageId = parsed.packageId;
-  if (targetPackageId && targetPackageId !== currentPackageId) {
-    return actions.get(`${targetPackageId}/${targetActionId}`);
-  }
-  return (
-    actions.get(targetActionId) ||
-    (currentPackageId ? actions.get(`${currentPackageId}/${targetActionId}`) : undefined)
-  );
 }
 
 /**

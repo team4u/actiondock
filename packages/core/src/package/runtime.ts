@@ -1,9 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   ActionDefinition,
-  ActionRef,
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
@@ -13,7 +11,6 @@ import { DefaultExecutionService } from "../execution/service";
 import type {
   ActionInvoker,
   CancelResult,
-  ExecutionService,
   ExecutionTicket,
 } from "../execution/types";
 import { createNodePlatform, type RuntimePlatform } from "../platform";

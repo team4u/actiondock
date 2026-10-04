@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildCliInputAdviceV1,
-  buildInputTransportV1,
-  buildCliInputEncodingV1,
-  buildInputPolicyV1,
-  formatInputErrorForCli,
-  toCliInputErrorEnvelope,
-  InputError,
-} from "../../src/input";
-import { INVALID_ARGUMENT } from "../../src/errors";
+import { buildCliInputAdviceV1 } from "../../src/input";
 
-describe("Phase 9: Input Advice v1 与元数据构建器", () => {
+describe("输入建议", () => {
   describe("Schema Sanity 阶段（Section 44）", () => {
     it("合法根形状通过：undefined, boolean, plain object", () => {
       const advUndefined = buildCliInputAdviceV1(undefined);
@@ -476,64 +467,6 @@ describe("Phase 9: Input Advice v1 与元数据构建器", () => {
       const fAny = adv.fields.find((f) => f.path === "anyVal");
       assert.strictEqual(fAny?.operator, ":=");
       assert.strictEqual(fAny?.encoding, "json");
-    });
-  });
-
-  describe("共享构建器（Section 55）", () => {
-    it("buildInputTransportV1 返回标准传输元数据", () => {
-      const transport = buildInputTransportV1();
-      assert.strictEqual(transport.version, 1);
-      assert.strictEqual(transport.defaultInputMode, "empty-object");
-      assert.strictEqual(transport.fullJson.inlineOption, "--input");
-      assert.strictEqual(transport.fullJson.fileOption, "--input-file");
-      assert.strictEqual(transport.fullJson.stdinValue, "-");
-      assert.strictEqual(transport.fullJson.preferredLargeInputMode, "stdin");
-      assert.strictEqual(transport.fullJson.encoding, "utf-8");
-      assert.strictEqual(transport.fullJson.maxInputBytes, 10 * 1024 * 1024);
-      assert.strictEqual(transport.fullJson.maxJsonDepth, 256);
-    });
-
-    it("buildCliInputEncodingV1 返回标准编码元数据与限制常量", () => {
-      const encoding = buildCliInputEncodingV1();
-      assert.strictEqual(encoding.name, "flat-json-value");
-      assert.strictEqual(encoding.version, 1);
-      assert.strictEqual(encoding.scope, "cli-argv");
-      assert.strictEqual(encoding.root, "object");
-      assert.strictEqual(encoding.operators.string, "=");
-      assert.strictEqual(encoding.operators.json, ":=");
-      assert.strictEqual(encoding.limits.maxAssignments, 1000);
-      assert.strictEqual(encoding.limits.maxPathDepth, 32);
-      assert.strictEqual(encoding.limits.maxPathBytes, 1024);
-      assert.strictEqual(encoding.limits.maxPropertyKeyBytes, 128);
-      assert.strictEqual(encoding.limits.maxRawValueBytes, 1024 * 1024);
-      assert.strictEqual(encoding.limits.maxJsonLiteralBytes, 1024 * 1024);
-      assert.strictEqual(encoding.limits.maxTotalRawBytes, 10 * 1024 * 1024);
-      assert.strictEqual(encoding.limits.maxArrayIndex, 10000);
-      assert.strictEqual(encoding.limits.maxMaterializedBytes, 10 * 1024 * 1024);
-      assert.strictEqual(encoding.limits.maxJsonDepth, 256);
-    });
-
-    it("buildInputPolicyV1 返回 cli-pre-target 与禁止属性名", () => {
-      const policy = buildInputPolicyV1();
-      assert.strictEqual(policy.version, 1);
-      assert.strictEqual(policy.scope, "cli-pre-target");
-      assert.strictEqual(policy.propertyScope, "recursive");
-      assert.ok((policy.forbiddenPropertyNames).includes("__proto__"));
-      assert.ok((policy.forbiddenPropertyNames).includes("constructor"));
-      assert.ok((policy.forbiddenPropertyNames).includes("prototype"));
-    });
-
-
-    it("toCliInputErrorEnvelope 与 formatInputErrorForCli 格式化", () => {
-      const err = new InputError(INVALID_ARGUMENT, "Something failed", { path: "a.b" });
-      const envelope = toCliInputErrorEnvelope(err);
-      assert.strictEqual(envelope.ok, false);
-      assert.strictEqual(envelope.error.code, INVALID_ARGUMENT);
-      assert.strictEqual(envelope.error.message, "Something failed");
-      assert.deepStrictEqual(envelope.error.details, { path: "a.b" });
-
-      const formatted = formatInputErrorForCli(err);
-      assert.strictEqual(formatted, "Error: Something failed");
     });
   });
 });

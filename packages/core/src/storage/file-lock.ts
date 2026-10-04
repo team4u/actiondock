@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { Stats } from "node:fs";
 import {
   existsSync,
   mkdirSync,

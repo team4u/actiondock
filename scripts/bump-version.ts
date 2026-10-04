@@ -1,28 +1,22 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { normalizeSemver } from "./lib/semver.js";
-import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.js";
+import { normalizeSemver } from "./lib/semver.ts";
+import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.ts";
+import { alignInternalDependencies, internalDependencyRange } from "./lib/align-dependencies.ts";
 
 const rootDir = resolve(import.meta.dirname, "..");
 
 const subPackages = discoverWorkspacePackages(rootDir).map((pkg) => pkg.shortName);
 
-const examplePackages = [
-  "github-tools",
-];
-
+/** 发现 examples/ 下携带 package.json 的示例包目录（按目录名排序） */
 function getExamplePackages(): string[] {
   const examplesDir = join(rootDir, "examples");
-  if (!existsSync(examplesDir)) return examplePackages;
-  try {
-    const discovered = readdirSync(examplesDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && existsSync(join(examplesDir, d.name, "package.json")))
-      .map((d) => d.name);
-    return Array.from(new Set([...examplePackages, ...discovered]));
-  } catch {
-    return examplePackages;
-  }
+  if (!existsSync(examplesDir)) return [];
+  const discovered = readdirSync(examplesDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(examplesDir, d.name, "package.json")))
+    .map((d) => d.name);
+  return discovered.sort((a, b) => a.localeCompare(b));
 }
 
 interface BumpOptions {
@@ -85,13 +79,7 @@ function main() {
   const rootPkgPath = join(rootDir, "package.json");
   updateJsonFile(rootPkgPath, (pkg) => {
     pkg.version = targetVersion;
-    if (pkg.dependencies) {
-      for (const dep of Object.keys(pkg.dependencies)) {
-        if (dep.startsWith("@actiondock/")) {
-          pkg.dependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-        }
-      }
-    }
+    alignInternalDependencies(pkg, targetVersion);
   });
   console.log(`Updated root package.json -> ${targetVersion}`);
 
@@ -100,27 +88,7 @@ function main() {
     const pkgPath = join(rootDir, "packages", sub, "package.json");
     updateJsonFile(pkgPath, (pkg) => {
       pkg.version = targetVersion;
-      if (pkg.dependencies) {
-        for (const dep of Object.keys(pkg.dependencies)) {
-          if (dep.startsWith("@actiondock/")) {
-            pkg.dependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-          }
-        }
-      }
-      if (pkg.peerDependencies) {
-        for (const dep of Object.keys(pkg.peerDependencies)) {
-          if (dep.startsWith("@actiondock/")) {
-            pkg.peerDependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-          }
-        }
-      }
-      if (pkg.devDependencies) {
-        for (const dep of Object.keys(pkg.devDependencies)) {
-          if (dep.startsWith("@actiondock/")) {
-            pkg.devDependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-          }
-        }
-      }
+      alignInternalDependencies(pkg, targetVersion);
     });
     console.log(`Updated packages/${sub}/package.json -> ${targetVersion}`);
   }
@@ -132,20 +100,7 @@ function main() {
     if (existsSync(pkgPath)) {
       updateJsonFile(pkgPath, (pkg) => {
         pkg.version = targetVersion;
-        if (pkg.dependencies) {
-          for (const dep of Object.keys(pkg.dependencies)) {
-            if (dep.startsWith("@actiondock/")) {
-              pkg.dependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-            }
-          }
-        }
-        if (pkg.devDependencies) {
-          for (const dep of Object.keys(pkg.devDependencies)) {
-            if (dep.startsWith("@actiondock/")) {
-              pkg.devDependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
-            }
-          }
-        }
+        alignInternalDependencies(pkg, targetVersion);
       });
       console.log(`Updated examples/${example}/package.json`);
     }
@@ -163,7 +118,7 @@ function main() {
   // packages/core/src/project/init.ts
   const initTsPath = join(rootDir, "packages", "core", "src", "project", "init.ts");
   let initTs = readFileSync(initTsPath, "utf8");
-  const depVer = isPrerelease ? targetVersion : `^${targetVersion}`;
+  const depVer = internalDependencyRange(targetVersion);
   initTs = initTs.replace(
     /"@actiondock\/sdk":\s*"[^"]+"/,
     `"@actiondock/sdk": "${depVer}"`
