@@ -386,6 +386,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const host = await createActionDockHost({
         packages: [appA, appB],
         autoLoadCurrentProject: false,
+        inMemory: true,
       });
 
       // 1. 使用短 ID "calc" 查询存在歧义冲突，返回 INVALID_ACTION_REF

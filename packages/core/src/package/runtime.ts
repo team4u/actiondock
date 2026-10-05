@@ -169,6 +169,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   public readonly generationId: string;
   public readonly packageRoot?: string;
   public readonly projectConfig: ProjectConfig;
+  public readonly inMemory: boolean;
   private readonly platform: RuntimePlatform;
   private readonly actionsMap: Map<string, ActionDefinition>;
   private readonly options: PackageRuntimeInternalOptions;
@@ -191,6 +192,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   constructor(options: PackageRuntimeInternalOptions = {}) {
     this.options = options;
+    this.inMemory = Boolean(options.inMemory);
     // - 确定项目根路径与配置对象
     let packageRoot = options.packageRoot;
     let projectConfig = options.projectConfig;

@@ -1453,9 +1453,15 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   private getGlobalStorage(): RuntimeStorage {
     if (!this.globalStorage) {
-      const hasInMemoryPackage = this.options.packages?.some(
-        (item) => typeof item !== "string" && !isPackageRuntime(item) && item.inMemory
-      );
+      const hasInMemoryPackage =
+        this.options.packages?.some((item) => {
+          if (typeof item === "string") return false;
+          if (isPackageRuntime(item)) {
+            return Boolean(item.inMemory || (item as any).options?.inMemory);
+          }
+          return Boolean(item.inMemory);
+        }) ||
+        Array.from(this.runtimes.values()).some((rt) => Boolean(rt.inMemory || (rt as any).options?.inMemory));
       const inMemory = Boolean(this.options.inMemory || hasInMemoryPackage);
       this.globalStorage =
         this.options.platform?.storage?.createGlobalStorage?.({

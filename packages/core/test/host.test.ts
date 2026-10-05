@@ -71,6 +71,29 @@ describe("ActionDockHost 多包宿主容器", () => {
     await host.close();
   });
 
+  it("当仅传入 PackageRuntime 内存实例且未显式指定 inMemory 时，Host 全局存储自动继承内存模式", async () => {
+    const appA = await createPackageRuntime({
+      projectConfig: { id: "pkg.inmem-a", name: "InMem A", actions: {} },
+      inMemory: true,
+    });
+    const appB = await createPackageRuntime({
+      projectConfig: { id: "pkg.inmem-b", name: "InMem B", actions: {} },
+      inMemory: true,
+    });
+
+    const host = await createActionDockHost({
+      packages: [appA, appB],
+      autoLoadCurrentProject: false,
+    });
+
+    assert.strictEqual(appA.inMemory, true);
+    assert.strictEqual(appB.inMemory, true);
+    const globalStorage = (host as any).getGlobalStorage();
+    assert.strictEqual((globalStorage as any).dbPath, ":memory:");
+
+    await host.close();
+  });
+
   it("支持通过 projectRoot 自动加载当前工程及重复包注册冲突校验", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "actiondock-host-proj-"));
 

@@ -403,6 +403,18 @@ describe("SqliteRuntimeStorage", () => {
         s.close();
       }
     });
+
+    it("NodeSqliteDriver 构造时即完成 busy_timeout 5000ms 配置", () => {
+      const driver = new NodeSqliteDriver(":memory:");
+      try {
+        const row = driver.prepare("PRAGMA busy_timeout;").get() as {
+          timeout?: number;
+        } | undefined;
+        assert.strictEqual(Number(row?.timeout), 5000);
+      } finally {
+        driver.close();
+      }
+    });
   });
 
   describe("Runs", () => {

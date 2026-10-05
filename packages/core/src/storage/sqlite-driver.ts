@@ -25,6 +25,11 @@ export class NodeSqliteDriver implements SqliteDriver {
     } else {
       this.db = dbPath;
     }
+    try {
+      this.db.exec("PRAGMA busy_timeout = 5000;");
+    } catch {
+      // 忽略已关闭或不支持的只读连接异常
+    }
   }
 
   /**

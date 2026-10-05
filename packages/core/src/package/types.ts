@@ -288,6 +288,8 @@ export interface PackageRuntime {
   readonly packageRoot?: string;
   /** 项目配置对象（actiondock.json 解析结果） */
   readonly projectConfig: ProjectConfig;
+  /** 是否采用纯内存运行模式 */
+  readonly inMemory?: boolean;
 
   /**
    * 受信任内部调用方法（Host 或子任务执行主链调用入口）。

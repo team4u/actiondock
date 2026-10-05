@@ -25,10 +25,10 @@ export function initSchema(
     }
   }
 
+  // 跨进程写并发基线：优先设置 busy_timeout，确保后续 PRAGMA（如 journal_mode = WAL）与表结构初始化在锁争用时能够重试等待
+  driver.exec("PRAGMA busy_timeout = 5000;");
   driver.exec("PRAGMA journal_mode = WAL;");
   driver.exec("PRAGMA synchronous = NORMAL;");
-  // 跨进程写并发基线
-  driver.exec("PRAGMA busy_timeout = 5000;");
 
   const versionRes = driver.prepare("PRAGMA user_version;").get<{ user_version: number }>();
   const version = Number(versionRes?.user_version ?? 0);
