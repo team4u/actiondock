@@ -100,8 +100,24 @@ export interface ListRunsOptions {
   status?: string;
   /** 模糊意图检索模式 */
   intent?: string;
+  /** 幂等请求标识集合（经 idempotency_keys 反查关联运行记录） */
+  requestIds?: string[];
+  /** 偏移游标条数（跳过的记录数） */
+  offset?: number;
   /** 最大返回记录条数限制 */
   limit?: number;
+  /** 取消信号，用于中止读取请求 */
+  signal?: AbortSignal;
+  /** 包白名单过滤集合（可选） */
+  packageAllowlist?: string[];
+}
+
+/**
+ * 运行记录读取控制选项。
+ */
+export interface RunReadOptions {
+  /** 取消信号，用于中止读取请求 */
+  signal?: AbortSignal;
 }
 
 /**
@@ -185,9 +201,11 @@ export interface EventsPort {
  */
 export interface RunsPort {
   /** 查询任务执行记录列表 */
-  list(query?: ListRunsOptions): Promise<RunRecord[]>;
+  list(query?: ListRunsOptions, options?: RunReadOptions): Promise<RunRecord[]>;
+  /** 统计符合条件的任务执行记录总数 */
+  count?(query?: ListRunsOptions, options?: RunReadOptions): Promise<number>;
   /** 查询指定运行标识的记录详情 */
-  get(runId: string): Promise<RunRecord | undefined>;
+  get(runId: string, options?: RunReadOptions): Promise<RunRecord | undefined>;
   /** 取消指定在运行的任务 */
   cancel(runId: string, reason?: string): Promise<CancelResult>;
   /** 清空历史任务运行记录 */

@@ -21,8 +21,10 @@ const IPC_METHOD_HANDLERS: Readonly<
   describePlaybook: async (service, a) => service.discovery.describePlaybook(a[0] as string),
   runAction: async (service, a) => service.execution.run(a[0] as any, a[1], a[2] as any),
   startAction: async (service, a) => service.execution.start(a[0] as any, a[1], a[2] as any),
-  listRuns: async (service, a) => service.runs.list(a[0] as any),
-  getRun: async (service, a) => service.runs.get(a[0] as string),
+  listRuns: async (service, a) => service.runs.list(a[0] as any, a[1] as any),
+  countRuns: async (service, a) =>
+    typeof service.runs.count === "function" ? service.runs.count(a[0] as any, a[1] as any) : undefined,
+  getRun: async (service, a) => service.runs.get(a[0] as string, a[1] as any),
   cancelRun: async (service, a) => service.runs.cancel(a[0] as string, a[1] as string),
   clearRuns: async (service, a) =>
     service.runs.clear ? await service.runs.clear(a[0] as any) : 0,
@@ -99,8 +101,11 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
       return arg;
     }
     const { [IPC_SIGNAL_MARKER]: _marker, ...rest } = arg as Record<string, unknown>;
-    const controller = new AbortController();
-    activeControllers.set(id, controller);
+    let controller = activeControllers.get(id);
+    if (!controller) {
+      controller = new AbortController();
+      activeControllers.set(id, controller);
+    }
     return { ...rest, signal: controller.signal };
   };
 
@@ -155,15 +160,25 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
           process.send(response);
         }
       } catch (err: any) {
+        const isAbort =
+          err?.name === "AbortError" ||
+          err?.code === "ABORT_ERR" ||
+          err?.code === "EXECUTION_ABORTED" ||
+          err?.code === "OPERATION_ABORTED";
         const response: IpcResponseMessage = {
           id,
           type: "response",
           ok: false,
           error: {
-            code: err?.code || SERVICE_ERROR,
+            code: err?.code || (isAbort ? "OPERATION_ABORTED" : SERVICE_ERROR),
             message: err?.message || String(err),
             stack: err?.stack,
-            details: err?.details,
+            details:
+              err?.details !== undefined
+                ? (typeof err?.details === "object" && err?.details !== null && err?.name === "AbortError"
+                    ? { name: err?.name, ...err.details }
+                    : err.details)
+                : (err?.name === "AbortError" ? { name: err?.name } : undefined),
           },
         };
 
@@ -179,7 +194,9 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
       const abortMsg = msg as IpcAbortMessage;
       const controller = activeControllers.get(abortMsg.id);
       if (controller) {
-        controller.abort(new Error(abortMsg.reason || "Execution was aborted via IPC"));
+        const abortError = new Error(abortMsg.reason || "Execution was aborted via IPC");
+        (abortError as any).name = "AbortError";
+        controller.abort(abortError);
       }
     } else if (msg.type === "close") {
       await safeClose();

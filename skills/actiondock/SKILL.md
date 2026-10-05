@@ -33,7 +33,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
 | **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>] [--json]` | 规范调用语法，支持扁平参数与 `--input` / `--input-file` 互斥输入；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |
-| **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
+| **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果；多条后台任务可用 `ad runs watch` 阻塞等待全部终态聚合退出，后台派工无 runId 时以 `--request-id` 反查等待 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
 | **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](references/developer.md) |
 | **生成 TypeScript 类型** | `ad generate types` | 基于清单 Schema 自动生成强类型声明文件 | [developer.md](references/developer.md) |
@@ -97,7 +97,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
   - 三种输入模式严格互斥：扁平参数、`--input <json>` 与 `--input-file <path|->` 严格互斥，不可混用（违者触发 `INPUT_CONFLICT`）；未指定输入时默认传入 `{}`。
   - 机器模式与退出码：面向智能体调用推荐使用 `--json`；当参数解析出错时输出标准错误信封并以退出码 2 退出。
 - 默认原始输出与机器信封：`ad run` 默认直接将结果正文（如文件 `content`、`text`、`message` 或标量字符串）原始输出到 stdout（保留真实换行且无 JSON 转义），元数据独立输出至 stderr，兼顾命令行可读性、Agent 行号精确定位与 Unix 管道消费；如需程序化消费标准 JSON 信封，传入 `--json`。
-- 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消。
+- 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消；多条后台任务可用 `ad runs watch [ids...]` 阻塞等待全部终态后聚合退出，主控后台派工拿不到 runId 时可在派工命令携带 `--request-id`，再用同标识 `ad runs watch --request-id <id>` 反查等待。
 - 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。
 
 ---

@@ -293,6 +293,9 @@ ad runs list --profile prod
 # 查询指定任务终态详情与执行耗时
 ad runs show <runId> --profile prod
 
+# 阻塞等待多个远端任务到达终态后聚合退出（超时仅退出等待，不取消任务）
+ad runs watch <runId1> <runId2> --profile prod --timeout 10m
+
 # 中止远端正在执行的长任务并级联回收子进程树
 ad runs cancel <runId> --profile prod --reason "手动中止任务"
 ```

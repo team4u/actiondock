@@ -242,7 +242,11 @@ export interface RuntimeStorage {
     finishedAt?: string
   ): void;
   getRun(id: string): RunRecord | null;
-  listRuns(options?: { actionId?: string; status?: string; limit?: number }): RunRecord[];
+  listRuns(options?: { actionId?: string; status?: string; limit?: number; offset?: number }): RunRecord[];
+  /** 统计符合条件的运行记录总数 */
+  countRuns?(options?: { actionId?: string; status?: string; requestIds?: string[] }): number;
+  /** 查询单条运行记录并补齐幂等请求标识关联（详情路径专用） */
+  getRunWithRequestId?(id: string): RunRecord | null;
   clearRuns(options?: {
     actionId?: string;
     status?: string;
@@ -253,10 +257,19 @@ export interface RuntimeStorage {
   cleanExpiredRuns?(policy?: RunsRetentionPolicy): number;
 
   /**
-   * 收敛死亡会话遗留的非终态运行任务（含无会话标识的遗留非终态记录），
+   * 收敛死亡宿主遗留的非终态运行任务（含无会话标识的遗留非终态记录），
    * 统一收敛为 interrupted。历史别名 recoverRunningRuns 已合并至本方法。
+   *
+   * 判定依据是宿主存活而不是会话归属：仅收割进程探测失败或心跳过期的记录，
+   * 无法确认死亡时保守保留，避免误杀并发进程的在途任务。
    */
-  recoverDeadSessionRuns?(currentHostSessionId?: string): number | Promise<number>;
+  recoverDeadSessionRuns?(
+    currentHostSessionId?: string,
+    options?: { probe?: import("./run-liveness").ProcessLivenessProbe }
+  ): number | Promise<number>;
+
+  /** 刷新在途运行记录的心跳时间戳（供执行宿主周期性调用，支撑存活判定） */
+  touchRunHeartbeat?(runIds: string[]): number;
 
   /** 确保底层存储与 Schema 初始化完成 */
   ensureInitialized?(): Promise<void>;
@@ -264,6 +277,18 @@ export interface RuntimeStorage {
   // --- Idempotency 幂等去重管理 ---
   checkAndRecordIdempotency?(record: IdempotencyRecord): IdempotencyCheckResult;
   getIdempotencyRecord?(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined;
+  /**
+   * 按客户端幂等请求标识批量反查运行记录（仅限当前包范围）。
+   *
+   * 不按 ownerId 隔离：查询方（CLI 旁观视图）与写入方（后台派工进程）分属
+   * 不同宿主会话，ownerId 天然不一致；requestId 本身即跨进程全局唯一的外部
+   * 事实源，包维度隔离已提供足够边界。
+   */
+  listRunsByRequestIds?(requestIds: string[]): RunRecord[];
+  /** 按客户端幂等请求标识反查关联运行记录总数 */
+  countRunsByRequestIds?(requestIds: string[], options?: { actionId?: string; status?: string }): number;
+  /** 反查运行记录关联的幂等请求标识映射（仅限当前包范围，无关联时不含对应键） */
+  getRunRequestIds?(runIds: string[]): Record<string, string>;
 
   // --- Events 审计事件仓储 ---
   appendEvent?(eventType: string, payload: unknown): void;

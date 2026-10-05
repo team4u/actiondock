@@ -103,7 +103,7 @@ describe("CLI Readonly Query - Preserve Running Runs", () => {
   });
 
   it("ensures execution commands with ownDataDir harvest dead orphan runs into interrupted", async () => {
-    // 写入一条状态为 running 的遗留死会话运行记录
+    // 写入一条状态为 running 的遗留死会话运行记录（携带已死亡进程标识，收割判定可确认死亡）
     const storage = createStorage("test.query-pkg", {
       customHome: tempHome,
       projectRoot: tempDir,
@@ -121,6 +121,7 @@ describe("CLI Readonly Query - Preserve Running Runs", () => {
       packageInstanceId: "pkg-inst",
       generationId: "gen-1",
       ownerId: "owner-1",
+      hostPid: 99999998,
     });
     await storage.close();
 

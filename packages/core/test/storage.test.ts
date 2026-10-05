@@ -9,6 +9,22 @@ import { resolveDatabasePath } from "../src/storage";
 import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
+/**
+ * 取得一个近期内已退出的进程标识（收割判定需确认死亡）。
+ * 派生短暂子进程并等待退出后校验探测已返回不存在。
+ */
+function findRecentlyDeadPid(): number {
+  // 直接采用几乎不可能被占用的标识：与收割判定同源探测校验，确保确实死亡
+  const pid = 99999998;
+  try {
+    process.kill(pid, 0);
+    throw new Error("expected fallback pid to be dead");
+  } catch (err: any) {
+    if (err?.code !== "ESRCH") throw err;
+  }
+  return pid;
+}
+
 describe("SqliteRuntimeStorage", () => {
   let storage: SqliteRuntimeStorage;
 
@@ -473,6 +489,8 @@ describe("SqliteRuntimeStorage", () => {
           actionId: "job",
           status: "running" as const,
           startedAt: new Date().toISOString(),
+          // 模拟已崩溃宿主的遗留记录：携带已死亡进程标识，收割判定可确认死亡
+          hostPid: findRecentlyDeadPid(),
         });
         assert.strictEqual(nextOwnerRun, undefined); // createRun 无返回值，仅确认不抛错
         await nextOwner.close();

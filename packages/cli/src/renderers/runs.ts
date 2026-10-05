@@ -35,6 +35,7 @@ export function renderRunDetail(run: RunRecord): string {
   lines.push(`Run:          ${run.id}`);
   lines.push(`Action:       ${run.actionId}`);
   if (run.packageId) lines.push(`Package:      ${run.packageId}`);
+  if (run.requestId) lines.push(`Request ID:   ${run.requestId}`);
   lines.push(`Status:       ${run.status}`);
   if (run.parentRunId) lines.push(`Parent Run:   ${run.parentRunId}`);
   lines.push(`Started:      ${run.startedAt}`);

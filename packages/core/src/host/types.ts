@@ -128,10 +128,13 @@ export interface ActionDockHost extends ActionDockService {
   ): Promise<ExecutionTicket>;
 
   /** 查询指定运行标识的记录详情 */
-  getRun(runId: string): Promise<RunRecord | undefined>;
+  getRun(runId: string, signal?: AbortSignal): Promise<RunRecord | undefined>;
 
   /** 列出运行记录 */
-  listRuns(query?: ListRunsOptions): Promise<RunRecord[]>;
+  listRuns(query?: ListRunsOptions, signal?: AbortSignal): Promise<RunRecord[]>;
+
+  /** 统计符合条件的运行记录总数 */
+  countRuns(query?: ListRunsOptions, signal?: AbortSignal): Promise<number>;
 
   /** 清理运行记录 */
   clearRuns(options?: {

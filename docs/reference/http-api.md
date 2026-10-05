@@ -314,11 +314,13 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 鉴权说明：需要有效 Bearer 令牌。
 - 白名单过滤：若服务端配置了包白名单或动作白名单，返回的历史记录列表自动过滤，仅包含符合白名单条件的记录。
 - 查询参数：
-  - `limit`（可选）：最大返回记录数，**默认值为 50**。
+  - `limit`（可选）：最大返回记录数，**默认值为 50**，夹紧在 1 至 500 区间。
+  - `offset`（可选）：偏移游标条数（跳过的记录数），缺省为 0，与 `limit` 组合实现分页遍历。
   - `status`（可选）：按运行状态筛选。状态包含进行中状态（`pending`、`running`）以及终态（`success`、`failed`、`cancelled`、`timed_out`、`interrupted`）。
   - `actionId`（可选）：按动作标识筛选。
   - `packageId`（可选）：按包标识筛选。
   - `intent`（可选）：按关键词意图筛选。
+  - `requestIds`（可选）：按幂等请求标识反查关联运行记录，支持重复参数（`requestId=a&requestId=b` 或 `requestIds=a&requestIds=b`）形式传递多个标识，每一个标识均作为不作解释的原样字符串（保留内部逗号与首尾空格），仅命中当前包范围内经 idempotency_keys 登记的记录。
 - 响应数据结构：
   ```json
   {
@@ -330,6 +332,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
         "actionId": "sample.greet",
         "packageId": "example-tools",
         "status": "success",
+        "requestId": "client-req-001",
         "startedAt": "2026-09-12T10:00:00.000Z",
         "finishedAt": "2026-09-12T10:00:00.050Z",
         "input": { "name": "ActionDock" },
@@ -338,6 +341,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
     ]
   }
   ```
+  执行时携带幂等请求标识（`Idempotency-Key` 请求头或 `requestId` 字段）的记录在返回体中携带 `requestId` 字段；无幂等登记的记录不包含该字段。
 
 ### 查询单次执行详情 (`GET /api/v2/runs/:runId`)
 

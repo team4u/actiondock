@@ -123,6 +123,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。
   - 输出模式：**默认采用原始文本输出**。直接将结果正文（如文件 `content`、`message`、`text` 或标量字符串）原始输出到 stdout（保留真实换行与格式排版，不进行 JSON 序列化转义），附加元数据（如 `lines`、`path`、`hasMore`）通过 stderr 输出；执行失败时在 stderr 输出错误详情并以退出码 1 退出。便于命令行直观阅读、LLM Agent 精确行号消费以及管道下游工具直接处理。
   - 机器模式：添加 `--json` 选项时，面向智能体调用推荐使用；输出标准 JSON 结果信封（`{ "ok": true, "data": ... }`），业务失败时在 stdout 输出错误信封（`{ "ok": false, "error": ... }`）并以退出码 1 退出；若参数解析出错输出标准错误信封并以退出码 2 退出。
+  - 幂等请求标识：`--request-id <id>` 为可选的客户端幂等键，用于标记请求身份。其作用域区分为两种模式：
+    - 在统一服务实例与远程常驻服务模式（如 `ad serve` 或远程服务）下，支持相同入参请求的幂等去重重放，服务端会自动拦截重复调度并返回先前的执行结果。
+    - 在独立的本地命令行进程模式下，`--request-id` 主要作为关联标识与状态反查凭据（供 `ad runs list --request-id` 过滤与 `ad runs watch --request-id` 精准对因反查）。不同独立本地命令行进程分属独立进程实例，不会跨进程自动拦截重放。
   - 传统输入选项：
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
@@ -249,13 +252,25 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出执行历史 (`ad runs list`)：
   ```bash
-  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json]
+  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [--request-id <id>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json]
   ```
+  支持按幂等请求标识过滤：`--request-id` 可重复传入多个，框架经 idempotency_keys 反查关联的运行记录（仅限当前包范围），命中记录在列表与机器模式输出中携带 `requestId` 字段。未命中时返回空集合且退出码为 0。
 
 - 查看单次执行详情 (`ad runs show`)：
   ```bash
   ad runs show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
+  执行时携带 `--request-id` 的记录在详情中同样展示 `Request ID` 字段。
+
+- 阻塞等待运行终态 (`ad runs watch`)：
+  ```bash
+  ad runs watch [ids...] [--request-id <id>] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--resolve-timeout <duration>] [--interval <duration>] [--timeout <duration>] [-q, --quiet] [--data-dir <path>] [--json]
+  ```
+  阻塞等待一个或多个运行到达终态后聚合退出。主要面向本地场景：本地 shell 并发起多个 `ad run` 后台进程后，用一条 watch 命令阻塞到全部终态再收结果。执行环境解析优先（显式配置远端目标时严格直连远端服务；本地模式检索当前工程及已注册链接包，显式指定 `--package` 时严格隔离在目标包范围内）。等待策略为统一轮询（缺省间隔两秒，`--interval` 可调），全部终态即退出。人读模式每运行输出一行终态摘要，等待期间每五秒输出一次未完成计数（`--quiet` 关闭）；机器模式结束时输出聚合对象，`ok` 仅在全部终态且全部执行成功时为真。`--timeout` 为整体上限，超时后输出未终态运行的当前状态并以退出码 1 结束，不会取消任务；中断信号同样仅退出等待，不取消任何任务。
+
+  按幂等请求标识等待：`--request-id <id>` 可多次传入（可重复选项），替代位置参数 runId 语义（两者可混用）。语法形态与 `ad runs list` 保持一致，避免选项参数对后续位置参数产生吞噬。典型场景是主控以 nohup 后台派工后拿不到 runId：派工命令携带 `--request-id` 预置标识，主控随后以同标识 watch 等待。反查过程按轮询间隔带有限重试（`--resolve-timeout` 控制预算，缺省三十秒），因为派工进程写入幂等键可能晚于 watch 启动；超出预算仍未命中时报错提示该 requestId 不存在并以退出码 1 结束。反查命中的作用域即为后续轮询归属（本地或远端），聚合输出的逐运行条目携带 `requestId` 字段便于结果对因。需要说明的是，在独立的本地命令行进程模式下，`--request-id` 主要作为关联标识与状态反查凭据使用，各独立进程不会跨实例自动拦截重放；在统一服务实例与远程常驻服务模式下则支持相同入参请求的幂等去重重放。
+
+  轮询等待机制与事件协作权衡：ActionDock 核心规范坚持事件驱动协作原则，但在命令行运行观察场景采用只读轻量轮询，是基于客观物理与系统边界约束推导的最优解。命令行工具作为独立的短暂只读旁观进程直接连接本地 SQLite 存储文件，任务宿主进程与观察进程分属完全独立的操作系统进程，SQLite 单文件存储层缺乏原生跨进程事件总线与推送能力；ActionDock 坚持零守护进程架构哲学，不强制要求常驻事件服务器或后台中继；通过带瞬态错误容忍的轻量级定时只读轮询获取最新记录，既保障了零常驻进程的轻量性，又实现了高度的跨平台稳定性与可靠性。
 
 - 取消正在运行的任务 (`ad runs cancel`)：
   ```bash

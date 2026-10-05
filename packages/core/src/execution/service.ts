@@ -75,6 +75,15 @@ import { validateSchemaOnly } from "../schema/validator";
 
 export type { ExecutionServiceOptions };
 
+/**
+ * 在途运行心跳刷新间隔（毫秒）。
+ *
+ * 必须显著小于存活判定的宽限期（见 run-liveness 的 RUN_LIVENESS_GRACE_MS），
+ * 保证心跳正常的宿主绝不被误判过期；间隔内崩溃由进程探测兜底，
+ * 心跳只服务无进程标识的遗留记录收敛判定。
+ */
+export const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
+
 interface ActiveRun {
   runId: string;
   controller: AbortController;
@@ -131,6 +140,8 @@ export class DefaultExecutionService implements ExecutionService {
   public readonly packageInstanceId: string;
   public readonly generationId: string;
   public hostSessionId?: string;
+  /** 宿主进程标识：落库到运行记录供跨进程存活判定（并发打开同一数据目录时不误收割） */
+  public readonly hostPid: number;
   public readonly eventSink: EventSink;
 
   private storage: RuntimeStorage;
@@ -148,6 +159,8 @@ export class DefaultExecutionService implements ExecutionService {
   private actionInvoker?: ActionInvoker;
   private registry: ActionRegistry;
   private activeRuns = new Map<string, ActiveRun>();
+  /** 在途运行心跳定时器：周期性刷新心跳时间戳，支撑无进程标识判定路径的兜底收敛 */
+  private heartbeatTimer?: ReturnType<typeof setInterval>;
   private isClosing = false;
   private reservedSlots = 0;
 
@@ -163,6 +176,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.packageInstanceId = this.identity.instanceId;
     this.generationId = this.identity.generation;
     this.hostSessionId = options.hostSessionId;
+    this.hostPid = process.pid;
     this.projectConfig = options.projectConfig;
     this.projectRoot = options.projectRoot;
     this.configOverrides = options.configOverrides || {};
@@ -528,6 +542,7 @@ export class DefaultExecutionService implements ExecutionService {
 
       this.activeRuns.set(runId, activeItem);
       releaseSlot();
+      this.ensureHeartbeatTimer();
       bridge.emitEvent({ type: "status", status: "running" });
 
       executionPromise
@@ -985,6 +1000,7 @@ export class DefaultExecutionService implements ExecutionService {
       generationId: context.package?.generation || this.generationId,
       ownerId: this.ownerId,
       hostSessionId: context.hostSessionId || this.hostSessionId,
+      hostPid: this.hostPid,
       status: "failed",
       input: input as JsonValue,
       error,
@@ -1056,6 +1072,7 @@ export class DefaultExecutionService implements ExecutionService {
       parentRunId: context.parentRunId,
       ownerId: context.principalId || context.tenantId || this.ownerId,
       hostSessionId: context.hostSessionId || this.hostSessionId,
+      hostPid: this.hostPid,
       packageInstanceId: context.package?.instanceId || this.packageInstanceId,
       generationId: context.package?.generation || this.generationId,
       targetPackageId,
@@ -1201,8 +1218,48 @@ export class DefaultExecutionService implements ExecutionService {
     return this.eventSink.subscribe(runId, options);
   }
 
+  /**
+   * 确保在途运行心跳定时器存在。
+   *
+   * 存活判定的第一依据是进程探测（运行记录已落库宿主进程标识），
+   * 心跳是对遗留记录（无进程标识）与其他协作场景的兜底信号：
+   * 持有进程周期性刷新在途记录的心跳时间戳，收割方仅对心跳过期的
+   * 遗留记录做宽限期判定，正常运行中的记录绝不会被误判过期。
+   * 定时器不阻塞进程退出（unref），无在途运行时不产生任何调度。
+   */
+  private ensureHeartbeatTimer(): void {
+    if (this.heartbeatTimer) return;
+    const touch = () => {
+      if (this.isClosing || this.activeRuns.size === 0) return;
+      if (typeof this.storage.touchRunHeartbeat !== "function") return;
+      try {
+        this.storage.touchRunHeartbeat(Array.from(this.activeRuns.keys()));
+      } catch (err: any) {
+        // 心跳失败不影响执行主链路，存活判定仍可依赖进程探测，但必须通过 logger.warn 记录告警
+        const errDetail = err instanceof Error ? `${err.message}${err.stack ? `\n${err.stack}` : ""}` : String(err);
+        const warnMsg = `[ExecutionService] Failed to touch run heartbeat: ${errDetail}`;
+        if (this.logger) {
+          this.logger.warn(warnMsg, {
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
+        } else {
+          console.warn(warnMsg);
+        }
+      }
+    };
+    this.heartbeatTimer = setInterval(touch, RUN_HEARTBEAT_INTERVAL_MS);
+    if (this.heartbeatTimer.unref) {
+      this.heartbeatTimer.unref();
+    }
+  }
+
   public async close(options: { graceMs?: number } = {}): Promise<void> {
     this.isClosing = true;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
     this.reservedSlots = 0;
     const graceMs = options.graceMs ?? 5000;
 

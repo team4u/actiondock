@@ -139,14 +139,21 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 列出历史执行记录 (`ad runs list`)：
   ```bash
-  ad runs list [patterns...] [-a, --action <actionId>] [-n, --limit <count>] [-P, --package <id>]
+  ad runs list [patterns...] [-a, --action <actionId>] [--request-id <id>] [-n, --limit <count>] [-P, --package <id>]
   ```
+  支持按幂等请求标识反查：`--request-id` 可重复传入多个，命中记录携带 `requestId` 字段。
 
 - 查看执行记录详情 (`ad runs show`)：
   ```bash
   ad runs show <id>
   ```
   查看入参快照、返回值、报错堆栈、耗时与事件流。
+
+- 阻塞等待运行终态 (`ad runs watch`)：
+  ```bash
+  ad runs watch [ids...] [--request-id <id>] [-P, --package <id>] [--timeout <duration>] [--interval <duration>] [--resolve-timeout <duration>] [-q, --quiet] [--json]
+  ```
+  阻塞等待一个或多个运行到达终态后聚合退出：本地 shell 并发起多个 `ad run` 后台进程后，用一条 watch 命令阻塞到全部终态再收结果；`--request-id` 适用于后台派工后主控无 runId 的场景（反查带有限重试）；`--timeout` 为整体上限，超时或中断仅退出等待，不取消任务；机器模式输出聚合对象，`ok` 仅在全部终态且全部执行成功时为真。
 
 - 取消正在运行的异步长任务 (`ad runs cancel`)：
   ```bash

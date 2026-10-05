@@ -1,6 +1,7 @@
 import {
   loadProjectConfig,
   parseDuration,
+  type ActionDockService,
 } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
@@ -14,7 +15,14 @@ import {
   ExecutionError,
   NO_PROJECT_NO_LINKED_MESSAGE,
 } from "../errors";
-import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
+import { renderResult, renderRunDetail, renderRunsList, writeStdout } from "../renderer";
+import {
+  pollRunsUntilTerminal,
+  renderWatchSummary,
+  resolveRunsByRequestIds,
+  type RequestIdResolution,
+  type WatchRunSource,
+} from "../services/run-watch";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
@@ -58,7 +66,56 @@ function resolveLocalRunScope(packageOption?: string): {
 }
 
 /**
- * 注册 runs 动作执行历史管理命令（list、show、clear、cancel）。
+ * 解析 watch 命令的正时长选项值（毫秒）。
+ * 格式非法或非正值时抛参数错误（退出码 2）。
+ */
+function parsePositiveDuration(raw: string | undefined, flagName: string): number {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    throw new ArgumentError(`Invalid ${flagName} argument: value is required`);
+  }
+  let ms: number | undefined;
+  try {
+    ms = parseDuration(String(raw));
+  } catch (err: any) {
+    throw new ArgumentError(`Invalid ${flagName} argument: ${err.message}`);
+  }
+  if (ms === undefined || ms <= 0) {
+    throw new ArgumentError(
+      `Invalid ${flagName} argument: must be a positive duration (e.g. 500ms, 2s)`
+    );
+  }
+  return ms;
+}
+
+/**
+ * Commander 可重复选项收集函数：同一选项多次出现时累积为数组。
+ */
+function collectRepeatableOption(value: string, previous: string[]): string[] {
+  return previous.concat([value]);
+}
+
+/**
+ * 归一化 requestId 选项值为去重后的非空原样字符串数组。
+ * 将 requestId 作为不作解释的原样字符串，不拆分逗号、不剔除首尾空白，只做非空有效字符串检查与去重。
+ */
+export function normalizeRequestIds(raw: unknown): string[] {
+  const items = Array.isArray(raw) ? raw : raw !== undefined && raw !== null ? [raw] : [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of items) {
+    if (typeof item === "string" && item.length > 0) {
+      if (!seen.has(item)) {
+        seen.add(item);
+        result.push(item);
+      }
+    }
+  }
+  return result;
+}
+
+
+/**
+ * 注册 runs 动作执行历史管理命令（list、show、watch、clear、cancel）。
  *
  * @param program Commander 实例
  * @param context 命令行上下文
@@ -76,6 +133,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       .option("-P, --package <id>", "Target package ID or path")
       .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
       .option("-a, --action <actionId>", "Filter by action ID")
+      .option("--request-id <id>", "Filter by idempotency request ID (repeatable)", collectRepeatableOption, [])
       .option("-n, --limit <count>", "Maximum number of records to return", "20")
   )
     .option("--fallback", "Enable fallback to full list when no items match intent")
@@ -87,6 +145,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const { shouldFallback } = resolveFallbackStrategy(options);
       const limit = Number.parseInt(options.limit, 10) || 20;
+      const requestIds = normalizeRequestIds(options.requestId);
       const scope = resolveLocalRunScope(options.package);
 
       // 通过 Service 门面统一访问
@@ -101,6 +160,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
           const records = await service.runs.list({
             packageId: options.package,
             actionId: options.action,
+            requestIds: requestIds.length > 0 ? requestIds : undefined,
             limit: queryLimit,
           });
 
@@ -187,6 +247,275 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         },
         { localRoot: scope.targetPackageRoot, scanLinkedPackages: true }
       );
+    });
+
+  // runs watch [ids...] / --request-id <id>
+  applyTargetOptions(
+    runsCmd
+      .command("watch [ids...]")
+      .description("Block until the given runs reach a terminal state, then aggregate results")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option(
+        "--request-id <id>",
+        "Wait by idempotency request ID(s) instead of run IDs (repeatable)",
+        collectRepeatableOption,
+        []
+      )
+  )
+    .option("--resolve-timeout <duration>", "Budget for resolving --request-id to run IDs (e.g. 30s)", "30s")
+    .option("--timeout <duration>", "Overall wait limit (e.g. 30s, 5m, 500ms); exits with current statuses on expiry")
+    .option("--interval <duration>", "Polling interval (e.g. 500ms, 30s)", "2s")
+    .option("-q, --quiet", "Suppress periodic waiting progress lines")
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .action(async (ids: string[], rawOptions: any, cmd: any) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
+      const watchIds = (ids || []).filter((id: string) => id && id.trim());
+      const requestIds = normalizeRequestIds(options.requestId);
+      if (watchIds.length === 0 && requestIds.length === 0) {
+        throw new ArgumentError(
+          "At least one run ID or --request-id is required for watch"
+        );
+      }
+
+      const intervalMs = parsePositiveDuration(options.interval, "--interval");
+      const timeoutMs = options.timeout
+        ? parsePositiveDuration(options.timeout, "--timeout")
+        : undefined;
+      const resolveTimeoutMs = parsePositiveDuration(
+        options.resolveTimeout,
+        "--resolve-timeout"
+      );
+
+      // 从命令入口开始计算统一绝对截止时间
+      const commandStartedAt = Date.now();
+      const overallDeadline =
+        timeoutMs !== undefined ? commandStartedAt + timeoutMs : undefined;
+
+      const effectiveControl = context?.control;
+      const externalSignal = effectiveControl?.signal;
+
+      // 绑定统一超时与外部取消信号至读取取消控制器
+      const timeoutController =
+        overallDeadline !== undefined ? new AbortController() : undefined;
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      if (overallDeadline !== undefined) {
+        const remainingDelay = Math.max(0, overallDeadline - commandStartedAt);
+        timeoutTimer = setTimeout(() => {
+          timeoutController?.abort();
+        }, remainingDelay);
+        if (timeoutTimer.unref) timeoutTimer.unref();
+      }
+
+      const readSignal =
+        externalSignal && timeoutController
+          ? AbortSignal.any([externalSignal, timeoutController.signal])
+          : externalSignal ?? timeoutController?.signal;
+
+      try {
+        // 单一环境服务生命周期：一次 withService 包住标识解析和整个等待过程
+        await withService(
+          options,
+          context,
+          async (service, resolved) => {
+            const scope =
+              resolved.type === "local"
+                ? resolveLocalRunScope(options.package)
+                : undefined;
+            const normalizedPackageId = options.package
+              ? (resolved.type === "remote" ? options.package : scope?.projConfig?.id || options.package)
+              : undefined;
+            const whereDescription =
+              resolved.type === "remote"
+                ? `on remote server ${resolved.serverUrl || ""}`
+                : options.package
+                  ? `in package '${normalizedPackageId}'`
+                  : "in current project or any linked packages";
+
+            // 1. 解析 requestId
+            const resolvedMap = new Map<string, RequestIdResolution>();
+            if (requestIds.length > 0) {
+              const current = Date.now();
+              const resolveDeadline =
+                overallDeadline !== undefined
+                  ? Math.min(overallDeadline, commandStartedAt + resolveTimeoutMs)
+                  : commandStartedAt + resolveTimeoutMs;
+              const remainingResolveBudgetMs = Math.max(0, resolveDeadline - current);
+
+              const resolveTimeoutController = new AbortController();
+              let resolveTimer: NodeJS.Timeout | undefined;
+              if (remainingResolveBudgetMs < Infinity) {
+                resolveTimer = setTimeout(() => {
+                  resolveTimeoutController.abort();
+                }, remainingResolveBudgetMs);
+                if (resolveTimer.unref) resolveTimer.unref();
+              }
+
+              const resolveSignals: AbortSignal[] = [resolveTimeoutController.signal];
+              if (externalSignal) resolveSignals.push(externalSignal);
+              if (timeoutController) resolveSignals.push(timeoutController.signal);
+              const resolveSignal = AbortSignal.any(resolveSignals);
+
+              let hits: RequestIdResolution[] = [];
+              let unresolved: string[] = [];
+              try {
+                const res = await resolveRunsByRequestIds(
+                  service,
+                  requestIds,
+                  {
+                    packageId: normalizedPackageId,
+                    intervalMs,
+                    resolveTimeoutMs: remainingResolveBudgetMs,
+                    deadline: resolveDeadline,
+                    signal: resolveSignal,
+                  }
+                );
+                hits = res.resolved;
+                unresolved = res.unresolved;
+              } finally {
+                if (resolveTimer) clearTimeout(resolveTimer);
+              }
+
+              // 查询返回后再次校验截止时间
+              if (unresolved.length > 0 || Date.now() >= resolveDeadline) {
+                const missingList = unresolved.length > 0 ? unresolved : requestIds;
+                throw new ExecutionError(
+                  `Request ID(s) not found ${whereDescription} within ${options.resolveTimeout}: ${missingList.join(", ")}`
+                );
+              }
+
+              for (const hit of hits) {
+                resolvedMap.set(hit.requestId, hit);
+              }
+            }
+
+            // 2. 保持用户输入顺序与 runId 去重
+            const sources: WatchRunSource[] = [];
+            const seenRunIds = new Set<string>();
+
+            // 先按用户输入的位置参数添加
+            for (const id of watchIds) {
+              if (seenRunIds.has(id)) continue;
+              seenRunIds.add(id);
+              sources.push({ runId: id, source: resolved.type });
+            }
+
+            // 再按用户输入的 --request-id 顺序添加或补齐
+            for (const reqId of requestIds) {
+              const hit = resolvedMap.get(reqId);
+              if (!hit) continue;
+              const existing = sources.find((s) => s.runId === hit.runId);
+              if (existing) {
+                if (!existing.requestId) existing.requestId = hit.requestId;
+                if (!existing.initialRecord) existing.initialRecord = hit.record;
+              } else if (!seenRunIds.has(hit.runId)) {
+                seenRunIds.add(hit.runId);
+                sources.push({
+                  runId: hit.runId,
+                  source: resolved.type,
+                  requestId: hit.requestId,
+                  initialRecord: hit.record,
+                });
+              }
+            }
+
+            // 3. 校验位置参数 runId 是否存在与归属校验
+            const notFound: string[] = [];
+            for (const source of sources) {
+              if (!source.initialRecord) {
+                const record = await service.runs.get(source.runId, { signal: readSignal });
+                if (record) {
+                  if (normalizedPackageId && record.packageId !== normalizedPackageId) {
+                    notFound.push(source.runId);
+                  } else {
+                    source.initialRecord = record;
+                  }
+                } else {
+                  notFound.push(source.runId);
+                }
+              } else if (normalizedPackageId && source.initialRecord.packageId !== normalizedPackageId) {
+                notFound.push(source.runId);
+              }
+            }
+
+            if (notFound.length > 0) {
+              throw new ExecutionError(
+                `Run record(s) not found ${whereDescription}: ${notFound.join(", ")}`
+              );
+            }
+
+            if (sources.length === 0) {
+              throw new ArgumentError("At least one valid run is required for watch");
+            }
+
+            // 4. 等待结果
+            const remainingOverallMs =
+              overallDeadline !== undefined
+                ? Math.max(0, overallDeadline - Date.now())
+                : undefined;
+
+            const aggregation = await pollRunsUntilTerminal(sources, {
+              service,
+              intervalMs,
+              timeoutMs: remainingOverallMs,
+              deadline: overallDeadline,
+              signal: externalSignal,
+              timeoutSignal: timeoutController?.signal,
+              quiet: options.quiet || options.json,
+              context,
+            });
+
+            // 5. 输出结果（携带 reason、timedOut、interrupted 与逐运行结果）
+            if (options.json) {
+              writeStdout(
+                JSON.stringify(
+                  {
+                    ok: aggregation.ok,
+                    timedOut: aggregation.timedOut,
+                    interrupted: aggregation.interrupted,
+                    reason: aggregation.reason,
+                    runs: aggregation.runs.map((r) => ({
+                      runId: r.runId,
+                      source: r.source,
+                      ...(r.requestId !== undefined ? { requestId: r.requestId } : {}),
+                      status: r.status,
+                      terminal: r.terminal,
+                      ...(r.data !== undefined ? { data: r.data } : {}),
+                      ...(r.error !== undefined ? { error: r.error } : {}),
+                    })),
+                  },
+                  null,
+                  2
+                ),
+                context
+              );
+            } else {
+              writeStdout(
+                renderWatchSummary(
+                  aggregation,
+                  resolved.type === "remote" ? remoteTargetSuffix(resolved) : undefined
+                ),
+                context
+              );
+            }
+
+            if (!aggregation.ok) {
+              if (context) {
+                context.exitCode = 1;
+              }
+              if (!context?.control) {
+                process.exitCode = 1;
+              }
+            }
+          },
+          {
+            localRoot: () => resolveLocalRunScope(options.package).targetPackageRoot,
+            scanLinkedPackages: !options.package,
+          }
+        );
+      } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+      }
     });
 
   // runs cancel

@@ -109,12 +109,14 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
     });
 
     const now = new Date().toISOString();
+    // 模拟已崩溃宿主的遗留记录：携带已死亡进程标识（与残留锁文件中的死亡主进程一致）
     storage.createRun({
       id: "run-running-1",
       packageId: "pkg.recovery-test",
       actionId: "job",
       status: "running" as const,
       startedAt: now,
+      hostPid: 99999998,
     });
 
     storage.createRun({
@@ -123,6 +125,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       actionId: "job",
       status: "pending" as any,
       startedAt: now,
+      hostPid: 99999998,
     });
 
     storage.createRun({

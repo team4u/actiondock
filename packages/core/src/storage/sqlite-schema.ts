@@ -64,6 +64,8 @@ export function initSchema(
           generation_id TEXT NOT NULL,
           owner_id TEXT NOT NULL,
           host_session_id TEXT,
+          host_pid INTEGER,
+          heartbeat_at TEXT,
           status TEXT NOT NULL,
           input_json TEXT,
           output_json TEXT,
@@ -116,6 +118,13 @@ export function initSchema(
       const columns = driver.prepare("PRAGMA table_info(runs);").all<{ name: string }>();
       if (Array.isArray(columns) && !columns.some((c) => c.name === "host_session_id")) {
         driver.exec("ALTER TABLE runs ADD COLUMN host_session_id TEXT;");
+      }
+      // 存活判定依据列：记录所属宿主进程标识与最后一次活跃心跳，旧库以可空列兼容补充
+      if (Array.isArray(columns) && !columns.some((c) => c.name === "host_pid")) {
+        driver.exec("ALTER TABLE runs ADD COLUMN host_pid INTEGER;");
+      }
+      if (Array.isArray(columns) && !columns.some((c) => c.name === "heartbeat_at")) {
+        driver.exec("ALTER TABLE runs ADD COLUMN heartbeat_at TEXT;");
       }
     } catch {
       // 忽略非结构化表或兼容驱动异常

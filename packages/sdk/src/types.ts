@@ -674,6 +674,12 @@ export interface RunRecord {
   ownerId: string;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
+  /** 执行宿主进程标识符（用于跨进程存活判定，防止并发打开同一数据目录时误收割在途记录） */
+  hostPid?: number;
+  /** 执行宿主最近一次心跳刷新时间（UTC ISO 8601 格式，用于在途存活判定） */
+  heartbeatAt?: string;
+  /** 客户端幂等请求标识（经 idempotency_keys 反查关联，无幂等登记时缺省） */
+  requestId?: string;
   /** 运行生命周期状态 */
   status: RunStatus;
   /** 输入参数快照 */

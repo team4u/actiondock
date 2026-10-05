@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS runs (
   generation_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   host_session_id TEXT,
+  host_pid INTEGER,
+  heartbeat_at TEXT,
   status TEXT NOT NULL,
   input_json TEXT,
   output_json TEXT,
@@ -103,6 +105,8 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 );
 CREATE INDEX IF NOT EXISTS idx_idemp_run ON idempotency_keys(run_id);
 ```
+
+其中 `runs` 表的 `host_pid` 与 `heartbeat_at` 两列是运行记录的存活判定依据：前者登记写入方宿主进程标识（供跨进程探测判定，防止并发打开同一数据目录时误收割在途记录），后者记录最后一次心跳刷新时间（供无进程标识的遗留记录做宽限期兜底判定）；旧库升级时以可空列兼容补充。`idempotency_keys` 表的 `request_id` 列同时支撑反向查询：`ad runs list --request-id` 与 `ad runs watch --request-id` 均经该表反查关联运行记录。
 
 ---
 
@@ -179,8 +183,15 @@ ad state clear --all          # 清空该 package 下的所有状态
 # 查看调用历史（支持 -P 过滤特定包，外部目录自动聚合所有 linked packages）
 ad runs list --limit 20 [-P <pkg>] [-i <intent>]
 
+# 按幂等请求标识反查运行记录（可重复传入多个）
+ad runs list --request-id <requestId> [-P <pkg>]
+
 # 查看运行记录详情（自动跨本地项目与 linked packages 查找）
 ad runs show 01JM8A... [-P <pkg>]
+
+# 阻塞等待一个或多个运行到达终态后聚合退出（支持 --request-id 反查等待）
+ad runs watch 01JM8A... 01JN2B... [-P <pkg>]
+ad runs watch --request-id <requestId> [-P <pkg>] [--timeout 10m]
 
 # 取消运行中的任务
 ad runs cancel 01JM8A... --profile <name>

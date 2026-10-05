@@ -21,6 +21,7 @@ import {
   INVALID_ARGUMENT,
   TIMEOUT,
 } from "../errors";
+import { createAbortError } from "../ipc/service";
 import type {
   CancelResult,
   ExecutionTicket,
@@ -338,34 +339,146 @@ export class RemoteActionDockService implements ActionDockService {
     };
 
     this.runs = {
-      async list(query?: ListRunsOptions): Promise<RunRecord[]> {
+      async list(query?: ListRunsOptions, options?: import("./types").RunReadOptions): Promise<RunRecord[]> {
         self.assertNotClosed();
+        const effectiveSignal = options?.signal ?? query?.signal;
+        try {
+          const SERVER_MAX_PAGE_SIZE = 500;
+          const SERVER_MAX_OFFSET = 100_000;
+
+          if (query?.offset !== undefined && (query.offset < 0 || query.offset > SERVER_MAX_OFFSET || !Number.isSafeInteger(query.offset))) {
+            throw new ActionDockError(
+              INVALID_ARGUMENT,
+              `Invalid offset '${query.offset}': must be a non-negative safe integer <= ${SERVER_MAX_OFFSET}`
+            );
+          }
+
+          const requestedLimit = query?.limit;
+          let offset = query?.offset ?? 0;
+          const allItems: RunRecord[] = [];
+
+          while (true) {
+            if (effectiveSignal?.aborted) {
+              throw createAbortError(effectiveSignal.reason);
+            }
+
+            if (offset > SERVER_MAX_OFFSET) {
+              throw new ActionDockError(
+                INVALID_ARGUMENT,
+                `Invalid offset '${offset}': must be a non-negative safe integer <= ${SERVER_MAX_OFFSET}`
+              );
+            }
+
+            let batchLimit = SERVER_MAX_PAGE_SIZE;
+            if (requestedLimit !== undefined) {
+              const remaining = requestedLimit - allItems.length;
+              if (remaining <= 0) {
+                break;
+              }
+              batchLimit = Math.min(remaining, SERVER_MAX_PAGE_SIZE);
+            }
+
+            const res = await fetchRemoteRuns(self.serverUrl, self.token, {
+              packageId: query?.packageId,
+              actionId: query?.actionId,
+              status: query?.status,
+              intent: query?.intent,
+              limit: batchLimit,
+              offset,
+              requestIds: query?.requestIds,
+              allowInsecureHttp: self.allowInsecureHttp,
+              insecure: self.insecure,
+              dispatcher: self.dispatcher,
+              signal: effectiveSignal,
+            });
+
+            if (effectiveSignal?.aborted) {
+              throw createAbortError(effectiveSignal.reason);
+            }
+
+            const items = res.items || [];
+            if (items.length === 0) {
+              break;
+            }
+
+            allItems.push(...items);
+            offset += items.length;
+
+            if (requestedLimit !== undefined && allItems.length >= requestedLimit) {
+              break;
+            }
+
+            if (typeof res.total === "number" && offset >= res.total) {
+              break;
+            }
+
+            if (items.length < batchLimit) {
+              break;
+            }
+
+            if (offset > SERVER_MAX_OFFSET) {
+              throw new ActionDockError(
+                INVALID_ARGUMENT,
+                `Invalid offset '${offset}': must be a non-negative safe integer <= ${SERVER_MAX_OFFSET}`
+              );
+            }
+          }
+
+          return allItems;
+        } catch (err: any) {
+          if (effectiveSignal?.aborted || err?.name === "AbortError") {
+            throw createAbortError(effectiveSignal?.reason ?? err);
+          }
+          wrapRemoteError(err);
+        }
+      },
+
+      async count(query?: ListRunsOptions, options?: import("./types").RunReadOptions): Promise<number> {
+        self.assertNotClosed();
+        const effectiveSignal = options?.signal ?? query?.signal;
         try {
           const res = await fetchRemoteRuns(self.serverUrl, self.token, {
             packageId: query?.packageId,
             actionId: query?.actionId,
             status: query?.status,
             intent: query?.intent,
-            limit: query?.limit,
+            limit: 1,
+            offset: 0,
+            requestIds: query?.requestIds,
             allowInsecureHttp: self.allowInsecureHttp,
             insecure: self.insecure,
             dispatcher: self.dispatcher,
+            signal: effectiveSignal,
           });
-          return res.items || [];
+          if (typeof res.total === "number") {
+            return res.total;
+          }
+          const all = await self.runs.list(
+            { ...query, limit: undefined, offset: undefined },
+            options
+          );
+          return all.length;
         } catch (err: any) {
+          if (effectiveSignal?.aborted || err?.name === "AbortError") {
+            throw createAbortError(effectiveSignal?.reason ?? err);
+          }
           wrapRemoteError(err);
         }
       },
 
-      async get(runId: string): Promise<RunRecord | undefined> {
+      async get(runId: string, options?: import("./types").RunReadOptions): Promise<RunRecord | undefined> {
         self.assertNotClosed();
         try {
           return await fetchRemoteRun(self.serverUrl, runId, self.token, {
             allowInsecureHttp: self.allowInsecureHttp,
             insecure: self.insecure,
             dispatcher: self.dispatcher,
+            signal: options?.signal,
           });
         } catch (err: any) {
+          if (options?.signal?.aborted || err?.name === "AbortError") {
+            throw createAbortError(options?.signal?.reason ?? err);
+          }
           const code = String(err?.code || "");
           if (code === "RUN_NOT_FOUND" || code === "NOT_FOUND" || err?.status === 404) {
             return undefined;

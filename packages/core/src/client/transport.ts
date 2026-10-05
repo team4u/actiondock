@@ -141,6 +141,8 @@ export interface RemoteClientRequestOptions {
   insecure?: boolean;
   /** 自定义底层 HTTP 调度器（平台中立） */
   dispatcher?: unknown;
+  /** 取消信号，用于中止 HTTP 请求 */
+  signal?: AbortSignal;
 }
 
 /** 远端请求描述选项。 */
@@ -232,6 +234,7 @@ export async function fetchRemoteJson<T = any>(
   const res = await remoteFetch(path, {
     method: options.method,
     body: options.body,
+    signal: options.signal,
   });
 
   const data = (await res.json().catch(() => ({}))) as any;
@@ -256,11 +259,19 @@ export async function fetchRemoteJson<T = any>(
  * 过滤 undefined 与空串。
  */
 export function buildQueryString(
-  params: Record<string, string | number | boolean | undefined>
+  params: Record<string, string | number | boolean | readonly (string | number | boolean)[] | undefined>
 ): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === "") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== "") {
+          search.append(key, String(item));
+        }
+      }
       continue;
     }
     search.set(key, String(value));
@@ -273,11 +284,19 @@ export function buildQueryString(
  * 构造保留空串语义的查询串：仅跳过 undefined，保留空串。
  */
 export function buildQueryStringPreservingEmpty(
-  params: Record<string, string | number | boolean | undefined>
+  params: Record<string, string | number | boolean | readonly (string | number | boolean)[] | undefined>
 ): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined) {
+          search.append(key, String(item));
+        }
+      }
       continue;
     }
     search.set(key, String(value));

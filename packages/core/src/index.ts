@@ -30,13 +30,17 @@ export type {
   RemoteServiceOptions,
   ConfigValueView,
   ListRunsOptions,
+  RunReadOptions,
   StateScopeOptions,
 } from "./service/types";
 export {
+  isTerminalRunStatus,
   DEFAULT_RUNS_RETENTION_MS,
   DEFAULT_MAX_RUNS_PER_PACKAGE,
   DEFAULT_MIN_RETAIN_RUNS,
 } from "./storage/types";
+export { isRunHostDead } from "./storage/run-liveness";
+export type { TerminalRunStatus } from "./storage/types";
 export { parseDuration } from "./utils";
 export { toSnakeUpperCase, resolveEnvValue } from "./runtime/env";
 export type { ResolvedEnv } from "./runtime/env";

@@ -73,6 +73,8 @@ ActionDock 采用确定性的结构化错误体系。所有失败均通过标准
 | `IDEMPOTENCY_CONFLICT` | 409 | 携带相同 requestId 的重放请求提交了不同的入参内容摘要。 | 确保相同去重请求标识对应相同的业务入参，或更换新的 requestId。 |
 | `STANDALONE_ASYNC_UNSUPPORTED` | 400 | 独立单执行交付产物拒绝异步启动语义。 | 独立交付产物仅支持同步单次运行，异步任务请通过服务模式调用。 |
 | `HOST_PROCESS_EXITED` | 502 | 宿主子进程已异常退出，调用无法送达。 | 检查子进程崩溃日志与系统资源。 |
+| `HOST_LOST` | - | 仅 `ad runs watch` 聚合输出使用：本地观察中确认运行记录的持有宿主进程已死亡（非任务终态）。 | 任务宿主已崩溃，重启派工或检查宿主进程日志；该代码出现在 watch 输出的 `error` 字段，不是 HTTP 错误。 |
+| `WATCH_QUERY_FAILED` | - | 仅 `ad runs watch` 聚合输出使用：运行记录查询连续失败达到容忍阈值（非任务终态）。 | 检查本地数据库或远端服务连通性后重试；该代码出现在 watch 输出的 `error` 字段，不是 HTTP 错误。 |
 
 ---
 

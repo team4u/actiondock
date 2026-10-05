@@ -174,7 +174,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad playbook list` / `show` | 查看智能体操作规程 Playbook |
 | `ad config list` / `get` / `set` | 管理包运行时配置与环境变量绑定 |
 | `ad state list` / `get` / `set` / `delete` / `clear` | 查看与维护 SQLite 持久化状态 |
-| `ad runs list` / `show` / `clear` | 查询任务执行历史与追踪记录，或按时间与数量策略清理历史数据 |
+| `ad runs list` / `show` / `watch` / `clear` | 查询任务执行历史、阻塞等待运行终态聚合退出，或按时间与数量策略清理历史数据；list 支持 `--request-id` 过滤，watch 支持按 `--request-id` 反查等待（后台派工场景主控无 runId 时使用） |
 | `ad test` | 执行快速单元测试 |
 | `ad build` | 构建 Node.js 目录交付产物（支持 `--vendor-deps` 与 `--archive`） |
 | `ad pack` | 打包为标准 npm tarball（`.tgz`），支持 `--dry-run` |

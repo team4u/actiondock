@@ -142,4 +142,5 @@ npx skills remove <skill-name>
     - `ok: false`：提取 `error.code` 与 `error.message`。遇到报错时查阅 [troubleshooting.md](troubleshooting.md) 定向自愈。
 - **第六阶段：跨生命周期状态与运行追踪**：
   - 异步任务执行 `ad runs show <runId>` 追踪执行进度与事件流；必要时执行 `ad runs cancel <runId>` 取消。
+  - 多条后台任务用 `ad runs watch [ids...]` 阻塞等待全部终态聚合退出；后台派工无 runId 时以 `--request-id` 反查等待。
   - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。

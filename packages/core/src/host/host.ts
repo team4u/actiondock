@@ -51,6 +51,7 @@ import {
   type ErrorCode,
 } from "../errors";
 import { InvocationPolicy } from "../invocation/policy";
+import { createAbortError } from "../ipc/service";
 import { DataDirLock } from "../storage/data-dir-lock";
 import {
   DefaultActionCatalog,
@@ -112,6 +113,35 @@ async function findRunOwnerRuntime(
     runtimes.map(async (rt) => ({ rt, record: await rt.getRun(runId).catch(() => undefined) }))
   );
   return results.find((r) => r.record !== undefined)?.rt;
+}
+
+/**
+ * 包装异步操作以响应 AbortSignal 取消信号。
+ * 若信号已中止立即抛出 AbortError，否则挂载一次性中止监听并在操作完成时注销。
+ */
+function withAbortSignal<T>(op: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) {
+    throw createAbortError(signal.reason);
+  }
+  if (!signal) {
+    return op();
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(createAbortError(signal.reason));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    op().then(
+      (res) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(res);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      }
+    );
+  });
 }
 
 export class DefaultActionDockHost implements ActionDockHost {
@@ -241,14 +271,22 @@ export class DefaultActionDockHost implements ActionDockHost {
     };
 
     this.runs = {
-      async list(query?: ListRunsOptions): Promise<RunRecord[]> {
+      async list(query?: ListRunsOptions, options?: import("../service/types").RunReadOptions): Promise<RunRecord[]> {
         await self.ensureInitialized();
-        return self.listRuns(query);
+        const effectiveSignal = options?.signal ?? query?.signal;
+        return withAbortSignal(() => self.listRuns(query, effectiveSignal), effectiveSignal);
       },
 
-      async get(runId: string): Promise<RunRecord | undefined> {
+      async count(query?: ListRunsOptions, options?: import("../service/types").RunReadOptions): Promise<number> {
         await self.ensureInitialized();
-        return self.getRun(runId);
+        const effectiveSignal = options?.signal ?? query?.signal;
+        return withAbortSignal(() => self.countRuns(query, effectiveSignal), effectiveSignal);
+      },
+
+      async get(runId: string, options?: import("../service/types").RunReadOptions): Promise<RunRecord | undefined> {
+        await self.ensureInitialized();
+        const effectiveSignal = options?.signal;
+        return withAbortSignal(() => self.getRun(runId, effectiveSignal), effectiveSignal);
       },
 
       async cancel(runId: string, reason?: string): Promise<CancelResult> {
@@ -1091,23 +1129,170 @@ export class DefaultActionDockHost implements ActionDockHost {
     );
   }
 
-  async getRun(runId: string): Promise<RunRecord | undefined> {
+  async getRun(runId: string, signal?: AbortSignal): Promise<RunRecord | undefined> {
     await this.ensureInitialized();
+    if (signal?.aborted) {
+      throw createAbortError(signal.reason);
+    }
     for (const runtime of this.listRuntimes()) {
+      if (signal?.aborted) {
+        throw createAbortError(signal.reason);
+      }
       const record = await runtime.getRun(runId);
+      if (signal?.aborted) {
+        throw createAbortError(signal.reason);
+      }
       if (record) return record;
     }
     return undefined;
   }
 
-  async listRuns(query?: ListRunsOptions): Promise<RunRecord[]> {
+  async listRuns(query?: ListRunsOptions, signal?: AbortSignal): Promise<RunRecord[]> {
     await this.ensureInitialized();
+    const effectiveSignal = signal ?? query?.signal;
+    if (effectiveSignal?.aborted) {
+      throw createAbortError(effectiveSignal.reason);
+    }
     const runtimes = query?.packageId
-      ? [this.getRuntime(query.packageId)].filter(Boolean) as PackageRuntime[]
-      : this.listRuntimes();
+      ? ([this.getRuntime(query.packageId)].filter(Boolean) as PackageRuntime[])
+      : query?.packageAllowlist && query.packageAllowlist.length > 0
+        ? (query.packageAllowlist.map((id) => this.getRuntime(id)).filter(Boolean) as PackageRuntime[])
+        : this.listRuntimes();
+
+    // 当存在 intent 过滤时：分批读取并在内存中累积命中记录，先过滤后分页
+    if (query?.intent) {
+      const intentStr = query.intent;
+      const matchedRecords: RunRecord[] = [];
+      const BATCH_SIZE = 100;
+      const targetLimit = query.limit;
+      const targetOffset = query.offset ?? 0;
+      const neededCount = targetLimit !== undefined ? targetOffset + targetLimit : Infinity;
+
+      if (runtimes.length === 1) {
+        const runtime = runtimes[0];
+        let batchOffset = 0;
+        while (true) {
+          if (effectiveSignal?.aborted) {
+            throw createAbortError(effectiveSignal.reason);
+          }
+          const batch = await runtime.listRuns({
+            actionId: query.actionId,
+            status: query.status,
+            requestIds: query.requestIds,
+            limit: BATCH_SIZE,
+            offset: batchOffset,
+            signal: effectiveSignal,
+          });
+          if (effectiveSignal?.aborted) {
+            throw createAbortError(effectiveSignal.reason);
+          }
+          if (batch.length === 0) break;
+          batchOffset += batch.length;
+
+          const normalized = batch.map((r) => ({
+            ...r,
+            packageId: (r as any).packageId || runtime.packageId,
+          }));
+
+          const filtered = filterByIntent(
+            normalized,
+            intentStr,
+            [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
+            false
+          );
+          matchedRecords.push(...filtered);
+
+          if (matchedRecords.length >= neededCount) {
+            break;
+          }
+
+          if (batch.length < BATCH_SIZE) {
+            break;
+          }
+        }
+      } else {
+        for (const runtime of runtimes) {
+          if (effectiveSignal?.aborted) {
+            throw createAbortError(effectiveSignal.reason);
+          }
+          let batchOffset = 0;
+          while (true) {
+            if (effectiveSignal?.aborted) {
+              throw createAbortError(effectiveSignal.reason);
+            }
+            const batch = await runtime.listRuns({
+              actionId: query.actionId,
+              status: query.status,
+              requestIds: query.requestIds,
+              limit: BATCH_SIZE,
+              offset: batchOffset,
+              signal: effectiveSignal,
+            });
+            if (effectiveSignal?.aborted) {
+              throw createAbortError(effectiveSignal.reason);
+            }
+            if (batch.length === 0) break;
+            batchOffset += batch.length;
+
+            const normalized = batch.map((r) => ({
+              ...r,
+              packageId: (r as any).packageId || runtime.packageId,
+            }));
+
+            const filtered = filterByIntent(
+              normalized,
+              intentStr,
+              [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
+              false
+            );
+            matchedRecords.push(...filtered);
+
+            if (batch.length < BATCH_SIZE) {
+              break;
+            }
+          }
+        }
+        matchedRecords.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      }
+
+      const end = targetLimit !== undefined ? targetOffset + targetLimit : undefined;
+      return matchedRecords.slice(targetOffset, end);
+    }
+
+    // 当不存在 intent 过滤时：
+    if (runtimes.length === 1) {
+      if (effectiveSignal?.aborted) {
+        throw createAbortError(effectiveSignal.reason);
+      }
+      const runtime = runtimes[0];
+      const recs = await runtime.listRuns(query ? { ...query, signal: effectiveSignal } : { signal: effectiveSignal });
+      if (effectiveSignal?.aborted) {
+        throw createAbortError(effectiveSignal.reason);
+      }
+      return recs.map((r) => ({
+        ...r,
+        packageId: (r as any).packageId || runtime.packageId,
+      }));
+    }
+
+    // 跨包联合查询：下推 limit/offset 或合并排序
     const records: RunRecord[] = [];
+    const fetchLimit = query?.limit !== undefined
+      ? (query.offset ?? 0) + query.limit
+      : undefined;
     for (const runtime of runtimes) {
-      const recs = await runtime.listRuns(query);
+      if (effectiveSignal?.aborted) {
+        throw createAbortError(effectiveSignal.reason);
+      }
+      const recs = await runtime.listRuns({
+        ...query,
+        offset: 0,
+        limit: fetchLimit,
+        signal: effectiveSignal,
+      });
+      if (effectiveSignal?.aborted) {
+        throw createAbortError(effectiveSignal.reason);
+      }
       for (const r of recs) {
         records.push({
           ...r,
@@ -1116,19 +1301,93 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
     records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-    let result = records;
+    const start = query?.offset ?? 0;
+    const end = query?.limit !== undefined ? start + query.limit : undefined;
+    return records.slice(start, end);
+  }
+
+  async countRuns(query?: ListRunsOptions, signal?: AbortSignal): Promise<number> {
+    await this.ensureInitialized();
+    const effectiveSignal = signal ?? query?.signal;
+    if (effectiveSignal?.aborted) {
+      throw createAbortError(effectiveSignal.reason);
+    }
+    const runtimes = query?.packageId
+      ? ([this.getRuntime(query.packageId)].filter(Boolean) as PackageRuntime[])
+      : query?.packageAllowlist && query.packageAllowlist.length > 0
+        ? (query.packageAllowlist.map((id) => this.getRuntime(id)).filter(Boolean) as PackageRuntime[])
+        : this.listRuntimes();
+
     if (query?.intent) {
-      result = filterByIntent(
-        result,
-        query.intent,
-        [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
-        false
-      );
+      const intentStr = query.intent;
+      let count = 0;
+      const BATCH_SIZE = 100;
+      for (const runtime of runtimes) {
+        if (effectiveSignal?.aborted) {
+          throw createAbortError(effectiveSignal.reason);
+        }
+        let batchOffset = 0;
+        while (true) {
+          if (effectiveSignal?.aborted) {
+            throw createAbortError(effectiveSignal.reason);
+          }
+          const batch = await runtime.listRuns({
+            actionId: query.actionId,
+            status: query.status,
+            requestIds: query.requestIds,
+            limit: BATCH_SIZE,
+            offset: batchOffset,
+            signal: effectiveSignal,
+          });
+          if (effectiveSignal?.aborted) {
+            throw createAbortError(effectiveSignal.reason);
+          }
+          if (batch.length === 0) break;
+          batchOffset += batch.length;
+
+          const normalized = batch.map((r) => ({
+            ...r,
+            packageId: (r as any).packageId || runtime.packageId,
+          }));
+
+          const filtered = filterByIntent(
+            normalized,
+            intentStr,
+            [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
+            false
+          );
+          count += filtered.length;
+
+          if (batch.length < BATCH_SIZE) {
+            break;
+          }
+        }
+      }
+      return count;
     }
-    if (query?.limit && result.length > query.limit) {
-      result.length = query.limit;
+
+    let total = 0;
+    for (const runtime of runtimes) {
+      if (effectiveSignal?.aborted) {
+        throw createAbortError(effectiveSignal.reason);
+      }
+      if (typeof runtime.countRuns === "function") {
+        total += await runtime.countRuns(query ? { ...query, signal: effectiveSignal } : { signal: effectiveSignal });
+      } else {
+        const all = await runtime.listRuns({
+          actionId: query?.actionId,
+          status: query?.status,
+          requestIds: query?.requestIds,
+          limit: 100_000,
+          signal: effectiveSignal,
+        });
+        if (effectiveSignal?.aborted) {
+          throw createAbortError(effectiveSignal.reason);
+        }
+        total += all.length;
+      }
     }
-    return result;
+    return total;
   }
 
   async clearRuns(options?: {

@@ -37,6 +37,7 @@ import type {
   DiscoveryPort,
   ExecutionPort,
   ListRunsOptions,
+  RunReadOptions,
   RunsPort,
   StatePort,
   StateScopeOptions,
@@ -48,6 +49,21 @@ import type {
   IpcResponseMessage,
   IpcServiceOptions,
 } from "./types";
+
+/**
+ * 创建标准 AbortError 异常对象。
+ */
+export function createAbortError(reason?: unknown): Error {
+  const message =
+    reason instanceof Error
+      ? (reason.message || "The operation was aborted")
+      : reason !== undefined
+        ? String(reason)
+        : "The operation was aborted";
+  const err = new Error(message, reason !== undefined ? { cause: reason } : undefined);
+  err.name = "AbortError";
+  return err;
+}
 
 /**
  * 跨进程取消信号占位标记字段名。
@@ -68,18 +84,82 @@ export function hasIpcSignalMarker(value: unknown): value is Record<string, unkn
 }
 
 /**
- * 序列化执行选项：剥离不可序列化的 AbortSignal 并写入占位标记。
+ * 安全收敛可跨进程传递的数据值，过滤函数、undefined、Symbol、BigInt 并防御循环引用。
  */
-function markIpcSignal(options?: RunOptions): Record<string, unknown> | undefined {
-  if (!options) return undefined;
-  const clean: Record<string, unknown> = {};
-  if (options.timeoutMs !== undefined) clean.timeoutMs = options.timeoutMs;
-  if (options.config !== undefined) clean.config = options.config;
-  if (options.requestId !== undefined) clean.requestId = options.requestId;
-  if (options.signal) {
-    clean[IPC_SIGNAL_MARKER] = true;
+function sanitizeIpcValue(value: unknown, ancestors: Set<object>): unknown {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
   }
-  return clean;
+  if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol" || typeof value === "bigint") {
+    return undefined;
+  }
+  if (typeof value === "object") {
+    if (ancestors.has(value)) {
+      return undefined;
+    }
+    ancestors.add(value);
+
+    try {
+      if (Array.isArray(value)) {
+        const result: unknown[] = [];
+        for (const item of value) {
+          const sanitized = sanitizeIpcValue(item, ancestors);
+          if (sanitized !== undefined) {
+            result.push(sanitized);
+          }
+        }
+        return result;
+      }
+
+      const result: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(value)) {
+        const sanitized = sanitizeIpcValue(val, ancestors);
+        if (sanitized !== undefined) {
+          result[key] = sanitized;
+        }
+      }
+      return result;
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 序列化执行选项与查询选项的边界收敛函数。
+ *
+ * 序列化边界决策：
+ * - 剥离不可序列化对象：AbortSignal 无法通过 Node IPC 通道传递，在此转换为 IPC_SIGNAL_MARKER 占位标记，由远端宿主根据标记重建 AbortController 接入取消链路。
+ * - 过滤非安全值：全面剔除函数、undefined、Symbol 与 BigInt 等无法安全跨进程传递的值，防止 IPC 序列化异常或意外的远端反射。
+ * - 循环引用防御：递归遍历嵌套对象（如 config 配置项或 filter 筛选条件）时基于调用栈祖先集合进行环检测，阻断循环引用进入 IPC 通道，且不误伤跨字段复用的合法对象。
+ * - 支持跨进程选项透传：安全保留 RunOptions 与 RunReadOptions、ListRunsOptions 中的合法字段（包含 timeoutMs、config、requestId、limit、offset、packageId、action、status、since、until、requestIds、filter 等）。
+ */
+export function markIpcSignal<T extends Record<string, any>>(
+  options?: T
+): Record<string, unknown> | undefined {
+  if (!options || typeof options !== "object") return undefined;
+  const ancestors = new Set<object>();
+  ancestors.add(options);
+
+  try {
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(options)) {
+      if (key === "signal") {
+        if (value) {
+          clean[IPC_SIGNAL_MARKER] = true;
+        }
+        continue;
+      }
+      const sanitized = sanitizeIpcValue(value, ancestors);
+      if (sanitized !== undefined) {
+        clean[key] = sanitized;
+      }
+    }
+    return clean;
+  } finally {
+    ancestors.delete(options);
+  }
 }
 
 /**
@@ -151,11 +231,18 @@ export class IpcActionDockService implements ActionDockService {
           if (resp.ok) {
             pending.resolve(resp.data);
           } else {
-            const err = new ActionDockError(
-              (resp.error?.code as ErrorCode) || IPC_ERROR,
-              resp.error?.message || "IPC Service call failed",
-              resp.error?.details as Record<string, unknown> | undefined
-            );
+            const isAbort =
+              resp.error?.code === "EXECUTION_ABORTED" ||
+              resp.error?.code === "OPERATION_ABORTED" ||
+              resp.error?.code === "ABORT_ERR" ||
+              (resp.error?.details as any)?.name === "AbortError";
+            const err = isAbort
+              ? createAbortError(resp.error?.message)
+              : new ActionDockError(
+                  (resp.error?.code as ErrorCode) || IPC_ERROR,
+                  resp.error?.message || "IPC Service call failed",
+                  resp.error?.details as Record<string, unknown> | undefined
+                );
             pending.reject(err);
           }
         }
@@ -194,8 +281,8 @@ export class IpcActionDockService implements ActionDockService {
      * 生成方法级端口转发器：把端口方法调用映射为 callRemote 远端调用。
      * 方法名与参数列表的对应关系即唯一事实源，杜绝手写转发样板膨胀。
      */
-    const forward = <T>(method: string, args: unknown[]): Promise<T> =>
-      self.callRemote<T>(method, args);
+    const forward = <T>(method: string, args: unknown[], signal?: AbortSignal): Promise<T> =>
+      self.callRemote<T>(method, args, signal);
 
     this.discovery = {
       async listPackages(): Promise<PackageInfo[]> {
@@ -253,12 +340,42 @@ export class IpcActionDockService implements ActionDockService {
     };
 
     this.runs = {
-      async list(query?: ListRunsOptions): Promise<RunRecord[]> {
-        return forward<RunRecord[]>("listRuns", [query]);
+      async list(query?: ListRunsOptions, options?: RunReadOptions): Promise<RunRecord[]> {
+        const signal = options?.signal ?? query?.signal;
+        if (signal?.aborted) {
+          throw createAbortError(signal.reason);
+        }
+        const serializableQuery = markIpcSignal(query);
+        const serializableOptions = markIpcSignal(options);
+        const args =
+          serializableOptions !== undefined
+            ? [serializableQuery ?? {}, serializableOptions]
+            : [serializableQuery];
+        return forward<RunRecord[]>("listRuns", args, signal);
       },
 
-      async get(runId: string): Promise<RunRecord | undefined> {
-        const res = await forward<RunRecord | null | undefined>("getRun", [runId]);
+      async count(query?: ListRunsOptions, options?: RunReadOptions): Promise<number> {
+        const signal = options?.signal ?? query?.signal;
+        if (signal?.aborted) {
+          throw createAbortError(signal.reason);
+        }
+        const serializableQuery = markIpcSignal(query);
+        const serializableOptions = markIpcSignal(options);
+        const args =
+          serializableOptions !== undefined
+            ? [serializableQuery ?? {}, serializableOptions]
+            : [serializableQuery];
+        return forward<number>("countRuns", args, signal);
+      },
+
+      async get(runId: string, options?: RunReadOptions): Promise<RunRecord | undefined> {
+        const signal = options?.signal ?? (options as any)?.query?.signal;
+        if (signal?.aborted) {
+          throw createAbortError(signal.reason);
+        }
+        const serializableOptions = markIpcSignal(options);
+        const args = serializableOptions !== undefined ? [runId, serializableOptions] : [runId];
+        const res = await forward<RunRecord | null | undefined>("getRun", args, signal);
         return res ?? undefined;
       },
 
@@ -369,9 +486,7 @@ export class IpcActionDockService implements ActionDockService {
     await this.readyPromise;
 
     if (signal?.aborted) {
-      const err = new Error(signal.reason ? String(signal.reason) : "Operation aborted");
-      (err as any).name = "AbortError";
-      throw err;
+      throw createAbortError(signal.reason);
     }
 
     const id = randomUUID();
@@ -386,6 +501,13 @@ export class IpcActionDockService implements ActionDockService {
     if (signal && !signal.aborted) {
       onAbort = () => {
         this.sendAbort(id);
+        if (method !== "runAction") {
+          const pending = this.pendingCalls.get(id);
+          if (pending) {
+            this.pendingCalls.delete(id);
+            pending.reject(createAbortError(signal.reason));
+          }
+        }
       };
       signal.addEventListener("abort", onAbort, { once: true });
     }

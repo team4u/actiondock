@@ -331,6 +331,9 @@ export interface PackageRuntime {
   /** 查询任务执行记录列表 */
   listRuns(options?: ListRunsOptions): Promise<RunRecord[]>;
 
+  /** 统计符合条件的任务执行记录总数 */
+  countRuns?(options?: ListRunsOptions): Promise<number>;
+
   /** 查询指定运行标识的记录详情 */
   getRun(runId: string): Promise<RunRecord | undefined>;
 

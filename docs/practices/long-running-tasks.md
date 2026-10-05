@@ -78,15 +78,24 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
 
 ## 异步调度与状态管理
 
-对于耗时极长的任务，ActionDock 支持通过远程微服务模式或 MCP Tasks 协议以异步方式调度：
+对于耗时极长的任务，ActionDock 支持通过远程微服务模式、MCP Tasks 协议或本地标准后台方式进行调度：
 
-- 异步启动长任务：
+- 远程异步启动长任务：
   ```bash
-  ad run data.batch-process --async -- items.0=a items.1=b items.2=c items.3=d
+  # 远程服务模式下使用 --async 异步派工（需指定 --profile 或 --server）：
+  ad run data.batch-process --profile prod --async -- items.0=a items.1=b items.2=c items.3=d
   # 复杂或批量数据可通过文件传递（与扁平参数互斥）：
-  # ad run data.batch-process --async --input-file ./batch.json
+  # ad run data.batch-process --profile prod --async --input-file ./batch.json
   ```
-  命令立即返回运行标识（`runId`），而不会在终端中长时间等待。
+  命令立即返回运行标识（`runId`），而不会在终端中长时间等待。`--async` 选项专用于远程服务或环境配置模式，独立的本地命令行执行不支持该选项。
+
+- 本地后台启动长任务：
+  ```bash
+  # 本地进程模式下，通过标准后台方式启动（& 或 nohup）：
+  ad run data.batch-process --input-file ./batch-1.json &
+  # 或使用 nohup 脱机后台运行并预置幂等请求标识：
+  nohup ad run data.batch-process --request-id batch-main --input-file ./batch.json >/dev/null 2>&1 &
+  ```
 
 - 查询任务当前状态与进度：
   ```bash
@@ -99,6 +108,23 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
   ad runs cancel <runId> --reason "用户主动终止"
   ```
   执行服务会向对应运行实例发射 `ctx.signal`，业务函数感知后退出。
+
+- 阻塞等待多个运行终态聚合退出：
+  ```bash
+  # 本地并行派工后统一收结果（通过标准后台方式 & 启动本地独立进程）
+  ad run data.batch-process --input-file ./batch-1.json &
+  ad run data.batch-process --input-file ./batch-2.json &
+  ad runs watch <runId1> <runId2> --json
+
+  # 后台派工拿不到 runId 时，派工携带 --request-id，再以同标识等待
+  nohup ad run data.batch-process --request-id batch-main --input-file ./batch.json >/dev/null 2>&1 &
+  ad runs watch --request-id batch-main --timeout 30m --json
+  ```
+  watch 只读旁观，不取消不收割；超时或中断信号仅退出等待并输出当前状态，不会终止任务；退出码仅在全部终态且全部执行成功时为 0。
+
+- 幂等请求标识的作用域说明：
+  - 在统一服务实例与远程常驻服务模式（如 `ad serve` 或远程服务）下，支持相同入参请求的幂等去重重放。若传入相同的 `--request-id` 与相同入参，服务端会拦截重复调度并直接返回先前的执行结果。
+  - 在独立的本地命令行进程模式下，`--request-id` 主要作为关联标识与状态反查凭据（供 `ad runs list` 过滤与 `ad runs watch` 精准对因反查）。由于不同独立本地命令行进程分属独立的进程实例，各进程直接执行并落库，不会跨进程自动拦截重放。
 
 ---
 

@@ -24,6 +24,7 @@ export async function fetchRemoteRun(
       allowInsecureHttp: options?.allowInsecureHttp,
       insecure: options?.insecure,
       dispatcher: options?.dispatcher,
+      signal: options?.signal,
     }
   );
 }
@@ -59,8 +60,16 @@ export async function cancelRemoteRun(
 export async function fetchRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number } & RemoteClientRequestOptions
-): Promise<{ ok: boolean; total: number; items: RunRecord[] }> {
+  options?: {
+    status?: string;
+    actionId?: string;
+    packageId?: string;
+    intent?: string;
+    limit?: number;
+    offset?: number;
+    requestIds?: string[];
+  } & RemoteClientRequestOptions
+): Promise<{ ok: boolean; total?: number; items: RunRecord[] }> {
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/runs${buildQueryString({
@@ -69,6 +78,10 @@ export async function fetchRemoteRuns(
       packageId: options?.packageId,
       intent: options?.intent,
       limit: options?.limit,
+      offset: options?.offset,
+      requestIds: options?.requestIds && options.requestIds.length > 0
+        ? options.requestIds
+        : undefined,
     })}`,
     token,
     {
@@ -76,6 +89,7 @@ export async function fetchRemoteRuns(
       allowInsecureHttp: options?.allowInsecureHttp,
       insecure: options?.insecure,
       dispatcher: options?.dispatcher,
+      signal: options?.signal,
     }
   );
 }

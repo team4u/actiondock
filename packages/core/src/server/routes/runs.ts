@@ -4,6 +4,7 @@ import {
   EVENT_BACKPRESSURE_LIMIT,
   EVENT_CURSOR_EXPIRED,
   EXECUTION_FAILED,
+  INVALID_ARGUMENT,
   PACKAGE_FORBIDDEN,
   RUN_ALREADY_FINISHED,
   RUN_INTERRUPTED,
@@ -12,7 +13,8 @@ import {
   RUNS_LIST_ERROR,
 } from "../../errors";
 import { isTerminalRunStatus } from "../../storage/types";
-import type { ExecutionEvent } from "@actiondock/sdk";
+import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
+import { createAbortError } from "../../ipc/service";
 import { parseDuration } from "../../utils";
 import { readJsonBody } from "../body";
 import { getSubPath, isActionAllowedByPolicy, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
@@ -31,12 +33,42 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const actionId = url.searchParams.get("actionId") || undefined;
       const packageId = url.searchParams.get("packageId") || undefined;
       const intent = url.searchParams.get("intent") || undefined;
-      // limit 边界防护：非法或超界值回退默认 50，并夹紧到 1 至 500 区间
-      const parsedLimit = parseInt(url.searchParams.get("limit") || "50", 10);
-      const limit =
-        Number.isFinite(parsedLimit) && parsedLimit > 0
-          ? Math.min(parsedLimit, 500)
-          : 50;
+      // requestId 反查：支持 requestId 与 requestIds 重复查询参数，将每一个参数值作为原样字符串保存
+      const requestIds = [
+        ...url.searchParams.getAll("requestId"),
+        ...url.searchParams.getAll("requestIds"),
+      ].filter((id) => id.length > 0);
+
+      // offset 校验：非负安全整数，默认为 0，上限 100000 防止滥用
+      const rawOffset = url.searchParams.get("offset");
+      let offset = 0;
+      if (rawOffset !== null && rawOffset !== "") {
+        const parsedOffset = Number(rawOffset);
+        if (!Number.isSafeInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 100_000) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: INVALID_ARGUMENT,
+                message: `Invalid offset '${rawOffset}': must be a non-negative safe integer <= 100000`,
+              },
+            },
+            400,
+            corsHeaders
+          );
+        }
+        offset = parsedOffset;
+      }
+
+      // limit 边界防护：未提供保持默认值 50，提供则夹紧在 1 至 500 区间
+      const rawLimit = url.searchParams.get("limit");
+      let limit = 50;
+      if (rawLimit !== null) {
+        const parsedLimit = parseInt(rawLimit, 10);
+        if (Number.isFinite(parsedLimit)) {
+          limit = Math.min(Math.max(parsedLimit, 1), 500);
+        }
+      }
 
       if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
         return jsonResponse(
@@ -66,31 +98,133 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         );
       }
 
-      let allRuns = await service.runs.list({
+      const queryOptions: import("../../service/types").ListRunsOptions = {
         actionId,
         status,
         packageId,
         intent,
-        limit,
-      });
+        requestIds: requestIds.length > 0 ? requestIds : undefined,
+        signal: req.signal,
+        packageAllowlist:
+          policy.packageAllowlist && policy.packageAllowlist.length > 0
+            ? policy.packageAllowlist
+            : undefined,
+      };
 
-      if (policy.packageAllowlist && policy.packageAllowlist.length > 0) {
-        allRuns = allRuns.filter((r) => isPackageAllowedByPolicy(r.packageId, policy));
-      }
+      const hasPolicyFilter = Boolean(
+        (policy.packageAllowlist && policy.packageAllowlist.length > 0) ||
+        (policy.actionAllowlist && policy.actionAllowlist.length > 0)
+      );
 
-      if (policy.actionAllowlist && policy.actionAllowlist.length > 0) {
-        allRuns = allRuns.filter((r) =>
-          isActionAllowedByPolicy({ packageId: r.packageId, actionId: r.actionId }, policy)
+      let runs: RunRecord[];
+      let total: number | undefined;
+
+      if (hasPolicyFilter) {
+        const BATCH_SIZE = 100;
+        let cursorOffset = 0;
+        let matchedCount = 0;
+        const pagedRuns: RunRecord[] = [];
+
+        while (true) {
+          if (req.signal?.aborted) {
+            throw createAbortError(req.signal.reason);
+          }
+
+          const batch = await service.runs.list(
+            {
+              ...queryOptions,
+              limit: BATCH_SIZE,
+              offset: cursorOffset,
+              signal: req.signal,
+            },
+            { signal: req.signal }
+          );
+
+          if (req.signal?.aborted) {
+            throw createAbortError(req.signal.reason);
+          }
+
+          if (batch.length === 0) {
+            break;
+          }
+
+          for (const run of batch) {
+            const packageAllowed = isPackageAllowedByPolicy(run.packageId, policy);
+            const actionAllowed = isActionAllowedByPolicy(
+              { packageId: run.packageId, actionId: run.actionId },
+              policy
+            );
+            if (packageAllowed && actionAllowed) {
+              if (matchedCount >= offset && pagedRuns.length < limit) {
+                pagedRuns.push(run);
+              }
+              matchedCount++;
+            }
+          }
+
+          cursorOffset += batch.length;
+          if (batch.length < BATCH_SIZE) {
+            break;
+          }
+        }
+
+        runs = pagedRuns;
+        total = matchedCount;
+      } else {
+        // 当 hasPolicyFilter 为 false 时：下推 limit 与 offset 到底层查询
+        if (req.signal?.aborted) {
+          throw createAbortError(req.signal.reason);
+        }
+
+        runs = await service.runs.list(
+          {
+            ...queryOptions,
+            limit,
+            offset,
+            signal: req.signal,
+          },
+          { signal: req.signal }
         );
+
+        if (req.signal?.aborted) {
+          throw createAbortError(req.signal.reason);
+        }
+
+        // 统计总数 total 的可靠处理：
+        if (typeof service.runs.count === "function") {
+          total = await service.runs.count(
+            {
+              ...queryOptions,
+              signal: req.signal,
+            },
+            { signal: req.signal }
+          );
+        } else if (runs.length === 0 && offset === 0) {
+          total = 0;
+        } else if (runs.length > 0 && runs.length < limit) {
+          total = offset + runs.length;
+        } else {
+          total = undefined;
+        }
       }
 
-      const sliced = allRuns.slice(0, limit);
+      const responseData: { ok: true; items: RunRecord[]; total?: number } = {
+        ok: true,
+        items: runs,
+      };
+      if (typeof total === "number") {
+        responseData.total = total;
+      }
+
       return jsonResponse(
-        { ok: true, total: allRuns.length, items: sliced },
+        responseData,
         200,
         corsHeaders
       );
     } catch (err: any) {
+      if (req.signal?.aborted || err?.name === "AbortError") {
+        throw err;
+      }
       return jsonResponse(
         { ok: false, error: { code: RUNS_LIST_ERROR, message: err.message } },
         500,
@@ -400,7 +534,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runShowMatch = subpath.match(/^\/runs\/([^/]+)$/);
   if (runShowMatch && req.method === "GET") {
     const runId = decodeURIComponent(runShowMatch[1]);
-    const run = await service.runs.get(runId);
+    const run = await service.runs.get(runId, { signal: req.signal });
 
     if (!run) {
       return jsonResponse(

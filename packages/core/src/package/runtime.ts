@@ -31,6 +31,7 @@ import {
   NOT_FOUND,
   SERVICE_CLOSED,
 } from "../errors";
+import { createAbortError } from "../ipc/service";
 import { createRootInvocationContext, type InvocationContext, type RunOptions } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
@@ -757,9 +758,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
     this.assertOpen();
-    // 历史读取复用存储能力，不创建执行服务
-    const record = (await this.prepareStorageAsync()).getRun(runId);
-    return record ?? undefined;
+    // 历史读取复用存储能力，不创建执行服务；详情路径补齐 requestId 关联
+    const storage = await this.prepareStorageAsync();
+    if (typeof storage.getRunWithRequestId === "function") {
+      return storage.getRunWithRequestId(runId) ?? undefined;
+    }
+    return storage.getRun(runId) ?? undefined;
   }
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
@@ -1134,11 +1138,89 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
     this.assertOpen();
-    return (await this.prepareStorageAsync()).listRuns({
+    if (options?.signal?.aborted) {
+      throw createAbortError(options.signal.reason);
+    }
+    const storage = await this.prepareStorageAsync();
+    if (options?.signal?.aborted) {
+      throw createAbortError(options.signal.reason);
+    }
+
+    // requestId 反查路径：经 idempotency_keys 反查关联运行记录（存储可选能力）
+    if (options?.requestIds && options.requestIds.length > 0) {
+      if (typeof storage.listRunsByRequestIds !== "function") {
+        return [];
+      }
+      let records = storage.listRunsByRequestIds(options.requestIds);
+      if (options.actionId) {
+        records = records.filter((r) => r.actionId === options.actionId);
+      }
+      if (options.status) {
+        records = records.filter((r) => r.status === options.status);
+      }
+      records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      if (typeof options.offset === "number" && options.offset > 0) {
+        records = records.slice(options.offset);
+      }
+      if (options.limit !== undefined && records.length > options.limit) {
+        records.length = options.limit;
+      }
+      return records;
+    }
+
+    const records = storage.listRuns({
       actionId: options?.actionId,
       status: options?.status,
       limit: options?.limit,
+      offset: options?.offset,
     });
+
+    // 常规路径补齐 requestId 关联（可选能力缺失时保持无关联，不阻断查询）
+    if (typeof storage.getRunRequestIds === "function" && records.length > 0) {
+      const requestIdByRunId = storage.getRunRequestIds(records.map((r) => r.id));
+      for (const record of records) {
+        const requestId = requestIdByRunId[record.id];
+        if (requestId) record.requestId = requestId;
+      }
+    }
+    return records;
+  }
+
+  async countRuns(options?: ListRunsOptions): Promise<number> {
+    this.assertOpen();
+    if (options?.signal?.aborted) {
+      throw createAbortError(options.signal.reason);
+    }
+    const storage = await this.prepareStorageAsync();
+    if (options?.signal?.aborted) {
+      throw createAbortError(options.signal.reason);
+    }
+    if (typeof storage.countRuns === "function") {
+      return storage.countRuns({
+        actionId: options?.actionId,
+        status: options?.status,
+        requestIds: options?.requestIds,
+      });
+    }
+    if (options?.requestIds && options.requestIds.length > 0) {
+      if (typeof storage.listRunsByRequestIds === "function") {
+        let records = storage.listRunsByRequestIds(options.requestIds);
+        if (options.actionId) {
+          records = records.filter((r) => r.actionId === options.actionId);
+        }
+        if (options.status) {
+          records = records.filter((r) => r.status === options.status);
+        }
+        return records.length;
+      }
+      return 0;
+    }
+    const records = storage.listRuns({
+      actionId: options?.actionId,
+      status: options?.status,
+      limit: 100_000,
+    });
+    return records.length;
   }
 
   async clearRuns(options?: {

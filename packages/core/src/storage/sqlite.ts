@@ -143,8 +143,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
   }
 
-  public recoverDeadSessionRuns(currentHostSessionId?: string): number {
-    return this.runsStore.recoverDeadSessionRuns(this.isClosed, currentHostSessionId);
+  public recoverDeadSessionRuns(
+    currentHostSessionId?: string,
+    options?: { probe?: import("./run-liveness").ProcessLivenessProbe }
+  ): number {
+    return this.runsStore.recoverDeadSessionRuns(this.isClosed, currentHostSessionId, options);
   }
 
   // --- Config 配置管理 ---
@@ -217,8 +220,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.runsStore.getRun(id);
   }
 
-  listRuns(options: { actionId?: string; status?: string; limit?: number } = {}): RunRecord[] {
+  listRuns(options: { actionId?: string; status?: string; limit?: number; offset?: number } = {}): RunRecord[] {
     return this.runsStore.listRuns(options);
+  }
+
+  countRuns(options: { actionId?: string; status?: string; requestIds?: string[] } = {}): number {
+    return this.runsStore.countRuns(options, this.isClosed);
   }
 
   clearRuns(options: { actionId?: string; status?: string; olderThanMs?: number; keep?: number } = {}): number {
@@ -229,6 +236,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.runsStore.cleanExpiredRuns(this.isClosed, policy);
   }
 
+  touchRunHeartbeat(runIds: string[]): number {
+    return this.runsStore.touchRunHeartbeat(this.isClosed, runIds);
+  }
+
   // --- Idempotency 幂等去重管理 ---
 
   checkAndRecordIdempotency(record: IdempotencyRecord): IdempotencyCheckResult {
@@ -237,6 +248,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
   getIdempotencyRecord(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined {
     return this.runsStore.getIdempotencyRecord(this.isClosed, ownerId, actionRef, requestId);
+  }
+
+  listRunsByRequestIds(requestIds: string[]): RunRecord[] {
+    return this.runsStore.listRunsByRequestIds(this.isClosed, requestIds);
+  }
+
+  countRunsByRequestIds(requestIds: string[], options: { actionId?: string; status?: string } = {}): number {
+    return this.runsStore.countRunsByRequestIds(this.isClosed, requestIds, options);
+  }
+
+  getRunRequestIds(runIds: string[]): Record<string, string> {
+    return this.runsStore.getRunRequestIds(this.isClosed, runIds);
+  }
+
+  getRunWithRequestId(id: string): RunRecord | null {
+    return this.runsStore.getRunWithRequestId(id, this.isClosed);
   }
 
   // --- Events 审计事件仓储 ---

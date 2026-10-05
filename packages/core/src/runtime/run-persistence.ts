@@ -19,6 +19,8 @@ export interface InitialRunRecordInput {
   ownerId?: string;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
+  /** 执行宿主进程标识（存活判定依据，落库到运行记录） */
+  hostPid?: number;
   /** 包物理实例标识 */
   packageInstanceId?: string;
   /** 快照代次标识 */
@@ -81,6 +83,7 @@ export function buildInitialRunRecord(
     parentRunId,
     ownerId,
     hostSessionId,
+    hostPid,
     packageInstanceId,
     generationId,
     targetPackageId,
@@ -103,6 +106,7 @@ export function buildInitialRunRecord(
     generationId: generationId || (runnerPackageId === targetPackageId ? runnerGenerationId : "1"),
     ownerId: ownerId || "local",
     hostSessionId: hostSessionId || runnerHostSessionId,
+    hostPid,
     status,
     error,
     startedAt,
