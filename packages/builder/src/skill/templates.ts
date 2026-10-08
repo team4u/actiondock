@@ -81,6 +81,32 @@ ${list}
 }
 
 /**
+ * 渲染「执行 Action」调用指引正文：三处生成器共用同一决策原则，
+ * 承载输入模式选择（扁平赋值与 --input-file）与输出模式选择（默认原始输出与按需 --json）。
+ */
+function renderInvocationGuidance(describeCmd: string, runCmd: string): string {
+  return `推荐在执行前调用 describe 命令调阅确切参数契约：
+
+\`\`\`bash
+# 调阅参数契约与建议赋值样例
+${describeCmd}
+
+# 调用语法格式（其中 ASSIGNMENT 根据 describe 查阅的参数契约提供）
+${runCmd} -- ASSIGNMENT...
+\`\`\`
+
+输入模式选择（三种输入模式严格互斥，仅选其一）：
+
+- 扁平赋值为默认首选：参数项少且结构简单时，直接以 \`-- key="value" count:=10\` 形式内联传递。
+- 文件输入用于复杂参数：当参数含深层嵌套结构、大段文本或内容易被终端引号转义破坏时，将完整 JSON 写入文件并通过 \`--input-file input.json\` 传递。
+
+输出模式选择（避免浪费上下文 token）：
+
+- 默认不加 \`--json\`：stdout 直接输出业务返回正文，保留原生格式与真实换行，绝大多数调用直接阅读正文即可推进后续步骤。
+- 仅在需要结构化提取时才追加 \`--json\`：如需按 \`error.code\` 判定自愈策略、以 \`runId\` 关联追踪或程序化消费完整字段时，才使用 JSON 信封输出（格式见下节）。`;
+}
+
+/**
  * JSON 信封段落变体：source 与 composite 使用「信封」表述，standalone 使用「结果」表述。
  */
 type JsonEnvelopeWording = "envelope" | "result";
@@ -100,9 +126,9 @@ function renderJsonEnvelopeSection(wording: JsonEnvelopeWording, options?: { wit
     options?.withDescriptions === false
       ? ""
       : `\n\n${stdoutLine}\n- \`stderr\`：执行日志与诊断${stderrTail}信息。`;
-  return `### 结构化响应解析
+  return `### 结构化响应解析（--json 模式）
 
-所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON ${noun}：
+仅当调用时显式追加 \`--json\` 选项，\`stdout\` 才输出标准 JSON ${noun}；默认不加该选项时直接输出业务正文：
 
 \`\`\`json
 // 执行成功响应 (ok 为 true)
@@ -150,7 +176,7 @@ export function renderRuntimeReferenceContent(options: {
 \`\`\`bash
 ${options.entryRelPath || "node ./entry.mjs"} list
 ${options.entryRelPath || "node ./entry.mjs"} describe <action-id>
-${options.entryRelPath || "node ./entry.mjs"} run <action-id> --json --input-file input.json
+${options.entryRelPath || "node ./entry.mjs"} run <action-id> -- ASSIGNMENT...
 \`\`\`
 
 若宿主环境已全局安装 \`ad\`，亦可将其链接后统一调度。`
@@ -269,21 +295,7 @@ ad describe ${pkgId}/${firstAction}
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
 
-推荐在执行前调用 describe 命令调阅确切参数契约：
-
-\`\`\`bash
-# 调阅参数契约与建议赋值样例
-ad describe ${pkgId}/${firstAction}
-
-# 调用语法格式（其中 ASSIGNMENT 根据 ad describe 查阅的参数契约提供）
-ad run ${pkgId}/${firstAction} --json -- ASSIGNMENT...
-\`\`\`
-
-将参数写入 JSON 文件并通过 --input-file 传递：
-
-\`\`\`bash
-ad run ${pkgId}/${firstAction} --json --input-file input.json
-\`\`\`
+${renderInvocationGuidance(`ad describe ${pkgId}/${firstAction}`, `ad run ${pkgId}/${firstAction}`)}
 
 ${renderJsonEnvelopeSection("envelope")}
 ${playbookSection}
@@ -345,21 +357,7 @@ ${binaryRelPath} describe ${firstAction}
 
 ### 执行 Action
 
-推荐在执行前调用 describe 命令调阅确切参数契约：
-
-\`\`\`bash
-# 调阅参数契约与建议赋值样例
-${binaryRelPath} describe ${firstAction}
-
-# 调用语法格式（其中 ASSIGNMENT 根据 describe 查阅的参数契约提供）
-${binaryRelPath} run ${firstAction} --json -- ASSIGNMENT...
-\`\`\`
-
-将参数写入 JSON 文件并通过 --input-file 传递：
-
-\`\`\`bash
-${binaryRelPath} run ${firstAction} --json --input-file input.json
-\`\`\`
+${renderInvocationGuidance(`${binaryRelPath} describe ${firstAction}`, `${binaryRelPath} run ${firstAction}`)}
 
 ${renderJsonEnvelopeSection("result")}
 ${playbookSection}
@@ -486,21 +484,7 @@ ${playbookEntries.join("\n")}
 
   const sInvoke = `## 标准调用命令
  
-推荐在执行前调用 describe 命令调阅确切参数契约：
-
-\`\`\`bash
-# 调阅参数契约与建议赋值样例
-ad describe ${sampleActionId}
-
-# 调用语法格式（其中 ASSIGNMENT 根据 ad describe 查阅的参数契约提供）
-ad run ${sampleActionId} --json -- ASSIGNMENT...
-\`\`\`
- 
-将参数写入 JSON 文件并通过 --input-file 传递：
- 
-\`\`\`bash
-ad run ${sampleActionId} --json --input-file input.json
-\`\`\`
+${renderInvocationGuidance(`ad describe ${sampleActionId}`, `ad run ${sampleActionId}`)}
 
 ${renderJsonEnvelopeSection("envelope", { withDescriptions: false })}`;
 

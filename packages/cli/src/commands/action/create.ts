@@ -233,8 +233,9 @@ ${returnBody}
     writeStdout(`\nParameter contract:`, context);
     writeStdout(`  ad describe ${id}`, context);
     writeStdout(`\nUsage:`, context);
-    writeStdout(`  Pass parameters according to describe assignment template: ad run ${id} --json -- ASSIGNMENT...`, context);
-    writeStdout(`  Complex input or large text: ad run ${id} --json --input-file input.json`, context);
+    writeStdout(`  Pass parameters according to describe assignment template: ad run ${id} -- ASSIGNMENT...`, context);
+    writeStdout(`  Complex input or large text: ad run ${id} --input-file input.json`, context);
+    writeStdout(`  Append --json only when structured extraction is needed`, context);
   } catch (err: any) {
     throw wrapAsExecutionError(err);
   }

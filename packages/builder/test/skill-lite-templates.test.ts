@@ -97,8 +97,15 @@ describe("技能说明轻量化", () => {
     assert.ok(md.includes("./playbooks/release.md"));
     // describe 调用示例保留
     assert.ok(md.includes("ad describe"));
-    // 结果信封说明保留
+    // 结果信封说明保留（仅 --json 模式生效）
     assert.ok(md.includes("### 结构化响应解析"));
+    // 调用决策指引：输入模式与输出模式选择原则保留
+    assert.ok(md.includes("扁平赋值为默认首选"));
+    assert.ok(md.includes("文件输入用于复杂参数"));
+    assert.ok(md.includes("仅在需要结构化提取时才追加"));
+    // 默认调用示例不再无条件携带 --json
+    assert.ok(!md.includes("--json -- ASSIGNMENT"));
+    assert.ok(!md.includes("--json --input-file"));
   });
 
   it("独立运行型模板不展开完整 Schema", () => {
@@ -109,6 +116,9 @@ describe("技能说明轻量化", () => {
     assert.ok(!md.includes("目标主机名"));
     assert.ok(md.includes("node ./entry.mjs describe"));
     assert.ok(md.includes("破坏性操作（执行前须向用户确认）"));
+    assert.ok(md.includes("扁平赋值为默认首选"));
+    assert.ok(md.includes("仅在需要结构化提取时才追加"));
+    assert.ok(!md.includes("--json -- ASSIGNMENT"));
   });
 
   it("复合模板不展开完整 Schema 且插槽名称兼容", () => {
@@ -130,6 +140,11 @@ describe("技能说明轻量化", () => {
 
     assert.ok(!md.includes("- 输入参数:"));
     assert.ok(!md.includes("- 输出字段:"));
+    // 调用决策指引保留且默认示例不携带 --json
+    assert.ok(md.includes("扁平赋值为默认首选"));
+    assert.ok(md.includes("仅在需要结构化提取时才追加"));
+    assert.ok(!md.includes("--json -- ASSIGNMENT"));
+    assert.ok(!md.includes("--json --input-file"));
     // 复合模板槽位内容正确插入 after-actions 位置
     const actionsIdx = md.indexOf("## 可用 Action 工具清单");
     const customIdx = md.indexOf("## 自定义段落");
@@ -161,6 +176,9 @@ describe("技能说明轻量化", () => {
 
     assert.ok(ref.includes("node ./entry.mjs list"));
     assert.ok(ref.includes("不要求全局安装"));
+    // 运行参考中的调用示例不再无条件携带 --json
+    assert.ok(ref.includes("run <action-id> -- ASSIGNMENT"));
+    assert.ok(!ref.includes("--json --input-file"));
   });
 
   it("参考文件路径常量为单一事实源相对路径", () => {
