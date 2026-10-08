@@ -5,11 +5,18 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { renderRawExecutionResult } from "../src/commands/run";
+import { extractTextFieldPayload, resolveActionDefaultTextField } from "../src/renderer";
+import { ArgumentError, ExecutionError } from "../src/errors";
+import { startActionDockServer, type ActionDockServerInstance } from "@actiondock/core/server";
 import type { ExecutionResult } from "@actiondock/sdk";
 
 import { runCliAsync } from "./helpers/run-cli";
 
 let tempHome: string | undefined;
+let serverInstance: ActionDockServerInstance | undefined;
+let tempRemoteDir: string | undefined;
+let serverUrl: string | undefined;
+const REMOTE_SECRET = "test-secret-raw-token";
 
 async function runCli(
   args: string[],
@@ -205,6 +212,178 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
       process.exitCode = prevExitCode ?? 0;
     }
   });
+
+  describe("Text Field Extraction & Default Annotation - Unit Tests", () => {
+    it("resolveActionDefaultTextField extracts valid textField string", () => {
+      assert.strictEqual(
+        resolveActionDefaultTextField({ "actiondock.cli": { textField: "content" } }),
+        "content"
+      );
+    });
+
+    it("resolveActionDefaultTextField returns undefined when annotations or actiondock.cli is absent", () => {
+      assert.strictEqual(resolveActionDefaultTextField(undefined), undefined);
+      assert.strictEqual(resolveActionDefaultTextField({}), undefined);
+      assert.strictEqual(resolveActionDefaultTextField({ other: "val" }), undefined);
+      assert.strictEqual(resolveActionDefaultTextField({ "actiondock.cli": {} }), undefined);
+    });
+
+    it("resolveActionDefaultTextField throws ExecutionError on invalid actiondock.cli annotation", () => {
+      assert.throws(
+        () => resolveActionDefaultTextField({ "actiondock.cli": "not-an-object" as any }),
+        (err: any) => err instanceof ExecutionError && err.code === "INVALID_ANNOTATION"
+      );
+      assert.throws(
+        () => resolveActionDefaultTextField({ "actiondock.cli": [1, 2] as any }),
+        (err: any) => err instanceof ExecutionError && err.code === "INVALID_ANNOTATION"
+      );
+      assert.throws(
+        () => resolveActionDefaultTextField({ "actiondock.cli": { textField: 123 } as any }),
+        (err: any) => err instanceof ExecutionError && err.code === "INVALID_ANNOTATION"
+      );
+      assert.throws(
+        () => resolveActionDefaultTextField({ "actiondock.cli": { textField: "" } }),
+        (err: any) => err instanceof ExecutionError && err.code === "INVALID_ANNOTATION"
+      );
+      assert.throws(
+        () => resolveActionDefaultTextField({ "actiondock.cli": { textField: "   " } }),
+        (err: any) => err instanceof ExecutionError && err.code === "INVALID_ANNOTATION"
+      );
+    });
+
+    it("extractTextFieldPayload extracts string text and non-empty metadata", () => {
+      const data = {
+        path: "README.md",
+        startLine: 1,
+        endLine: 3,
+        content: "# Header\nLine 2",
+        hasMore: false,
+      };
+      const res = extractTextFieldPayload(data, "content");
+      assert.strictEqual(res.text, "# Header\nLine 2");
+      assert.deepStrictEqual(res.metadata, {
+        path: "README.md",
+        startLine: 1,
+        endLine: 3,
+        hasMore: false,
+      });
+    });
+
+    it("extractTextFieldPayload handles text-only data with undefined metadata", () => {
+      const res = extractTextFieldPayload({ message: "just message" }, "message");
+      assert.strictEqual(res.text, "just message");
+      assert.strictEqual(res.metadata, undefined);
+    });
+
+    it("extractTextFieldPayload accepts empty string as valid text", () => {
+      const res = extractTextFieldPayload({ content: "", path: "test.txt" }, "content");
+      assert.strictEqual(res.text, "");
+      assert.deepStrictEqual(res.metadata, { path: "test.txt" });
+    });
+
+    it("extractTextFieldPayload throws on non-object or array data", () => {
+      assert.throws(
+        () => extractTextFieldPayload(null, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload("scalar string", "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload(42, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload([{ content: "in array" }], "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+    });
+
+    it("extractTextFieldPayload throws when field is missing or non-string", () => {
+      assert.throws(
+        () => extractTextFieldPayload({ path: "test.txt" }, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload({ content: 123 }, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload({ content: null }, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+      assert.throws(
+        () => extractTextFieldPayload({ content: { nested: true } }, "content"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+    });
+
+    it("extractTextFieldPayload rejects prototype-inherited fields and avoids prototype pollution in metadata", () => {
+      const proto = { inherited: "proto-val" };
+      const obj = Object.create(proto);
+      obj.own = "own-val";
+
+      assert.throws(
+        () => extractTextFieldPayload(obj, "inherited"),
+        (err: any) => err instanceof ExecutionError && err.code === "OUTPUT_FORMAT_ERROR"
+      );
+
+      const res = extractTextFieldPayload(
+        { content: "text", __proto__: { evil: true } as any, normal: 1 },
+        "content"
+      );
+      assert.strictEqual(res.text, "text");
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, "evil"), false);
+    });
+
+    it("renderRawExecutionResult with textField outputs raw text to stdout and metadata to stderr", () => {
+      const stdoutLogs: string[] = [];
+      const stderrLogs: string[] = [];
+
+      renderRawExecutionResult(
+        "files.read",
+        {
+          ok: true,
+          runId: "run-tf-1",
+          data: { path: "a.ts", content: "export default 1;\n" },
+        },
+        {
+          stdout: (msg) => stdoutLogs.push(msg),
+          stderr: (msg) => stderrLogs.push(msg),
+        },
+        { textField: "content" }
+      );
+
+      assert.strictEqual(stdoutLogs.join("\n"), "export default 1;\n");
+      assert.strictEqual(
+        stderrLogs.join("\n"),
+        JSON.stringify({ path: "a.ts" }, null, 2)
+      );
+    });
+
+    it("renderRawExecutionResult with textField does not write to stderr if metadata is empty", () => {
+      const stdoutLogs: string[] = [];
+      const stderrLogs: string[] = [];
+
+      renderRawExecutionResult(
+        "files.read",
+        {
+          ok: true,
+          runId: "run-tf-2",
+          data: { content: "only body" },
+        },
+        {
+          stdout: (msg) => stdoutLogs.push(msg),
+          stderr: (msg) => stderrLogs.push(msg),
+        },
+        { textField: "content" }
+      );
+
+      assert.strictEqual(stdoutLogs.join("\n"), "only body");
+      assert.strictEqual(stderrLogs.length, 0);
+    });
+  });
 });
 
 describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
@@ -242,7 +421,89 @@ export default defineAction(async (input: { path: string }) => {
 `;
     writeFileSync(join(tempDir, "actions", "read.ts"), filesReadSource, "utf-8");
 
-    // Register action in actiondock.json
+    // Create additional test actions
+    writeFileSync(
+      join(tempDir, "actions", "text-only.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  return { content: "only text content" };
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "empty-text.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  return { content: "", fileId: "123" };
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "annotated.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  return {
+    path: "docs/readme.md",
+    content: "# Title\\nBody line 2",
+    extra: 42,
+  };
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "bad-annotated.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+import { writeFileSync } from "node:fs";
+export default defineAction(async () => {
+  writeFileSync("${join(tempDir, "bad-annotated.ran").replace(/\\/g, "/")}", "ran");
+  return { content: "should not run" };
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "side-effect.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+import { appendFileSync } from "node:fs";
+export default defineAction(async () => {
+  appendFileSync("${join(tempDir, "side-effect-counter.txt").replace(/\\/g, "/")}", "1\\n");
+  return { notContent: "no text field here" };
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "array.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  return [{ content: "in array" }];
+});
+`,
+      "utf-8"
+    );
+
+    writeFileSync(
+      join(tempDir, "actions", "proto.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  const p = { content: "from proto" };
+  const obj = Object.create(p);
+  obj.own = "val";
+  return obj;
+});
+`,
+      "utf-8"
+    );
+
+    // Register actions in actiondock.json
     const configPath = join(tempDir, "actiondock.json");
     const existingConfig = JSON.parse(
       existsSync(configPath) ? readFileSync(configPath, "utf-8") : "{}"
@@ -259,10 +520,100 @@ export default defineAction(async (input: { path: string }) => {
         required: ["path"],
       },
     };
+    existingConfig.actions["files.text-only"] = {
+      entry: "actions/text-only.ts",
+      description: "Text only",
+    };
+    existingConfig.actions["files.empty-text"] = {
+      entry: "actions/empty-text.ts",
+      description: "Empty text",
+    };
+    existingConfig.actions["annotated.read"] = {
+      entry: "actions/annotated.ts",
+      description: "Annotated read",
+      annotations: {
+        "actiondock.cli": {
+          textField: "content",
+        },
+      },
+    };
+    existingConfig.actions["bad-annotated.action"] = {
+      entry: "actions/bad-annotated.ts",
+      description: "Bad annotation",
+      annotations: {
+        "actiondock.cli": {
+          textField: 12345,
+        },
+      },
+    };
+    existingConfig.actions["side-effect.action"] = {
+      entry: "actions/side-effect.ts",
+      description: "Side effect counter",
+    };
+    existingConfig.actions["array.action"] = {
+      entry: "actions/array.ts",
+      description: "Array result",
+    };
+    existingConfig.actions["proto.action"] = {
+      entry: "actions/proto.ts",
+      description: "Proto result",
+    };
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
+
+    // Initialize remote package and start server
+    tempRemoteDir = mkdtempSync(join(tmpdir(), "ad-cli-raw-remote-"));
+    const remoteInit = await runCli(["init", "--id", "test.remote-pkg", "--name", "Remote Pkg", "."], tempRemoteDir);
+    assert.strictEqual(remoteInit.exitCode, 0);
+
+    const remoteActionSource = `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  return {
+    remotePath: "remote/file.txt",
+    body: "Remote multiline body\\nLine 2",
+    version: 1,
+  };
+});
+`;
+    writeFileSync(join(tempRemoteDir, "actions", "remote-read.ts"), remoteActionSource, "utf-8");
+
+    const remoteConfigPath = join(tempRemoteDir, "actiondock.json");
+    const remoteConfig = JSON.parse(
+      existsSync(remoteConfigPath) ? readFileSync(remoteConfigPath, "utf-8") : "{}"
+    );
+    remoteConfig.actions = remoteConfig.actions || {};
+    remoteConfig.actions["remote.read"] = {
+      entry: "actions/remote-read.ts",
+      description: "Remote read with annotation",
+      annotations: {
+        "actiondock.cli": {
+          textField: "body",
+        },
+      },
+    };
+    writeFileSync(remoteConfigPath, JSON.stringify(remoteConfig, null, 2), "utf-8");
+
+    serverInstance = await startActionDockServer({
+      port: 0,
+      host: "127.0.0.1",
+      token: REMOTE_SECRET,
+      projectRoot: tempRemoteDir,
+    });
+    serverUrl = `http://127.0.0.1:${serverInstance.port}`;
   });
 
   after(async () => {
+    if (serverInstance) {
+      try {
+        await serverInstance.stop();
+      } catch {}
+      serverInstance = undefined;
+    }
+    if (tempRemoteDir && existsSync(tempRemoteDir)) {
+      try {
+        rmSync(tempRemoteDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {}
+      tempRemoteDir = undefined;
+    }
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -403,5 +754,294 @@ export default defineAction(async (input: { path: string }) => {
     assert.strictEqual(parsed.ok, false);
     assert.strictEqual(parsed.error.code, "INPUT_VALIDATION_FAILED");
     assert.strictEqual(parsed.hint, "Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
+  });
+
+  it("outputs raw text to stdout and remaining metadata to stderr with --text-field", async () => {
+    const proc = await runCli(
+      [
+        "run",
+        "files.read",
+        "--text-field",
+        "content",
+        "-i",
+        JSON.stringify({ path: "docs/readme.md" }),
+      ],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "# File Header\n\nBody text line 3\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, {
+      path: "docs/readme.md",
+      startLine: 1,
+      endLine: 3,
+      hasMore: false,
+    });
+  });
+
+  it("outputs raw text to stdout with empty stderr when text field is the only field", async () => {
+    const proc = await runCli(
+      ["run", "files.text-only", "--text-field", "content"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "only text content\n");
+    assert.strictEqual(stderr.trim(), "");
+  });
+
+  it("handles empty string as valid text field value and outputs metadata to stderr", async () => {
+    const proc = await runCli(
+      ["run", "files.empty-text", "--text-field", "content"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, { fileId: "123" });
+  });
+
+  it("automatically outputs declared text field and metadata when Action has default cli annotation", async () => {
+    const proc = await runCli(["run", "annotated.read"], tempDir);
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "# Title\nBody line 2\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, { path: "docs/readme.md", extra: 42 });
+  });
+
+  it("allows explicit --text-field to override Action default cli annotation", async () => {
+    const proc = await runCli(
+      ["run", "annotated.read", "--text-field", "path"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "docs/readme.md\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, {
+      content: "# Title\nBody line 2",
+      extra: 42,
+    });
+  });
+
+  it("ignores Action default cli annotation and outputs machine envelope when --json is provided", async () => {
+    const proc = await runCli(["run", "annotated.read", "--json"], tempDir);
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stderr.trim(), "");
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.path, "docs/readme.md");
+    assert.strictEqual(parsed.data.content, "# Title\nBody line 2");
+    assert.strictEqual(parsed.data.extra, 42);
+  });
+
+  it("rejects --text-field combined with --json before execution", async () => {
+    const proc = await runCli(
+      ["run", "files.read", "--text-field", "content", "--json"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 2);
+
+    const parsed = JSON.parse(proc.stdout.toString());
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "INVALID_ARGUMENT");
+    assert.ok(parsed.error.message.includes("Cannot specify both --text-field and --json"));
+  });
+
+  it("rejects --text-field combined with --async before execution", async () => {
+    const proc = await runCli(
+      ["run", "files.read", "--text-field", "content", "--async"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 2);
+
+    const stderr = proc.stderr.toString();
+    assert.ok(stderr.includes("Cannot specify both --text-field and --async"));
+  });
+
+  it("rejects empty --text-field option before execution", async () => {
+    const proc = await runCli(
+      ["run", "files.read", "--text-field", ""],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 2);
+
+    const stderr = proc.stderr.toString();
+    assert.ok(stderr.includes("requires a non-empty field name"));
+  });
+
+  it("rejects execution before calling action when Action has invalid annotation", async () => {
+    const proc = await runCli(["run", "bad-annotated.action"], tempDir);
+    assert.strictEqual(proc.exitCode, 1);
+
+    const stderr = proc.stderr.toString();
+    assert.ok(stderr.includes("Invalid 'actiondock.cli.textField' annotation"));
+
+    // Verify action was NEVER invoked (no side-effect executed)
+    assert.strictEqual(existsSync(join(tempDir, "bad-annotated.ran")), false);
+  });
+
+  it("reports CLI output format error and does not re-run action on runtime missing text field", async () => {
+    const proc = await runCli(
+      ["run", "side-effect.action", "--text-field", "content"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 1);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout.trim(), "");
+    assert.ok(
+      stderr.includes("CLI output format error: text field 'content' was not found in result data")
+    );
+
+    // Verify action ran exactly once (was NOT re-run)
+    const counterContent = readFileSync(join(tempDir, "side-effect-counter.txt"), "utf-8");
+    assert.strictEqual(counterContent.trim(), "1");
+
+    // Verify run record in storage was recorded as completed and not rewritten
+    const runsProc = await runCli(["runs", "list", "-a", "side-effect.action", "--json"], tempDir);
+    assert.strictEqual(runsProc.exitCode, 0);
+    const runsData = JSON.parse(runsProc.stdout.toString());
+    const items = Array.isArray(runsData) ? runsData : runsData.items;
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].status, "success");
+  });
+
+  it("reports CLI output format error when result data is an array", async () => {
+    const proc = await runCli(
+      ["run", "array.action", "--text-field", "content"],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 1);
+
+    const stderr = proc.stderr.toString();
+    assert.ok(
+      stderr.includes("CLI output format error: expected result data to be an object, but received an array")
+    );
+  });
+
+  it("reports CLI output format error when target text field is inherited from prototype", async () => {
+    const proc = await runCli(
+      [
+        "run",
+        "files.read",
+        "--text-field",
+        "toString",
+        "-i",
+        JSON.stringify({ path: "docs/readme.md" }),
+      ],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 1);
+
+    const stderr = proc.stderr.toString();
+    assert.ok(
+      stderr.includes("CLI output format error: text field 'toString' was not found in result data")
+    );
+  });
+
+  it("resolves default annotation and outputs text and metadata on remote server", async () => {
+    const proc = await runCli(
+      [
+        "run",
+        "remote.read",
+        "--server",
+        serverUrl!,
+        "--token",
+        REMOTE_SECRET,
+        "--allow-insecure-http",
+      ],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "Remote multiline body\nLine 2\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, {
+      remotePath: "remote/file.txt",
+      version: 1,
+    });
+  });
+
+  it("allows explicit --text-field to override default annotation on remote server", async () => {
+    const proc = await runCli(
+      [
+        "run",
+        "remote.read",
+        "--server",
+        serverUrl!,
+        "--token",
+        REMOTE_SECRET,
+        "--allow-insecure-http",
+        "--text-field",
+        "remotePath",
+      ],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stdout, "remote/file.txt\n");
+    const meta = JSON.parse(stderr);
+    assert.deepStrictEqual(meta, {
+      body: "Remote multiline body\nLine 2",
+      version: 1,
+    });
+  });
+
+  it("ignores default annotation on remote server when --json is provided", async () => {
+    const proc = await runCli(
+      [
+        "run",
+        "remote.read",
+        "--server",
+        serverUrl!,
+        "--token",
+        REMOTE_SECRET,
+        "--allow-insecure-http",
+        "--json",
+      ],
+      tempDir
+    );
+    assert.strictEqual(proc.exitCode, 0);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    assert.strictEqual(stderr.trim(), "");
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.body, "Remote multiline body\nLine 2");
+    assert.strictEqual(parsed.data.remotePath, "remote/file.txt");
+    assert.strictEqual(parsed.data.version, 1);
   });
 });

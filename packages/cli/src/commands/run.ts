@@ -8,11 +8,20 @@ import {
 import {
   type InvocationControl,
 } from "@actiondock/core/server";
-import { resolveExecutionHint } from "@actiondock/core";
+import {
+  ACTION_NOT_FOUND,
+  NOT_FOUND,
+  resolveExecutionHint,
+} from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError, packageNotFoundError } from "../errors";
-import { writeStderr, writeStdout } from "../renderer";
+import {
+  extractTextFieldPayload,
+  resolveActionDefaultTextField,
+  writeStderr,
+  writeStdout,
+} from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
@@ -23,19 +32,34 @@ import {
   withService,
 } from "../utils";
 
+export interface RawExecutionRenderOptions {
+  textField?: string;
+}
+
 /**
  * 以原始纯文本形式渲染 Action 执行终态结果（默认纯文本模式）。
  *
  * 设计契约：
  * - 通用纯文本透传：标量直接输出，结构化对象按标准规范呈现，杜绝私有业务字段嗅探。
+ * - 显式或声明式正文输出：指定 textField 时仅输出该自有字符串字段至 stdout，剩余字段以 JSON 对象形式输出至 stderr。
  * - 标准输出仅承载业务有效载荷，保持原生排版与真实换行，供用户调阅或下游管道消费。
  */
 export function renderRawExecutionResult(
   targetRef: string,
   result: ExecutionResult,
-  context?: CliContext
+  context?: CliContext,
+  options?: RawExecutionRenderOptions
 ): void {
   if (result.ok) {
+    if (options?.textField !== undefined) {
+      const { text, metadata } = extractTextFieldPayload(result.data, options.textField);
+      writeStdout(text, context);
+      if (metadata) {
+        writeStderr(JSON.stringify(metadata, null, 2), context);
+      }
+      return;
+    }
+
     const data: any = result.data;
     let rawText: string;
 
@@ -88,6 +112,18 @@ export async function executeAction(
 ): Promise<void> {
   if (!id) {
     throw new ArgumentError("Action ID is required for run");
+  }
+
+  if (options.textField !== undefined) {
+    if (typeof options.textField !== "string" || options.textField.trim() === "") {
+      throw new ArgumentError("The --text-field option requires a non-empty field name.");
+    }
+    if (options.json) {
+      throw new ArgumentError("Cannot specify both --text-field and --json.");
+    }
+    if (options.async) {
+      throw new ArgumentError("Cannot specify both --text-field and --async.");
+    }
   }
 
   const effectiveControl = control ?? context?.control;
@@ -179,6 +215,21 @@ export async function executeAction(
             return;
           }
         } else {
+          let effectiveTextField: string | undefined = options.textField;
+
+          if (!isMachine && effectiveTextField === undefined) {
+            try {
+              const spec = await service.discovery.describeAction(targetRef);
+              effectiveTextField = resolveActionDefaultTextField(spec.annotations);
+            } catch (err: any) {
+              if (err?.code === ACTION_NOT_FOUND || err?.code === NOT_FOUND) {
+                // 若动作未找到，继续交由 execution.run 生成统一的执行与提示结果
+              } else {
+                throw err;
+              }
+            }
+          }
+
           const result = await service.execution.run(targetRef, input as JsonValue, {
             signal: effectiveSignal,
             timeoutMs,
@@ -202,7 +253,7 @@ export async function executeAction(
               writeStdout(JSON.stringify(result, null, 2), context);
             }
           } else {
-            renderRawExecutionResult(targetRef, result, context);
+            renderRawExecutionResult(targetRef, result, context, { textField: effectiveTextField });
           }
 
           if (!result.ok) {
@@ -257,6 +308,10 @@ Flat Input Syntax & Examples:
     # Nested object properties
     ad run <id> -- user.name="alice" user.age:=30
 
+  Text Field Output:
+    # Extract specific text field to stdout (remaining fields as JSON to stderr)
+    ad run <id> --text-field content -- path="README.md"
+
   Complex or multiline inputs:
     # Pass via JSON file with --input-file to avoid shell escaping issues
     ad run <id> --input-file input.json`;
@@ -289,6 +344,7 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
+    .option("--text-field <field>", "Extract and output a specific top-level string field as raw text")
     .addHelpText("after", RUN_HELP_AFTER_TEXT)
     .action(async (id: string, params: string[] | any, rawOptions: any, cmd: any) => {
       let flatArgs: string[] | undefined;

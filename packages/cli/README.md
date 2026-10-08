@@ -152,8 +152,13 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 
 ### Action 输出模式与机器模式
 
-- **默认原始纯文本输出**：`ad run` 默认采用面向终端人类阅读与 LLM Agent 上下文消费的原始输出模式。直接将执行结果正文内容（如文件 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），相关元数据（如文件路径、行号范围、截断标记）独立输出至 stderr，符合 Unix 管道安全原则。业务执行失败时在 stderr 输出错误详情并以退出码 1 退出。
-- **机器 JSON 格式**（`--json`）：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。面向智能体调用推荐使用该模式；此时输出标准 JSON 结果（包含 `ok`、`runId`、`data` 或 `error`）；若参数解析出错输出标准错误信封并以退出码 2 退出。
+- **默认纯文本输出**：`ad run` 默认采用纯文本模式。标量直接输出；结构化对象完整输出为标准 JSON 格式到 stdout；不进行私有业务字段自动嗅探。
+- **显式正文输出与默认注解**：
+  - 显式指定正文字段：通过 `ad run <id> --text-field <field> -- ...` 提取结果中特定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以 JSON 对象形式输出至 stderr（元数据为空时不输出）。
+  - 声明式默认正文：Action 清单中声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 时自动按声明提取正文与元数据；显式 `--text-field` 优先于默认注解。
+  - 严格校验：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出，不静默回退，不改写运行记录。
+  - 参数互斥：`--text-field` 与 `--json`、`--async` 严格互斥，在执行前校验并以退出码 2 退出。
+- **机器模式**（`--json`）：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。此时始终输出完整执行信封（包含 `ok`、`runId`、`data` 或 `error`），忽略默认正文注解；若参数解析出错输出标准错误信封并以退出码 2 退出。
 
 ---
 
@@ -167,7 +172,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
 | `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引与建议赋值 |
-| `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--json` 输出标准信封） |
+| `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--text-field` 提取正文与 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码 |

@@ -96,7 +96,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # ad run <id> [-i, --input <json> | -f, --input-file <path|->] [control-options]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动。
-  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile`、`--timeout` 等）与数据平面（Action 入参）的协议边界。
+  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--text-field`、`--json`、`--config`、`--data-dir`、`--profile`、`--timeout` 等）与数据平面（Action 入参）的协议边界。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
@@ -107,8 +107,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
     - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
   - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。
-  - 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
-  - 默认原始输出：默认直接将结果正文内容（如 `content`、`text`、`message` 或文本标量）输出至 stdout，元数据输出至 stderr，保留原始格式与真实换行；业务失败时错误输出至 stderr 并以退出码 1 退出。
+  - 机器输出模式：面向智能体调用推荐使用 `--json`，输出标准 JSON 结果信封并忽略默认正文注解；当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
+  - 纯文本输出模式：
+    - 默认模式：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。
+    - 显式正文输出：传入 `--text-field <field>` 时，仅提取结果中指定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（元数据为空时不输出）。
+    - 声明式默认正文：Action 清单中声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 的同步执行自动应用该正文与元数据输出行为；显式 `--text-field` 优先于默认注解。
+    - 严格校验：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出；`--text-field` 与 `--json`、`--async` 严格互斥并在执行前以退出码 2 退出。
   - 传统输入选项：
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。

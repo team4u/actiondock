@@ -91,12 +91,16 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - 传参安全与扁平编码规范：
   - 规范调用语法：`ad run <action> [control-options] -- <assignments...>`。
-  - 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 协议边界：`--` 分隔符作为控制平面选项（如 `--text-field`、`--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
   - 两种赋值操作符：`path=value` 严格保留为字符串，不执行 JSON 解析与类型猜测；`path:=json` 严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
   - 路径语法规则：命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性；纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组；根节点始终物化为对象；严禁叶节点与容器冲突、对象与数组冲突及重复赋值（违者触发 `INPUT_PATH_CONFLICT`）；拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
   - 三种输入模式严格互斥：扁平参数、`--input <json>` 与 `--input-file <path|->` 严格互斥，不可混用（违者触发 `INPUT_CONFLICT`）；未指定输入时默认传入 `{}`。
   - 机器模式与退出码：仅在需要结构化提取（按错误码自愈、程序化消费完整字段）时才追加 `--json`，避免信封包装浪费上下文 token；当参数解析出错时输出标准错误信封并以退出码 2 退出。
-- 默认原始输出与机器信封：`ad run` 默认直接将结果正文（如文件 `content`、`text`、`message` 或标量字符串）原始输出到 stdout（保留真实换行且无 JSON 转义），元数据独立输出至 stderr，兼顾命令行可读性、Agent 行号精确定位与 Unix 管道消费；如需程序化消费标准 JSON 信封，传入 `--json`。
+- 纯文本输出与机器信封：
+  - 默认模式：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象完整输出为标准 JSON 格式到 stdout，不进行私有业务字段自动嗅探。
+  - 正文提取：显式指定 `--text-field <field>` 或 Action 清单声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，stdout 仅输出目标顶层自有字符串正文（保留真实换行且无 JSON 转义），其余字段以 JSON 对象形式输出至 stderr（元数据为空时不输出）；显式参数覆盖声明式注解。
+  - 严格校验：正文字段缺失、非字符串或返回数据非对象时明确报错退出；`--text-field` 与 `--json`、`--async` 互斥并在执行前以退出码 2 退出。
+  - 机器信封：如需程序化消费标准 JSON 信封，传入 `--json`，此时忽略默认正文注解。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消；多条后台任务可用 `ad runs watch [ids...]` 阻塞等待全部终态后聚合退出，主控后台派工拿不到 runId 时可在派工命令携带 `--request-id`，再用同标识 `ad runs watch --request-id <id>` 反查等待。
 - 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。
 
