@@ -1,4 +1,3 @@
-import "../utils/warning";
 import type { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
 import type { SqliteDriver, SqliteStatement } from "./types";

@@ -3,19 +3,6 @@ import { enableCompileCache } from "node:module";
 try {
   enableCompileCache?.();
 } catch {}
-try {
-  await import("@actiondock/core/warning");
-} catch {
-  try {
-    const { resolve } = await import("node:path");
-    const { existsSync } = await import("node:fs");
-    const { pathToFileURL } = await import("node:url");
-    const coreWarningSrc = resolve(import.meta.dirname, "../../core/src/utils/warning.ts");
-    if (existsSync(coreWarningSrc)) {
-      await import(pathToFileURL(coreWarningSrc).href);
-    }
-  } catch {}
-}
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -238,9 +225,6 @@ if (needsTsx) {
 
   if (tsxSpecifier) {
     const extraFlags = [];
-    if (process.env.ACTIONDOCK_SILENCE_WARNINGS !== "0") {
-      extraFlags.push("--no-warnings=ExperimentalWarning");
-    }
     if (nodeMajor >= 24) {
       extraFlags.push("--no-strip-types");
     }

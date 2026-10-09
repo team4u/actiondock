@@ -18,7 +18,6 @@ export function generateNodeHostEntrySource(plan: SelectionPlan): string {
 
   return `#!/usr/bin/env node
 // AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
-import "@actiondock/core/warning";
 import {
   createActionDock,
   createNodePlatform,
@@ -85,7 +84,6 @@ await serveParentIpc(service);
 export function generateNodeSupervisorEntrySource(plan: SelectionPlan): string {
   return `#!/usr/bin/env node
 // AUTO-GENERATED SUPERVISOR ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
-import "@actiondock/core/warning";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import {
@@ -157,8 +155,7 @@ if (argv.includes("-h") || argv.includes("--help") || argv[0] === "help") {
 
 // 3. 建立物理隔离监督边界，启动运行 ActionDockHost 的独立子进程
 const hostScript = join(import.meta.dirname, "entry-host.js");
-const warningFlags = process.env.ACTIONDOCK_SILENCE_WARNINGS !== "0" ? ["--no-warnings=ExperimentalWarning"] : [];
-const child = spawn(process.execPath, [...warningFlags, hostScript, ...argv], {
+const child = spawn(process.execPath, [hostScript, ...argv], {
   cwd: process.cwd(),
   env: process.env,
   stdio: ["pipe", "pipe", "pipe", "ipc"],

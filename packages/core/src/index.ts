@@ -5,7 +5,6 @@
  * 平台大对象驱动与解析器工具移至特定子路径导出（./server, ./project, ./registry,
  * ./profile, ./graph, ./package），严格杜绝在根导出泄露内部执行与平台上下文机制。
  */
-export { suppressExperimentalWarnings } from "./utils/warning";
 
 // 1. 核心版本号单一事实源
 export { ACTIONDOCK_VERSION } from "./version";

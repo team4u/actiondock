@@ -1,4 +1,3 @@
-import "../packages/core/src/utils/warning.ts";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";

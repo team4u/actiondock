@@ -41,11 +41,6 @@
       "types": "./dist/package/index.d.ts",
       "import": "./dist/package/index.js",
       "default": "./dist/package/index.js"
-    },
-    "./warning": {
-      "types": "./dist/utils/warning.d.ts",
-      "import": "./dist/utils/warning.js",
-      "default": "./dist/utils/warning.js"
     }
   },
   "files": [
