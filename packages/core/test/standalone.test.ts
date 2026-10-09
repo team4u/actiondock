@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
@@ -125,6 +126,112 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
       assert.notStrictEqual(parsed.runId, undefined);
     } finally {
       console.log = origLog;
+    }
+  });
+
+  it("支持 --stdin-field 将 stdin 原文绑定为入参字段并可与扁平参数组合", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "echo",
+          action: defineAction({
+            run(input: { text: string; style?: string }) {
+              return { received: input };
+            },
+          }),
+          inputSchema: {
+            type: "object",
+            properties: {
+              text: { type: "string" },
+              style: { type: "string" },
+            },
+            required: ["text"],
+          },
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    const origStdinDescriptor = Object.getOwnPropertyDescriptor(process, "stdin");
+    Object.defineProperty(process, "stdin", {
+      configurable: true,
+      get: () => Readable.from(["这是一段正文"]),
+    });
+    try {
+      const code = await dispatcher.dispatch([
+        "run",
+        "echo",
+        "--stdin-field",
+        "text",
+        "--json",
+        `--data-dir=${tmpDir}`,
+        "--",
+        "style=brief",
+      ]);
+      assert.strictEqual(code, 0);
+      const parsed = JSON.parse(stdoutLogs.join("\n"));
+      assert.strictEqual(parsed.ok, true);
+      assert.deepStrictEqual(parsed.data.received, {
+        text: "这是一段正文",
+        style: "brief",
+      });
+    } finally {
+      if (origStdinDescriptor) {
+        Object.defineProperty(process, "stdin", origStdinDescriptor);
+      }
+    }
+  });
+
+  it("目录型入口拒绝 --stdin-field 与 --input 或 --input-file 混用并返回退出码 2", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "echo",
+          action: defineAction({
+            run(input: { text: string }) {
+              return { received: input };
+            },
+          }),
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    const origStdinDescriptor2 = Object.getOwnPropertyDescriptor(process, "stdin");
+    Object.defineProperty(process, "stdin", {
+      configurable: true,
+      get: () => Readable.from(["x"]),
+    });
+    try {
+      const code = await dispatcher.dispatch([
+        "run",
+        "echo",
+        "--stdin-field",
+        "text",
+        '--input={"a":1}',
+        "--json",
+        `--data-dir=${tmpDir}`,
+      ]);
+      assert.strictEqual(code, 2);
+      const parsed = JSON.parse(stdoutLogs.join("\n"));
+      assert.strictEqual(parsed.ok, false);
+      assert.strictEqual(parsed.error.code, "INPUT_CONFLICT");
+    } finally {
+      if (origStdinDescriptor2) {
+        Object.defineProperty(process, "stdin", origStdinDescriptor2);
+      }
     }
   });
 
@@ -528,5 +635,105 @@ describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", (
     assert.strictEqual(parsed.ok, false);
     assert.strictEqual(parsed.error.code, "ACTION_NOT_FOUND");
     assert.strictEqual(parsed.hint, "Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
+  });
+
+  it("目录型 Standalone 运行时的 describe 输出说明与真实执行行为完全对照一致", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const fileReaderAction = defineAction({
+      run() {
+        return {
+          content: "file content text",
+          path: "sample.txt",
+          line: 12,
+        };
+      },
+    });
+
+    const annotatedAction = defineAction({
+      run() {
+        return {
+          content: "sniffed content",
+          customField: "custom text",
+          extra: "meta",
+        };
+      },
+    });
+
+    const plainObjectAction = defineAction({
+      run() {
+        return {
+          key: "value",
+          count: 99,
+        };
+      },
+    });
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "read-file",
+          action: fileReaderAction,
+          description: "文件读取动作",
+        },
+        {
+          id: "annotated",
+          action: annotatedAction,
+          description: "带注解动作",
+          annotations: {
+            "actiondock.cli": { textField: "customField" },
+          },
+        },
+        {
+          id: "plain-object",
+          action: plainObjectAction,
+          description: "普通对象动作",
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    // 1. 验证未注解动作的 describe 文案与实际 run 执行输出一致
+    await dispatcher.dispatch(["describe", "read-file", `--data-dir=${tmpDir}`]);
+    const describeText = stdoutLogs.join("\n");
+    assert.ok(describeText.includes("extracts 'content', 'text', or 'message' from objects (with metadata on stderr), falling back to formatted JSON"));
+    assert.ok(!describeText.includes("--text-field"));
+
+    stdoutLogs.length = 0;
+    stderrLogs.length = 0;
+    const runCode1 = await dispatcher.dispatch(["run", "read-file", `--data-dir=${tmpDir}`]);
+    assert.strictEqual(runCode1, 0);
+    // stdout 提取出 content 字段正文
+    assert.strictEqual(stdoutLogs.join("").trim(), "file content text");
+    // stderr 打印剩余元数据标签
+    assert.ok(stderrLogs.some((l) => l.includes("sample.txt") && l.includes("line 12")));
+
+    // 2. 验证带注解动作：describe 明确标注 standalone 忽略 textField 并嗅探，实际 run 确实嗅探 content 而非 customField
+    stdoutLogs.length = 0;
+    stderrLogs.length = 0;
+    await dispatcher.dispatch(["describe", "annotated", `--data-dir=${tmpDir}`]);
+    const annotatedDescribe = stdoutLogs.join("\n");
+    assert.ok(annotatedDescribe.includes("Default text field: customField (note: ignored in standalone runtime; standalone extracts 'content', 'text', or 'message', falling back to formatted JSON)"));
+    assert.ok(annotatedDescribe.includes("stdout: Raw string for scalars; extracts 'content', 'text', or 'message' from objects"));
+    assert.ok(annotatedDescribe.includes("stderr: Remaining fields as metadata (for extracted fields), diagnostics, and logs"));
+
+    stdoutLogs.length = 0;
+    stderrLogs.length = 0;
+    const runCode2 = await dispatcher.dispatch(["run", "annotated", `--data-dir=${tmpDir}`]);
+    assert.strictEqual(runCode2, 0);
+    // 实际执行确实输出 content，忽略 customField
+    assert.strictEqual(stdoutLogs.join("").trim(), "sniffed content");
+
+    // 3. 验证无嗅探命中对象：回退至 formatted JSON
+    stdoutLogs.length = 0;
+    stderrLogs.length = 0;
+    const runCode3 = await dispatcher.dispatch(["run", "plain-object", `--data-dir=${tmpDir}`]);
+    assert.strictEqual(runCode3, 0);
+    const parsedObj = JSON.parse(stdoutLogs.join(""));
+    assert.deepStrictEqual(parsedObj, { key: "value", count: 99 });
   });
 });

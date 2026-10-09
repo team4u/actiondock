@@ -131,9 +131,10 @@ npx skills remove <skill-name>
     - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
     - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
   - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-  - 传统文件与管道输入：对于超长文本或复杂嵌套对象，亦可写入临时 JSON 文件使用 `--input-file <path>`，或通过管道流式传入 `--input-file -`。
+  - 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 完整正文原样绑定为指定顶层字段的字符串值（不解析类型、不剥 BOM、不修剪空白、空输入为空字符串）；可与扁平赋值组合，与 `--input` / `--input-file` 互斥；stdin 源字节与最终入参序列化大小各有默认 10MiB 上限，合并字段和 JSON 转义放大计入最终大小；非法 UTF-8 报读取失败。管道非事务，高风险写入先完整生成并校验再执行。
+  - 传统文件与管道输入：对于超长文本或复杂嵌套对象，亦可写入临时 JSON 文件使用 `--input-file <path>`，或通过管道传入 `--input-file -`；读取完整输入后才执行 Action，不是逐行或流式执行。
   - 纯文本正文输出：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。当通过 `--text-field <field>` 显式指定或 Action 清单通过 `annotations["actiondock.cli"]` 声明默认正文字段时，仅将该顶层自有字符串正文输出至 stdout（保留真实换行且无 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（元数据为空时不输出）。极佳适配文件查阅、代码阅读与 Unix 管道消费。
-  - 机器 JSON 信封输出：面向智能体调用推荐传入 `--json`，终端输出标准 JSON 信封并忽略默认正文注解；若参数解析出错输出错误信封并以退出码 2 退出。`--text-field` 与 `--json`、`--async` 严格互斥并在执行前校验。
+  - 机器 JSON 信封输出：需要结构化提取时传入 `--json`，终端输出标准 JSON 信封并忽略默认正文注解；若参数解析出错输出错误信封并以退出码 2 退出。`--text-field` 与 `--json`、`--async` 严格互斥并在执行前校验。
   - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --async --json -- task=deploy`），获取包含 `runId` 的票据。
 - **第五阶段：结果校验与错误处置**：
   - 默认模式：直接消费 stdout 纯文本；若执行失败，stderr 输出错误详情并伴随非 0 退出码。

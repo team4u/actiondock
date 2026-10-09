@@ -98,10 +98,11 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```bash
   ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
-  作为编码顾问查询指定 Action 的详情，提供三层指导：
+  作为编码顾问查询指定 Action 的详情，提供四层指导：
   - 输入模式字段明细：字段名、类型、是否必填与描述信息。
   - Flat 编码指引：字符串赋值格式（`path=value`）、JSON 标量与结构赋值格式（`path:=json`）与数组元素赋值格式（`path.0=...`）。
   - 建议赋值样例展示：基于 `inputSchema` 字段属性呈现无副作用的赋值示例数据，不生成动态可执行命令。
+  - 输出选择契约说明：清晰展示默认正文字段、stdout 与 stderr 通道语义、`--json` 完整信封读取方式、`--text-field <field>` 显式改选正文方式及仅适用于同步执行的边界。普通 CLI 未声明默认正文时解释通用输出规则，不嗅探私有字段；目录型入口如实描述现有 `content`、`text`、`message` 提取规则，不宣传其不支持的 `--text-field` 选项。
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
@@ -111,6 +112,15 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持）。
   - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--text-field`、`--json`、`--config`、`--data-dir`、`--profile`、`--timeout` 等）与数据平面（Action 入参）的协议边界。
+  - 原始文本输入：`--stdin-field <field>` 将 stdin 完整正文（至 EOF）原样绑定为指定顶层入参字段的字符串值，适合管道传入 Markdown、CSV、补丁等原始文本。下例假定 `summarize` 与 `render` 是已注册且具有相应字符串入参的示例动作：
+    ```bash
+    printf '这是一段正文' | ad run summarize --stdin-field text -- style=brief
+    cat report.md | ad run render --stdin-field content
+    ```
+    - 语义边界：正文严格保持字符串，不猜测 JSON、数字或布尔类型；不剥离 BOM、不修剪首尾空白，保留 CRLF、引号、反斜杠与 Unicode；空 stdin 绑定为空字符串，是否允许由 `inputSchema` 裁决。
+    - 组合规则：可与 `--` 后扁平赋值组合补充其他字段；与 `--input`、`--input-file`（含 `-`）严格互斥（`INPUT_CONFLICT`）；flat 重复赋值同名或嵌套子路径以 `INPUT_PATH_CONFLICT` 拒绝；非法字段名（空、含点分路径、危险属性）以 `INVALID_FLAT_ARGUMENT` 拒绝，均发生在读取与执行前。
+    - 安全边界：stdin 原始字节与最终入参序列化结果分别受默认 10MiB 上限约束。源字节超限报 `INPUT_LIMIT_EXCEEDED`，合并字段或 JSON 转义后总大小超限报 `FLAT_INPUT_LIMIT_EXCEEDED`；严格 UTF-8 校验失败报 `INPUT_FILE_READ_FAILED`，不是 JSON 解析失败。等待 stdin 时可通过取消信号退出；`--text-field` 是输出选择，可与本选项同时使用。
+    - 管道非事务：普通 shell 管道不是事务，`pipefail` 只能反映失败不能阻止下游已写入；高风险导入、发评论、部署建议先完整生成并校验再写入。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
@@ -120,7 +130,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 根节点始终物化为对象。
     - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
     - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
-  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。另有独立的原始文本绑定 `--stdin-field <field>` 可与扁平参数组合，详见上文。
   - 输出模式：
     - 默认纯文本输出：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。
     - 显式正文输出：传入 `--text-field <field>` 时，仅提取结果中指定顶层自有字符串字段输出至 stdout（保留真实换行与原生排版，不进行 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（无多余字段时不输出）。
@@ -135,13 +145,16 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
     - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析，适合跨进程管道与持续集成脚本。
-    - 转义安全：复杂 JSON 推荐优先使用 `--input-file` 传递，杜绝终端引号转义损坏。无论文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+    - 转义安全：复杂 JSON 推荐优先使用 `--input-file` 传递，避免终端引号转义损坏。文件与 stdin JSON 在解析前剔除 UTF-8 BOM，默认输入大小上限为 10MiB；改用文件不会解除大小限制。`--stdin-field` 则保留正文 BOM。
 
-- 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：
+- 校验 Action 模式与契约 (`ad validate` / `ad action validate`)：
   ```bash
   ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
-  校验指定包或动作的元数据清单规范与输入输出 Schema 定义。
+  校验指定包或动作的元数据清单规范、输入输出 Schema 定义与输出契约合规性。
+  - 输出契约校验：静态分析 `annotations["actiondock.cli"].textField` 与 `outputSchema` 的兼容性，新增分析自身只读取元数据。`ad validate` 的其他检查仍会加载动作定义、检查依赖和生成类型摘要，但不会调用业务 `run`。
+  - 确定矛盾拦截：注解结构非法、正文字段声明非有效字符串、Schema 明确拒绝对象或字符串正文字段、目标字段未声明且没有 `patternProperties` 约束并禁止额外属性时，报告错误并以退出码 1 退出。
+  - 风险透明诊断：根类型未明确限定对象或允许其他类型、字段未标记为 `required` 或不能保证字符串、Schema 缺失、包含复杂组合或字段可能由 `patternProperties` 约束时，给出警告而不误拒合法结果。`--json` 下各动作的诊断结果可包含 `warnings` 数组。
 
 - 自动生成 TypeScript 类型声明 (`ad generate types`)：
   ```bash

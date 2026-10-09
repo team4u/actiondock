@@ -53,6 +53,8 @@ export function printHelp(
   writeOut("  <cmd> describe <id> [--json]                Show action details and schemas");
   writeOut("  <cmd> run <id> [--input '<json>']           Execute action (raw text output by default)");
   writeOut("  <cmd> run <id> [--json]                     Output standard execution result in JSON format");
+  writeOut("  <cmd> run <id> [--stdin-field <field>] [-- <assignments...>]");
+  writeOut("                                             Bind raw stdin text to an input field");
   writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
   writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
   writeOut("\nGlobal options:");

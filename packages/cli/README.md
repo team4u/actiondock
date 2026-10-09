@@ -59,6 +59,10 @@ ad run sample.greet -- name=Alice count:=1
 # 复杂参数或对象从文件读取（与扁平参数互斥）
 ad run sample.greet --input-file input.json
 
+# 原始文本管道绑定（假定已注册 summarize 动作且 text 是字符串入参）
+# 可与扁平赋值组合，与 --input / --input-file 互斥
+printf '这是一段正文' | ad run summarize --stdin-field text -- style=brief
+
 # 自动化与脚本通过标准输入传递
 cat input.json | ad run sample.greet --input-file -
 ```
@@ -126,11 +130,12 @@ ad pack
   - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
   - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
 - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+- 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 完整正文原样绑定为指定顶层字段的字符串值（不解析类型、不剥 BOM、不修剪空白、空输入为空字符串）；可与扁平赋值组合，与 `--input` / `--input-file` 互斥；stdin 源字节与绑定后的最终入参序列化大小各自受默认 10MiB 上限约束，分别超限报 `INPUT_LIMIT_EXCEEDED` 与 `FLAT_INPUT_LIMIT_EXCEEDED`，JSON 转义放大也计入最终大小；严格 UTF-8 校验失败报读取错误。管道非事务，高风险写入先完整生成并校验再执行。
 - 传统输入选项：
   - 简单内联参数：使用 `--input <json>` 直接解析 JSON 字符串。
   - 复杂对象文件：使用 `--input-file <path>` 读取文件并解析 JSON，避免各类终端的引号转义损坏。
   - 标准输入管道：使用 `--input-file -` 从标准输入读取全部数据并解析 JSON。
-  - 统一解析：解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+  - 统一解析：JSON 输入在解析前剔除 UTF-8 BOM，默认大小上限为 10MiB；改用文件不会解除限制。原始文本绑定保留正文 BOM。
 
 ### Windows 与多终端传参建议
 
@@ -156,7 +161,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 - **显式正文输出与默认注解**：
   - 显式指定正文字段：通过 `ad run <id> --text-field <field> -- ...` 提取结果中特定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以 JSON 对象形式输出至 stderr（元数据为空时不输出）。
   - 声明式默认正文：Action 清单中声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 时自动按声明提取正文与元数据；显式 `--text-field` 优先于默认注解。
-  - 严格校验：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出，不静默回退，不改写运行记录。
+  - 严格校验与契约闭环：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出，不静默回退，不改写运行记录。契约通过 `ad describe` 呈现通道语义与覆盖指引，并通过 `ad validate` 进行纯静态元数据合规校验。
   - 参数互斥：`--text-field` 与 `--json`、`--async` 严格互斥，在执行前校验并以退出码 2 退出。
 - **机器模式**（`--json`）：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。此时始终输出完整执行信封（包含 `ok`、`runId`、`data` 或 `error`），忽略默认正文注解；若参数解析出错输出标准错误信封并以退出码 2 退出。
 
@@ -171,9 +176,9 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad remove <package>` | 卸载并更新锁定依赖，提供原子回滚保护 |
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
-| `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引与建议赋值 |
-| `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--text-field` 提取正文与 `--json` 输出标准信封） |
-| `ad validate [id]` | 校验 Action 规范与模式规范 |
+| `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引、建议赋值与输出选择契约 |
+| `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--stdin-field` 绑定原始文本、`--text-field` 提取正文与 `--json` 输出标准信封） |
+| `ad validate [id]` | 校验 Action 规范、模式规范与输出选择契约 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码 |
 | `ad playbook list` / `show` | 查看智能体操作规程 Playbook |

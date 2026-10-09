@@ -9,6 +9,7 @@ import { DEFAULT_MAX_MATERIALIZED_SIZE_BYTES } from "./flat-parser";
 import type { FlatAssignment } from "./flat-parser";
 import { validateJsonValue } from "../value-validator";
 
+
 /**
  * 节点状态枚举（四态节点模型）。
  */
@@ -26,6 +27,81 @@ export type NodeState = (typeof NodeState)[keyof typeof NodeState];
  */
 export interface FlatMaterializerOptions {
   maxMaterializedSizeBytes?: number;
+}
+
+/**
+ * 断言顶层字符串属性写入不与既有字段结构冲突。
+ *
+ * 作为扁平赋值与 stdin 字段绑定共享的路径冲突判定单一事实源：
+ * - 重复赋值同名属性：DUPLICATE_ASSIGNMENT；
+ * - 既有同名对象容器：LEAF_CONTAINER_CONFLICT；
+ * - 既有同名数组容器：OBJECT_ARRAY_CONFLICT。
+ *
+ * @param target 目标对象（仅检测自有属性，不触及原型链）
+ * @param field 待写入的顶层属性名
+ */
+export function assertTopLevelLeafAvailable(
+  target: object,
+  field: string
+): void {
+  if (!Object.hasOwn(target, field)) return;
+  const existing = (target as Record<string, unknown>)[field];
+  if (Array.isArray(existing)) {
+    throw inputPathConflict(
+      `Path conflict at "${field}": expected object but found array`,
+      { path: field, reason: "OBJECT_ARRAY_CONFLICT" }
+    );
+  }
+  if (existing !== null && typeof existing === "object") {
+    throw inputPathConflict(
+      `Path conflict at "${field}": cannot assign value to existing container (object)`,
+      { path: field, reason: "LEAF_CONTAINER_CONFLICT" }
+    );
+  }
+  throw inputPathConflict(
+    `Duplicate assignment to leaf path "${field}"`,
+    { path: field, reason: "DUPLICATE_ASSIGNMENT" }
+  );
+}
+
+/**
+ * 校验物化后的最终入参值：结构合法性与实体化总大小上限。
+ *
+ * 作为扁平赋值与 stdin 字段绑定共享的最终校验单一事实源：
+ * - 结构非法或超深：FLAT_INPUT_LIMIT_EXCEEDED（MAX_MATERIALIZED_JSON_DEPTH / INVALID_JSON_VALUE）；
+ * - 序列化后字节超出 maxMaterializedSizeBytes（默认 10MiB）：
+ *   FLAT_INPUT_LIMIT_EXCEEDED（MAX_MATERIALIZED_BYTES）。
+ *
+ * @param result 待校验的最终入参对象
+ * @param options 物化配置选项（可选 maxMaterializedSizeBytes）
+ */
+export function assertMaterializedInputWithinLimits(
+  result: JsonValue,
+  options?: FlatMaterializerOptions
+): void {
+  const check = validateJsonValue(result);
+  if (!check.valid) {
+    throw flatInputLimitExceeded(
+      `Materialized input validation failed: ${check.reason}`,
+      {
+        reason:
+          check.code === "MAX_JSON_DEPTH"
+            ? "MAX_MATERIALIZED_JSON_DEPTH"
+            : "INVALID_JSON_VALUE",
+      }
+    );
+  }
+
+  const maxMaterializedSizeBytes =
+    options?.maxMaterializedSizeBytes ?? DEFAULT_MAX_MATERIALIZED_SIZE_BYTES;
+  const serialized = JSON.stringify(result);
+  const byteLength = Buffer.byteLength(serialized, "utf8");
+  if (byteLength > maxMaterializedSizeBytes) {
+    throw flatInputLimitExceeded(
+      `Materialized input size (${byteLength} bytes) exceeds limit (${maxMaterializedSizeBytes} bytes)`,
+      { byteLength, maxMaterializedSizeBytes, reason: "MAX_MATERIALIZED_BYTES" }
+    );
+  }
 }
 
 interface IntermediateNode {
@@ -261,29 +337,7 @@ export function materializeFlatInput(
 
   const result = materializeNode(root);
 
-  const check = validateJsonValue(result);
-  if (!check.valid) {
-    throw flatInputLimitExceeded(
-      `Materialized input validation failed: ${check.reason}`,
-      {
-        reason:
-          check.code === "MAX_JSON_DEPTH"
-            ? "MAX_MATERIALIZED_JSON_DEPTH"
-            : "INVALID_JSON_VALUE",
-      }
-    );
-  }
-
-  const maxMaterializedSizeBytes =
-    options?.maxMaterializedSizeBytes ?? DEFAULT_MAX_MATERIALIZED_SIZE_BYTES;
-  const serialized = JSON.stringify(result);
-  const byteLength = Buffer.byteLength(serialized, "utf8");
-  if (byteLength > maxMaterializedSizeBytes) {
-    throw flatInputLimitExceeded(
-      `Materialized input size (${byteLength} bytes) exceeds limit (${maxMaterializedSizeBytes} bytes)`,
-      { byteLength, maxMaterializedSizeBytes, reason: "MAX_MATERIALIZED_BYTES" }
-    );
-  }
+  assertMaterializedInputWithinLimits(result, options);
 
   return result;
 }

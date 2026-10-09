@@ -1,6 +1,7 @@
 import type { ActionSpec } from "../package/types";
 import { buildCliInputAdviceV1 } from "./advice";
 import { isForbiddenActionInputPropertyName } from "./flat-predicates";
+import { analyzeActionOutputContract } from "./output-contract";
 
 /**
  * 字段级异常明细。
@@ -221,10 +222,22 @@ export const ACTION_DESCRIBE_SYNTAX_REFERENCE: readonly string[] = [
 ];
 
 /**
+ * 格式化 Action 详情的可选配置项。
+ */
+export interface FormatActionDetailOptions {
+  /**
+   * 是否支持显式与声明式正文选择运行选项（普通 CLI 为 true，目录型 Standalone 默认为 false）。
+   * @default true
+   */
+  supportsTextField?: boolean;
+}
+
+/**
  * 格式化渲染 Action 详情人类可读文本。
  * 普通 CLI 与 Standalone 统一复用该函数，避免长期排版漂移。
  *
  * @param input Action 描述载荷或 Action 规范
+ * @param options 可选格式化配置项
  * @returns 格式化后的说明文本
  */
 export function formatActionDetail(
@@ -243,7 +256,8 @@ export function formatActionDetail(
         uses?: string[];
         entry?: string;
         [key: string]: any;
-      }
+      },
+  options?: FormatActionDetailOptions
 ): string {
   const payload: ActionDescribePayload =
     "inputAdvice" in input && input.inputAdvice
@@ -322,5 +336,58 @@ export function formatActionDetail(
     }
   }
 
+  const supportsTextField = options?.supportsTextField ?? true;
+  const outputContract = analyzeActionOutputContract({
+    annotations: payload.annotations,
+    outputSchema: payload.outputSchema,
+  });
+
+  const isAnnotationInvalid = outputContract.diagnostics.some(
+    (d) => d.code === "INVALID_ANNOTATION"
+  );
+
+  lines.push("");
+  lines.push("Output Selection:");
+  if (supportsTextField) {
+    if (isAnnotationInvalid) {
+      lines.push(`  Invalid annotation: ${outputContract.errors.join("; ")}`);
+      lines.push("  Default run: Synchronous execution will be rejected before invocation due to invalid annotation");
+      lines.push("  Full result: Pass '--json' to bypass default annotation and receive the complete structured envelope");
+      lines.push("  Explicit text field: Pass '--text-field <field>' to bypass default annotation and select a specific field");
+    } else if (outputContract.declared && outputContract.textField) {
+      lines.push(`  Default text field: ${outputContract.textField}`);
+      if (outputContract.errors.length > 0) {
+        lines.push(`  Contract conflict: ${outputContract.errors.join("; ")}`);
+      }
+      lines.push(`  stdout: Raw text content of '${outputContract.textField}' (synchronous execution only)`);
+      lines.push("  stderr: Remaining fields as JSON metadata, diagnostics, and logs");
+      lines.push("  Full result: Pass '--json' to receive the complete structured envelope");
+      lines.push("  Override: Pass '--text-field <field>' to select another top-level string field");
+    } else {
+      lines.push("  Default: Raw string for string results; formatted JSON for objects and arrays");
+      lines.push("  Full result: Pass '--json' to receive the complete structured envelope");
+      lines.push("  Custom field: Pass '--text-field <field>' to extract a specific top-level string field");
+    }
+  } else {
+    if (isAnnotationInvalid) {
+      lines.push(`  Invalid annotation: ${outputContract.errors.join("; ")} (note: ignored in standalone runtime; standalone extracts 'content', 'text', or 'message', falling back to formatted JSON)`);
+      lines.push("  stdout: Raw string for scalars; extracts 'content', 'text', or 'message' from objects");
+      lines.push("  stderr: Remaining fields as metadata (for extracted fields), diagnostics, and logs");
+      lines.push("  Full result: Pass '--json' to receive the complete structured envelope");
+    } else if (outputContract.declared && outputContract.textField) {
+      lines.push(`  Default text field: ${outputContract.textField} (note: ignored in standalone runtime; standalone extracts 'content', 'text', or 'message', falling back to formatted JSON)`);
+      if (outputContract.errors.length > 0) {
+        lines.push(`  Contract conflict: ${outputContract.errors.join("; ")}`);
+      }
+      lines.push("  stdout: Raw string for scalars; extracts 'content', 'text', or 'message' from objects");
+      lines.push("  stderr: Remaining fields as metadata (for extracted fields), diagnostics, and logs");
+      lines.push("  Full result: Pass '--json' to receive the complete structured envelope");
+    } else {
+      lines.push("  Default: Raw string for scalars; extracts 'content', 'text', or 'message' from objects (with metadata on stderr), falling back to formatted JSON");
+      lines.push("  Full result: Pass '--json' to receive the complete structured envelope");
+    }
+  }
+
   return lines.join("\n");
 }
+

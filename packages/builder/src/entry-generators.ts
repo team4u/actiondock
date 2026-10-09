@@ -145,6 +145,8 @@ if (argv.includes("-h") || argv.includes("--help") || argv[0] === "help") {
   console.log("  <cmd> list [--json]                         List available actions");
   console.log("  <cmd> describe <id> [--json]                Show action details and schemas");
   console.log("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
+  console.log("  <cmd> run <id> [--stdin-field <field>] [-- <assignments...>]");
+  console.log("                                             Bind raw stdin text to an input field");
   console.log("  <cmd> config list/get/set/delete            Manage package configuration");
   console.log("  <cmd> state list/get/set/delete             Manage shared state store");
   console.log("\\nGlobal options:");

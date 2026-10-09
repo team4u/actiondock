@@ -2,13 +2,23 @@ import type { JsonValue } from "@actiondock/sdk";
 import {
   inputConflict,
   inputLimitExceeded,
+  inputPathConflict,
+  invalidFlatArgument,
   invalidJson,
   InputError,
   FlatInputError,
 } from "./flat-errors";
+import {
+  isFlatPathPropertyName,
+  isForbiddenActionInputPropertyName,
+} from "./flat-predicates";
 import { decodeFlatInput } from "./flat-decode";
 import type { FlatParserOptions } from "./flat-parser";
 import type { FlatMaterializerOptions } from "./flat-materializer";
+import {
+  assertTopLevelLeafAvailable,
+  assertMaterializedInputWithinLimits,
+} from "./flat-materializer";
 import {
   validateJsonValue,
   DEFAULT_MAX_JSON_DEPTH,
@@ -37,6 +47,8 @@ export interface InputResolutionPolicy {
   sanitizeInputErrors?: boolean;
   /** 是否仅允许字节流输入（默认 false） */
   byteStreamOnly?: boolean;
+  /** 原始 stdin 文本模式：保留开头 BOM，UTF-8 编码失败视为读取失败（默认 false，仅作用于 stdinField） */
+  stdinRawText?: boolean;
 }
 
 /**
@@ -57,6 +69,8 @@ export interface ResolveActionInputOptions {
   input?: string;
   inputFile?: string;
   flatArgs?: string[];
+  /** 将 stdin 完整原始文本绑定为指定顶层入参字段的字符串值（与 input / inputFile 互斥，可与 flatArgs 组合） */
+  stdinField?: string;
   stdin?: NodeJS.ReadableStream;
   flatOptions?: FlatParserOptions & FlatMaterializerOptions;
   policy?: InputResolutionPolicy;
@@ -188,6 +202,70 @@ function sanitizeError(
 }
 
 /**
+ * 检测单个扁平 token 是否占用 stdin 绑定目标字段。
+ *
+ * 判定范围（在读 stdin 与执行业务之前）：
+ * - 目标字段本身：重复赋值（DUPLICATE_ASSIGNMENT）；
+ * - 目标字段的任意嵌套路径：叶/容器冲突（LEAF_CONTAINER_CONFLICT）。
+ *
+ * @param token 扁平赋值 token
+ * @param field stdin 绑定的目标字段名
+ */
+function detectFlatTokenFieldConflict(
+  token: string,
+  field: string
+): FlatInputError | null {
+  const colonEqIndex = token.indexOf(":=");
+  const eqIndex = token.indexOf("=");
+  let opIndex = -1;
+  if (colonEqIndex !== -1 && (eqIndex === -1 || colonEqIndex < eqIndex)) {
+    opIndex = colonEqIndex;
+  } else if (eqIndex !== -1) {
+    opIndex = eqIndex;
+  }
+  const rawPath = opIndex === -1 ? token : token.slice(0, opIndex);
+
+  if (rawPath !== field && !rawPath.startsWith(`${field}.`)) return null;
+
+  return inputPathConflict(
+    `Input path conflict at "${rawPath}": field "${field}" is already bound to stdin text via --stdin-field`,
+    { path: rawPath, reason: rawPath === field ? "DUPLICATE_ASSIGNMENT" : "LEAF_CONTAINER_CONFLICT" }
+  );
+}
+
+/**
+ * 校验 stdin 字段绑定名是否为合法安全顶层属性名。
+ *
+ * 拒绝空、纯空白、危险属性（`__proto__`、`constructor`、`prototype`）与
+ * 不符合扁平命名段规范（含点分嵌套路径）的表达，错误为 INVALID_FLAT_ARGUMENT。
+ *
+ * @param field 用户提供的字段名
+ */
+function assertStdinFieldName(field: string): void {
+  const problem = (() => {
+    if (field.length === 0) return "empty";
+    if (field.trim() !== field || field.trim().length === 0) return "whitespace";
+    if (isForbiddenActionInputPropertyName(field)) return "forbidden";
+    if (field.includes(".")) return "dotted";
+    if (!isFlatPathPropertyName(field)) return "invalid";
+    return null;
+  })();
+
+  if (problem === null) return;
+
+  const reason =
+    problem === "forbidden"
+      ? "FORBIDDEN_PROPERTY"
+      : problem === "dotted"
+        ? "INVALID_DOT_NOTATION"
+        : "INVALID_SEGMENT";
+  throw invalidFlatArgument(
+    `Invalid --stdin-field name (length: ${field.length}): must be a non-empty top-level property name without dot notation`,
+    { length: field.length, reason }
+  );
+}
+
+/**
  * 解析完整 JSON 文档字符串。
  * 若解析失败抛出 INVALID_JSON 异常。
  *
@@ -262,11 +340,15 @@ export function parseJson(
  * - effectiveFlat: flatArgs 存在且 length > 0
  * - hasInlineJson: options.input !== undefined（即使为 ""）
  * - hasFileJson: options.inputFile !== undefined（包含 "-"）
- * - 最多一个为 true；若超过一个，抛出 INPUT_CONFLICT（reason: "MULTIPLE_INPUT_MODES"）。
- * - 若三个均为 false，返回默认 {}。
+ * - hasStdinField: options.stdinField !== undefined
+ * - flat / inline JSON / file JSON 三者仍保持原有严格互斥；
+ * - stdinField 可与 flatArgs 组合（正文绑定到字段 + 扁平补充其他字段），
+ *   但与 inline JSON、file JSON（含 inputFile="-"）任何来源严格互斥；
+ * - 若四者均为 false，返回默认 {}。
  * - flatArgs = [] 视为未指定。
  * - options.input === "" 为显式 Full JSON 模式，进入解析并得到 INVALID_JSON / SYNTAX_ERROR，不可退化为 {}。
  * - 显式空 JSON 输入（--input ""、0 字节文件、空 stdin、纯空白、纯 BOM）统一返回 INVALID_JSON / SYNTAX_ERROR。
+ * - stdinField 的 stdin 读取为原始文本绑定：不做 JSON 解析、不剥 BOM、保留首尾空白，空 stdin 得到空字符串。
  *
  * @param options 输入解析选项
  * @returns 解析后的 JSON 对象
@@ -277,7 +359,27 @@ export async function resolveActionInput(
   const effectiveFlat = (options.flatArgs?.length ?? 0) > 0;
   const hasInlineJson = options.input !== undefined;
   const hasFileJson = options.inputFile !== undefined;
+  const hasStdinField = options.stdinField !== undefined;
 
+  // stdin 字段绑定与完整 JSON 来源（内联 / 文件 / stdin JSON）严格互斥
+  if (hasStdinField && (hasInlineJson || hasFileJson)) {
+    const err = inputConflict(
+      "Input options conflict: --stdin-field binds raw stdin text to an action input field and cannot be combined with inline JSON (-i/--input) or file input (-f/--input-file).",
+      {
+        reason: "MULTIPLE_INPUT_MODES",
+        hasFlatArgs: effectiveFlat,
+        hasInput: hasInlineJson,
+        hasInputFile: hasFileJson,
+        hasStdinField,
+      }
+    );
+    if (options.policy?.sanitizeInputErrors) {
+      throw sanitizeError(err, "stdin");
+    }
+    throw err;
+  }
+
+  // 原有三种完整输入模式之间的严格互斥保持不变
   let modeCount = 0;
   if (effectiveFlat) modeCount++;
   if (hasInlineJson) modeCount++;
@@ -299,12 +401,56 @@ export async function resolveActionInput(
     throw err;
   }
 
-  if (modeCount === 0) {
+  if (modeCount === 0 && !hasStdinField) {
     return {};
   }
 
   const policy = options.policy;
   const maxBytes = policy?.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES;
+
+  // 0. stdin 原始文本字段绑定模式（可与 flatArgs 组合）
+  if (hasStdinField) {
+    const field = options.stdinField!;
+    try {
+      assertStdinFieldName(field);
+
+      // 冲突检测与扁平完整解码均先于 stdin 读取：
+      // 目标字段占用冲突与任何已知的 flat 语法/路径/字面量错误在读 stdin 前拒绝，
+      // 不因等待上游 EOF 而挂起；解码结果复用，读取后不再重复解码。
+      let result: Record<string, JsonValue> = {};
+      if (effectiveFlat) {
+        for (const token of options.flatArgs!) {
+          const conflict = detectFlatTokenFieldConflict(token, field);
+          if (conflict) {
+            throw conflict;
+          }
+        }
+        result = decodeFlatInput(options.flatArgs!, options.flatOptions) as Record<string, JsonValue>;
+        assertTopLevelLeafAvailable(result, field);
+      }
+
+      const text = await readStdinBounded(options.stdin || process.stdin, {
+        maxInputBytes: maxBytes,
+        signal: options.signal,
+        byteStreamOnly: policy?.byteStreamOnly,
+        strictUtf8: policy?.strictUtf8 ?? true,
+        rawText: policy?.stdinRawText ?? true,
+      });
+
+      // 绑定后对最终入参执行既有实体化结构/总大小校验：
+      // stdin 源字节上限（maxInputBytes）与最终对象序列化上限
+      // （flatOptions.maxMaterializedSizeBytes，默认 10MiB）各自独立生效，
+      // 正文中的引号/反斜杠转义放大亦被最终上限拦截。
+      result[field] = text;
+      assertMaterializedInputWithinLimits(result, options.flatOptions);
+      return result;
+    } catch (err) {
+      if (policy?.sanitizeInputErrors) {
+        throw sanitizeError(err, "stdin");
+      }
+      throw err;
+    }
+  }
 
   // 1. 扁平入参模式
   if (effectiveFlat) {

@@ -126,6 +126,14 @@ export async function executeAction(
     }
   }
 
+  // --stdin-field 与 --text-field 分属输入绑定与输出选择，可同时使用；
+  // 与完整 JSON 输入来源的互斥由共享 resolver 统一裁决（INPUT_CONFLICT）
+  if (options.stdinField !== undefined) {
+    if (typeof options.stdinField !== "string") {
+      throw new ArgumentError("The --stdin-field option requires a field name.");
+    }
+  }
+
   const effectiveControl = control ?? context?.control;
   const effectiveSignal = effectiveControl?.signal;
 
@@ -134,7 +142,9 @@ export async function executeAction(
     input: options.input,
     inputFile: options.inputFile,
     flatArgs: effectiveFlatArgs && effectiveFlatArgs.length > 0 ? effectiveFlatArgs : undefined,
+    stdinField: options.stdinField,
     stdin: context?.stdin,
+    signal: effectiveSignal,
   });
 
   const check = validateActionInputValue(input);
@@ -312,6 +322,11 @@ Flat Input Syntax & Examples:
     # Extract specific text field to stdout (remaining fields as JSON to stderr)
     ad run <id> --text-field content -- path="README.md"
 
+  Raw Text Input from stdin:
+    # Bind entire stdin content as a string to the given input field
+    printf 'body text' | ad run <id> --stdin-field text -- style=brief
+    cat report.md | ad run <id> --stdin-field content
+
   Complex or multiline inputs:
     # Pass via JSON file with --input-file to avoid shell escaping issues
     ad run <id> --input-file input.json`;
@@ -329,7 +344,8 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Action input as inline JSON")
     .option("-f, --input-file <path>", "Action input from JSON file, or '-' for stdin")
-    .option("-c, --config <key=value...>", "Temporary config override (repeatable)");
+    .option("-c, --config <key=value...>", "Temporary config override (repeatable)")
+    .option("--stdin-field <field>", "Bind raw stdin text to a top-level action input field");
 
   (cmd as any).unknownOption = function (this: Command, flag: string) {
     this.error(

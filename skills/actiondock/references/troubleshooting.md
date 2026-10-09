@@ -35,12 +35,15 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `INVALID_FLAT_ARGUMENT` | 扁平赋值语法错误、非法属性名或非法数组索引（如前导零、负数、科学计数法等）或包含原型污染敏感属性。 | 检查赋值语法，确保属性名符合 `[A-Za-z_][A-Za-z0-9_-]*`，数组索引为非负连续整数，杜绝 `__proto__` 等属性。 |
 | `INVALID_JSON_LITERAL` | `path:=json` 中的 JSON 字面量解析失败或包含非有限数（`Infinity`、`-Infinity`、`NaN`）。 | 检查 `:=` 后的 JSON 语法是否合法，确保所有数值满足 `Number.isFinite`。 |
 | `INPUT_PATH_CONFLICT` | 扁平参数路径冲突（叶节点/容器冲突、对象/数组冲突、重复路径赋值或非连续稀疏数组）。 | 检查路径层级与类型，确保数组索引从 0 开始连续编号，杜绝同名键重复赋值与结构覆盖冲突。 |
-| `FLAT_INPUT_LIMIT_EXCEEDED` | 扁平参数数量、路径深度、路径长度、属性名长度或物化体积超出安全限制。 | 缩减参数规模；超大或深层数据改用 `--input-file <path>` 传递。 |
-| `INPUT_CONFLICT` | 命令行同时混合指定了扁平参数（`-- <assignments...>`）、`--input` 或 `--input-file`。 | 仅保留其中一种输入模式，三者严格互斥；简单标量推荐使用扁平参数，复杂结构使用 `--input-file`。 |
+| `FLAT_INPUT_LIMIT_EXCEEDED` | 扁平参数超出安全限制，或 `--stdin-field` 绑定后的最终入参序列化大小超出默认 10MiB 上限；合并字段及 JSON 转义放大均计入大小。 | 缩减或分批处理正文与补充字段；`MAX_MATERIALIZED_BYTES` 表示最终入参超限。改用文件不会解除输入大小限制。 |
+| `INPUT_LIMIT_EXCEEDED` | JSON 输入或 stdin 源字节超过默认 10MiB 上限。 | 缩减或分批处理输入；`MAX_INPUT_BYTES` 表示源字节超限，与最终入参大小限制独立生效。 |
+| `INPUT_CONFLICT` | 扁平参数、`--input`、`--input-file` 混用，或 `--stdin-field` 与 `--input` / `--input-file` 混用。 | 原有三种输入方式仅选其一；原始文本绑定可与扁平赋值组合，不可与内联或文件 JSON 输入混用。 |
 | `INPUT_FILE_NOT_FOUND` | `--input-file` 指定的目标文件在文件系统中不存在。 | 检查文件物理路径是否准确，或改用标准输入管道 `--input-file -` 传递数据。 |
-| `INPUT_FILE_READ_FAILED` | 读取输入文件或标准输入流发生底层错误（如目标为目录或权限不足）。 | 检查文件权限，确保指定的是有效可读文件而非目录。 |
+| `INPUT_FILE_READ_FAILED` | 读取输入文件或标准输入流发生底层错误（如目标为目录、权限不足，或 `--stdin-field` 正文含非法 UTF-8 字节）。 | 检查文件权限与流可用性；原始文本场景确认输入为合法 UTF-8 编码。 |
 | `INPUT_NOT_JSON` | 输入参数包含非有限数（NaN 或 Infinity）、循环引用或函数等非法类型。 | 检查调用参数，确保传递合法的纯 JSON 格式数据。推荐使用 `--input-file <path>` 传递。 |
 | `OUTPUT_NOT_JSON` | Action 业务返回值包含不可序列化的非 JSON 结构。 | 检查 Action 代码返回值，剔除非有限数、循环引用或裸类实例。 |
+| `INVALID_ANNOTATION` | 普通 CLI 默认同步调用发现 `actiondock.cli` 正文注解非法，在调用业务前拒绝。 | 修正清单后执行 `ad validate`；`--json` 或显式 `--text-field <field>` 可绕过默认注解。 |
+| `OUTPUT_FORMAT_ERROR` | 指定正文字段缺失、不是字符串，或结果不是对象，CLI 无法提取正文。 | 查验 `ad describe`、完整运行记录与输出契约；业务记录可能已经成功，不要因展示失败自动重跑有副作用的动作。 |
 | `ACTION_INPUT_INVALID` | 传入参数不匹配该 Action 声明的 inputSchema 契约。 | 执行 `ad describe <id>` 调阅参数定义与必填要求，修正传参字段与类型。 |
 | `ACTION_OUTPUT_INVALID` | Action 返回的对象不匹配 outputSchema 模式定义。 | 检查 Action 实现代码，确保返回结构包含全部必须属性且类型一致。 |
 

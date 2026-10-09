@@ -93,12 +93,16 @@ ${describeCmd}
 
 # 调用语法格式（其中 ASSIGNMENT 根据 describe 查阅的参数契约提供）
 ${runCmd} -- ASSIGNMENT...
+
+# 管道原始文本绑定（FIELD 为 describe 查阅的字符串字段名）
+printf '整段原始文本' | ${runCmd} --stdin-field FIELD
 \`\`\`
 
-输入模式选择（三种输入模式严格互斥，仅选其一）：
+输入模式选择（原有三种输入方式严格互斥，仅选其一；\`--stdin-field\` 原始文本绑定可与扁平赋值组合）：
 
 - 扁平赋值为默认首选：参数项少且结构简单时，直接以 \`-- key="value" count:=10\` 形式内联传递。
 - 文件输入用于复杂参数：当参数含深层嵌套结构、大段文本或内容易被终端引号转义破坏时，将完整 JSON 写入文件并通过 \`--input-file input.json\` 传递。
+- 管道原始文本绑定：当只需向单个字符串字段（如 text、content、csv、diff）传入整段原始文本时，使用 \`--stdin-field <field>\` 绑定 stdin 正文，正文保持原样不解析类型，可与扁平赋值补充其他字段。
 
 输出模式选择（避免浪费上下文 token）：
 

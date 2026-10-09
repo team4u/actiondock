@@ -93,16 +93,20 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 复杂参数推荐使用 JSON 文件传递（与扁平参数互斥）
   ad run greet --input-file input.json
 
-  # 自动化脚本可直接通过标准输入管道传递
+  # 自动化脚本通过标准输入传递完整 JSON
   cat input.json | ad run greet --input-file -
+
+  # 将原始文本绑定为字符串入参，无需包装 JSON
+  printf 'World' | ad run greet --stdin-field name
   ```
   - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
   - 赋值操作符：`path=value` 严格保留为字符串；`path:=json` 严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
   - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
-  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-  - 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
+  - 原有三种输入方式互斥：扁平参数、`--input` 与 `--input-file` 不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+  - 原始文本绑定：`--stdin-field <field>` 的字段名来自入参契约，可与扁平赋值组合，但不能与内联或文件 JSON 混用。正文保留空白与 BOM；源字节及最终入参序列化大小各有默认 10MiB 上限。
+  - 输出选择：通过 `ad describe greet` 查看默认输出方式；需要完整结构化数据时再使用 `--json`。参数解析错误以退出码 2 退出。
 
-  终端标准输出返回统一结构的成功响应信封：
+  显式调用 `ad run greet --json -- name=World` 时，stdout 返回统一结构的成功响应信封：
   ```json
   {
     "ok": true,

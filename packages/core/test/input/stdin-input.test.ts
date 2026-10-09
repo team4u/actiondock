@@ -6,6 +6,7 @@ import {
   InputError,
   INPUT_FILE_READ_FAILED,
   INPUT_LIMIT_EXCEEDED,
+  INVALID_JSON,
 } from "../../src/input/flat-errors";
 
 describe("标准输入有界读取 readStdinBounded", () => {
@@ -95,5 +96,37 @@ describe("标准输入有界读取 readStdinBounded", () => {
     await assert.rejects(
       readStdinBounded(stream, { signal: controller.signal })
     , /manual\-abort/);
+  });
+
+  it("rawText 模式保留开头 BOM 且编码失败报 INPUT_FILE_READ_FAILED / INVALID_UTF8", async () => {
+    // BOM 保留
+    const bomStream = Readable.from([Buffer.from([0xef, 0xbb, 0xbf, 0x61])]);
+    const bomText = await readStdinBounded(bomStream, { rawText: true });
+    assert.strictEqual(bomText, "\uFEFFa");
+
+    // 非法 UTF-8 字节：读取失败而非 JSON 解析失败
+    try {
+      await readStdinBounded(Readable.from([Buffer.from([0xff, 0xfe, 0x28])]), {
+        rawText: true,
+      });
+      assert.fail("不应到达此分支");
+    } catch (err: any) {
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, INPUT_FILE_READ_FAILED);
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "INVALID_UTF8");
+    }
+  });
+
+  it("非 rawText 模式维持既有行为：BOM 由后续 JSON 解析剥离，编码失败报 INVALID_JSON", async () => {
+    try {
+      await readStdinBounded(Readable.from([Buffer.from([0xff])]), {
+        strictUtf8: true,
+      });
+      assert.fail("不应到达此分支");
+    } catch (err: any) {
+      assert.ok(err instanceof InputError);
+      assert.strictEqual(err.code, "INVALID_JSON");
+      assert.strictEqual((err.details as Record<string, unknown>)?.reason, "INVALID_UTF8");
+    }
   });
 });

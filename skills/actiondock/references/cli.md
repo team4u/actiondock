@@ -88,12 +88,15 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   - 输入模式字段明细：字段名、类型、是否必填与字段描述。
   - Flat 编码指引：字符串赋值格式（`path=value`）、JSON 标量与结构赋值格式（`path:=json`）与数组元素赋值格式（`path.0=...`）。
   - 建议赋值样例展示：基于 `inputSchema` 声明类型提供无副作用的赋值示例数据。
+  - 输出选择契约说明：清晰展示默认正文字段、stdout 与 stderr 通道语义、`--json` 完整信封读取方式、`--text-field <field>` 显式改选正文方式及仅适用于同步执行的边界。普通 CLI 未声明默认正文时解释通用输出规则，不嗅探私有字段；目录型入口如实描述现有 `content`、`text`、`message` 提取规则，不宣传其不支持的 `--text-field` 选项。
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
   ad run <id> [control-options] [-- <assignments...>]
   # 或使用互斥的输入选项：
   # ad run <id> [-i, --input <json> | -f, --input-file <path|->] [control-options]
+  # 原始文本管道绑定（可与扁平赋值组合）：
+  # printf '正文' | ad run <id> --stdin-field <field> [-- <assignments...>]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动。
   - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--text-field`、`--json`、`--config`、`--data-dir`、`--profile`、`--timeout` 等）与数据平面（Action 入参）的协议边界。
@@ -107,7 +110,16 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
     - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
   - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。
-  - 机器输出模式：面向智能体调用推荐使用 `--json`，输出标准 JSON 结果信封并忽略默认正文注解；当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
+  - 原始文本输入：`--stdin-field <field>` 将 stdin 完整正文（至 EOF）原样绑定为指定顶层入参字段的字符串值，适合管道传入 Markdown、CSV、补丁等原始文本。下例假定 `summarize` 与 `render` 是已注册且具有相应字符串入参的示例动作：
+    ```bash
+    printf '这是一段正文' | ad run summarize --stdin-field text -- style=brief
+    cat report.md | ad run render --stdin-field content
+    ```
+    - 正文严格保持字符串，不猜测 JSON、数字或布尔；不剥离 BOM、不修剪首尾空白，保留 CRLF、引号、反斜杠与 Unicode；空 stdin 绑定为空字符串，是否允许由 `inputSchema` 裁决。
+    - 可与 `--` 后扁平赋值组合；与 `--input`、`--input-file`（含 `-`）互斥；flat 重复占用同名或子路径报 `INPUT_PATH_CONFLICT`；非法字段名报 `INVALID_FLAT_ARGUMENT`，均在读取与执行前。
+    - stdin 源字节与最终入参序列化结果各自受默认 10MiB 上限约束；分别超限报 `INPUT_LIMIT_EXCEEDED` 与 `FLAT_INPUT_LIMIT_EXCEEDED`，合并字段及 JSON 转义放大也计入最终大小。非法 UTF-8 报读取失败而非 JSON 解析失败；等待 stdin 时 Ctrl-C 可退出。
+    - 管道非事务：`pipefail` 只能反映失败不能阻止下游已写入；高风险写入建议先完整生成并校验再执行。
+  - 机器输出模式：仅在需要结构化提取时使用 `--json`，输出标准 JSON 结果信封并忽略默认正文注解；当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
   - 纯文本输出模式：
     - 默认模式：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。
     - 显式正文输出：传入 `--text-field <field>` 时，仅提取结果中指定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（元数据为空时不输出）。
@@ -117,13 +129,16 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。
     - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析。
-    - 转义安全：复杂对象或多行长文本推荐使用 `--input-file` 传递，避开终端引号转义问题。输入内容自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+    - 转义安全：复杂对象或多行长文本推荐使用 `--input-file` 传递，避开终端引号转义问题。JSON 文件及 stdin JSON 在解析前剔除 UTF-8 BOM，默认大小上限为 10MiB；改用文件不会解除限制。`--stdin-field` 保留正文 BOM。
 
 - 校验 Action 模式与契约 (`ad validate` / `ad action validate`)：
   ```bash
   ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
-  校验清单规范有效性、入参出参模式与引用的入口文件物理存在性。
+  校验清单规范有效性、入参出参模式、输出契约合规性与引用的入口文件物理存在性。
+  - 输出契约校验：静态分析 `annotations["actiondock.cli"].textField` 与 `outputSchema` 的兼容性，新增分析自身只读取元数据；整个校验命令的其他检查仍会加载动作定义，但不调用业务 `run`。
+  - 确定矛盾拦截：非法注解、无效正文字段声明、Schema 明确拒绝对象或字符串字段、目标字段未声明且没有 `patternProperties` 约束并禁止额外属性时，报告错误并以退出码 1 退出。
+  - 风险透明诊断：根类型或字段类型无法确定、字段允许非字符串或未标记为 `required`、Schema 缺失、复杂组合或 `patternProperties` 约束时，给出警告而不误拒合法结果；`--json` 下各动作的诊断结果可包含 `warnings` 数组。
 
 - 自动生成 TypeScript 类型声明 (`ad generate types`)：
   ```bash

@@ -374,5 +374,160 @@ describe("ActionDock describe 输出统一设计", () => {
       // 4. 复杂/文件输入
       assert.ok((joined).includes("--input-file input.json"));
     });
+
+    it("未声明默认正文时展示通用输出行为说明，不猜测字段，支持 CLI 显式覆盖提示", () => {
+      const payload: ActionDescribePayload = {
+        id: "unannotated",
+        inputAdvice: {
+          version: 1,
+          recommendedMode: "flat",
+        },
+      };
+
+      const text = formatActionDetail(payload, { supportsTextField: true });
+      assert.ok((text).includes("Output Selection:"));
+      assert.ok((text).includes("Default: Raw string for string results; formatted JSON for objects and arrays"));
+      assert.ok((text).includes("Full result: Pass '--json' to receive the complete structured envelope"));
+      assert.ok((text).includes("Custom field: Pass '--text-field <field>' to extract a specific top-level string field"));
+      // 不臆测私有字段
+      assert.ok(!(text).includes("content"));
+      assert.ok(!(text).includes("summary"));
+    });
+
+    it("声明默认正文时清楚展示字段名、通道语义、--json 完整结果、显式覆盖与同步适用范围", () => {
+      const payload: ActionDescribePayload = {
+        id: "annotated",
+        annotations: {
+          "actiondock.cli": {
+            textField: "summary",
+          },
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            count: { type: "number" },
+          },
+          required: ["summary"],
+        },
+        inputAdvice: {
+          version: 1,
+          recommendedMode: "flat",
+        },
+      };
+
+      const text = formatActionDetail(payload, { supportsTextField: true });
+      assert.ok((text).includes("Output Selection:"));
+      assert.ok((text).includes("Default text field: summary"));
+      assert.ok((text).includes("stdout: Raw text content of 'summary' (synchronous execution only)"));
+      assert.ok((text).includes("stderr: Remaining fields as JSON metadata, diagnostics, and logs"));
+      assert.ok((text).includes("Full result: Pass '--json' to receive the complete structured envelope"));
+      assert.ok((text).includes("Override: Pass '--text-field <field>' to select another top-level string field"));
+    });
+
+    it("目录型 Standalone 入口真实反映 content/text/message 嗅探与回退行为，不宣传其不支持的 --text-field 运行选项", () => {
+      const unannotatedPayload: ActionDescribePayload = {
+        id: "standalone-unannotated",
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const unannotatedText = formatActionDetail(unannotatedPayload, { supportsTextField: false });
+      assert.ok((unannotatedText).includes("Output Selection:"));
+      assert.ok((unannotatedText).includes("Default: Raw string for scalars; extracts 'content', 'text', or 'message' from objects (with metadata on stderr), falling back to formatted JSON"));
+      assert.ok((unannotatedText).includes("Full result: Pass '--json'"));
+      // 严禁宣传 --text-field
+      assert.ok(!(unannotatedText).includes("--text-field"));
+
+      const annotatedPayload: ActionDescribePayload = {
+        id: "standalone-annotated",
+        annotations: {
+          "actiondock.cli": { textField: "content" },
+        },
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const annotatedText = formatActionDetail(annotatedPayload, { supportsTextField: false });
+      assert.ok((annotatedText).includes("Output Selection:"));
+      assert.ok((annotatedText).includes("Default text field: content"));
+      assert.ok((annotatedText).includes("ignored in standalone runtime; standalone extracts 'content', 'text', or 'message', falling back to formatted JSON"));
+      assert.ok((annotatedText).includes("stdout: Raw string for scalars; extracts 'content', 'text', or 'message' from objects"));
+      assert.ok((annotatedText).includes("stderr: Remaining fields as metadata (for extracted fields), diagnostics, and logs"));
+      // 严禁宣传 --text-field 选项
+      assert.ok(!(annotatedText).includes("Pass '--text-field"));
+    });
+
+    it("声明非法注解时在 Output Selection 中清晰展示拒绝执行信息且不暗示自动回退，说明可使用 --json 或显式 --text-field 绕过", () => {
+      const payload: ActionDescribePayload = {
+        id: "bad-annotation",
+        annotations: {
+          "actiondock.cli": { textField: 123 },
+        },
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const text = formatActionDetail(payload);
+      assert.ok((text).includes("Output Selection:"));
+      assert.ok((text).includes("Invalid annotation:"));
+      assert.ok((text).includes("expected a string, but received number"));
+      assert.ok((text).includes("Synchronous execution will be rejected before invocation due to invalid annotation"));
+      assert.ok((text).includes("Pass '--json' to bypass default annotation"));
+      assert.ok((text).includes("Pass '--text-field <field>' to bypass default annotation"));
+      // 不得暗示存在自动默认回退
+      assert.ok(!(text).includes("Default: Raw string"));
+    });
+
+    it("注解合法但与 Schema 存在矛盾时标注 Contract conflict，保留默认选择字段说明且不称作 Invalid annotation", () => {
+      const payload: ActionDescribePayload = {
+        id: "conflict-action",
+        annotations: {
+          "actiondock.cli": { textField: "summary" },
+        },
+        outputSchema: {
+          type: "string", // 根类型为 string，与对象字段提取冲突
+        },
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const text = formatActionDetail(payload, { supportsTextField: true });
+      assert.ok((text).includes("Output Selection:"));
+      assert.ok((text).includes("Default text field: summary"));
+      assert.ok((text).includes("Contract conflict:"));
+      assert.ok((text).includes("does not allow an object"));
+      assert.ok((text).includes("stdout: Raw text content of 'summary' (synchronous execution only)"));
+      // 不得误报为 Invalid annotation
+      assert.ok(!(text).includes("Invalid annotation:"));
+    });
+
+    it("目录型 Standalone 模式下若存在非法注解或契约冲突，明确说明 standalone 忽略注解并按旧嗅探规则运行", () => {
+      const badAnnoPayload: ActionDescribePayload = {
+        id: "standalone-bad-anno",
+        annotations: {
+          "actiondock.cli": { textField: 777 },
+        },
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const textBadAnno = formatActionDetail(badAnnoPayload, { supportsTextField: false });
+      assert.ok((textBadAnno).includes("Invalid annotation:"));
+      assert.ok((textBadAnno).includes("ignored in standalone runtime; standalone extracts 'content', 'text', or 'message'"));
+      // 不暗示独立运行时会拒绝调用
+      assert.ok(!(textBadAnno).includes("rejected before invocation"));
+
+      const conflictPayload: ActionDescribePayload = {
+        id: "standalone-conflict",
+        annotations: {
+          "actiondock.cli": { textField: "summary" },
+        },
+        outputSchema: {
+          type: "string",
+        },
+        inputAdvice: { version: 1, recommendedMode: "flat" },
+      };
+
+      const textConflict = formatActionDetail(conflictPayload, { supportsTextField: false });
+      assert.ok((textConflict).includes("Default text field: summary (note: ignored in standalone runtime"));
+      assert.ok((textConflict).includes("Contract conflict:"));
+      assert.ok((textConflict).includes("stdout: Raw string for scalars; extracts 'content', 'text', or 'message' from objects"));
+    });
   });
 });

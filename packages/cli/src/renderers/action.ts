@@ -1,8 +1,13 @@
-import type { ActionSpec } from "@actiondock/core";
 import {
-  buildActionDescribePayload,
-  ACTION_DESCRIBE_SYNTAX_REFERENCE,
+  inspectActionTextFieldAnnotation,
+  formatActionDetail,
+  type FormatActionDetailOptions,
 } from "@actiondock/core/project";
+
+export {
+  formatActionDetail,
+  type FormatActionDetailOptions,
+};
 import { ExecutionError } from "../errors";
 
 /**
@@ -12,58 +17,20 @@ import { ExecutionError } from "../errors";
  * - 注解键名固定为 actiondock.cli，值必须为非空非数组对象。
  * - 正文字段键名为 textField，值必须为非空字符串。
  * - 无相关注解或未声明 textField 时返回 undefined。
- * - 注解存在但类型非法时抛出 ExecutionError。
+ * - 注解存在但类型非法时抛出 ExecutionError (INVALID_ANNOTATION)。
  */
 export function resolveActionDefaultTextField(
   annotations?: Record<string, unknown>
 ): string | undefined {
-  if (!annotations || typeof annotations !== "object") {
-    return undefined;
-  }
-
-  if (!Object.hasOwn(annotations, "actiondock.cli")) {
-    return undefined;
-  }
-
-  const cli = annotations["actiondock.cli"];
-  if (cli === undefined) {
-    return undefined;
-  }
-
-  if (typeof cli !== "object" || cli === null || Array.isArray(cli)) {
+  const inspection = inspectActionTextFieldAnnotation(annotations);
+  if (!inspection.valid) {
     throw new ExecutionError(
-      `Invalid 'actiondock.cli' annotation: expected an object, but received ${
-        cli === null ? "null" : Array.isArray(cli) ? "an array" : typeof cli
-      }.`,
+      inspection.error!,
       undefined,
       "INVALID_ANNOTATION"
     );
   }
-
-  if (!Object.hasOwn(cli, "textField") || (cli as Record<string, unknown>).textField === undefined) {
-    return undefined;
-  }
-
-  const textField = (cli as Record<string, unknown>).textField;
-  if (typeof textField !== "string") {
-    throw new ExecutionError(
-      `Invalid 'actiondock.cli.textField' annotation: expected a string, but received ${
-        textField === null ? "null" : Array.isArray(textField) ? "an array" : typeof textField
-      }.`,
-      undefined,
-      "INVALID_ANNOTATION"
-    );
-  }
-
-  if (textField.trim() === "") {
-    throw new ExecutionError(
-      "Invalid 'actiondock.cli.textField' annotation: cannot be an empty string.",
-      undefined,
-      "INVALID_ANNOTATION"
-    );
-  }
-
-  return textField;
+  return inspection.textField;
 }
 
 /**
@@ -164,112 +131,8 @@ export function renderActionList(
 }
 
 /**
- * 格式化渲染 Action 详情人类可读文本。
- *
- * @param input Action 描述载荷或 Action 规范
- * @returns 格式化后的说明文本
- */
-export function formatActionDetail(
-  input:
-    | ReturnType<typeof buildActionDescribePayload>
-    | (Partial<ActionSpec> & { id: string })
-    | {
-        id: string;
-        packageId?: string;
-        projectRoot?: string;
-        description?: string;
-        inputSchema?: unknown;
-        outputSchema?: unknown;
-        tags?: string[];
-        annotations?: Record<string, unknown>;
-        uses?: string[];
-        entry?: string;
-        [key: string]: any;
-      }
-): string {
-  const payload =
-    "inputAdvice" in input && (input as any).inputAdvice
-      ? (input as ReturnType<typeof buildActionDescribePayload>)
-      : buildActionDescribePayload(input as any);
-
-  const lines: string[] = [];
-  lines.push(`Action: ${payload.id}`);
-  if (payload.packageId) {
-    lines.push(`Package: ${payload.packageId}`);
-  }
-  if (payload.description) {
-    lines.push(`Description: ${payload.description}`);
-  }
-  if (payload.tags && payload.tags.length > 0) {
-    lines.push(`Tags: ${payload.tags.join(", ")}`);
-  }
-  if (payload.uses && payload.uses.length > 0) {
-    lines.push(`Uses: ${payload.uses.join(", ")}`);
-  }
-  if (payload.entry) {
-    lines.push(`Entry: ${payload.entry}`);
-  }
-
-  if (payload.inputSchema !== undefined) {
-    lines.push("");
-    lines.push("Input Schema:");
-    lines.push(
-      typeof payload.inputSchema === "string"
-        ? payload.inputSchema
-        : JSON.stringify(payload.inputSchema, null, 2)
-    );
-  }
-
-  if (payload.outputSchema !== undefined) {
-    lines.push("");
-    lines.push("Output Schema:");
-    lines.push(
-      typeof payload.outputSchema === "string"
-        ? payload.outputSchema
-        : JSON.stringify(payload.outputSchema, null, 2)
-    );
-  }
-
-  lines.push("");
-  lines.push(`Recommended Input: ${payload.inputAdvice.recommendedMode}`);
-
-  if (payload.inputAdvice.reason) {
-    lines.push(`Reason: ${payload.inputAdvice.reason}`);
-  }
-
-  const hasAssignments = Boolean(
-    payload.inputAdvice.assignments &&
-      Object.keys(payload.inputAdvice.assignments).length > 0
-  );
-
-  if (hasAssignments) {
-    lines.push("");
-    lines.push("Assignments:");
-    for (const [key, op] of Object.entries(payload.inputAdvice.assignments!)) {
-      lines.push(`  ${key}${op}`);
-    }
-  }
-
-  if (payload.inputAdvice.recommendedMode === "flat" || hasAssignments) {
-    lines.push("");
-    lines.push("Syntax Reference:");
-    lines.push(...(payload.syntaxReference || ACTION_DESCRIBE_SYNTAX_REFERENCE));
-  }
-
-  if (payload.inputAdvice.issues && payload.inputAdvice.issues.length > 0) {
-    lines.push("");
-    lines.push("Issues:");
-    for (const issue of payload.inputAdvice.issues) {
-      lines.push(`  - ${issue.path}: ${issue.code}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-/**
  * 格式化渲染 Action 详情（编码顾问 Encoding Advisor）。
- * 统一复用 formatActionDetail 实现。
+ * 统一复用核心 formatActionDetail 实现。
  */
 export function renderActionDetail(action: {
   id: string;
@@ -285,13 +148,23 @@ export function renderActionDetail(action: {
 /**
  * 格式化渲染 Action 校验结果。
  */
-export function renderActionValidation(results: Array<{ id: string; valid: boolean; errors: string[] }>): string {
+export function renderActionValidation(
+  results: Array<{ id: string; valid: boolean; errors: string[]; warnings?: string[] }>
+): string {
   const lines: string[] = [];
   for (const r of results) {
     if (r.valid) {
-      lines.push(`[OK] ${r.id}: Valid`);
+      if (r.warnings && r.warnings.length > 0) {
+        lines.push(`[OK] ${r.id}: Valid (warnings: ${r.warnings.join("; ")})`);
+      } else {
+        lines.push(`[OK] ${r.id}: Valid`);
+      }
     } else {
-      lines.push(`[FAIL] ${r.id}: ${r.errors.join(", ")}`);
+      let msg = `[FAIL] ${r.id}: ${r.errors.join(", ")}`;
+      if (r.warnings && r.warnings.length > 0) {
+        msg += ` (warnings: ${r.warnings.join("; ")})`;
+      }
+      lines.push(msg);
     }
   }
   return lines.join("\n");

@@ -86,9 +86,32 @@ node ./entry.mjs run get-pr --input-file ./input.json
 
 ---
 
-## 标准输出信封
+## 原始文本管道输入
 
-调用完成后，入口分发器在标准输出通道输出标准 JSON 信封结构：
+目录型入口同样支持 `--stdin-field <field>`，字段名来自 Action 入参契约：
+
+```bash
+printf 'team4u/actiondock' | node ./entry.mjs run list-prs --stdin-field repo -- state=open
+```
+
+- stdin 读取到 EOF 后作为字符串绑定，不解析 JSON、不剥 BOM、不修剪空白；空 stdin 得到空字符串，随后由 `inputSchema` 校验。
+- 可与扁平参数组合，与 `--input`、`--input-file`（含 `-`）互斥；已知参数错误与字段冲突在读取前拒绝。
+- stdin 源字节与最终入参序列化大小各有默认 10MiB 上限；引号转义放大与补充字段均计入最终大小，读取支持取消。
+- 这是完整文本输入，不是二进制或逐行执行。管道不是事务，`pipefail` 不会阻止下游已经写入，高风险写入应先生成并校验再提交。
+
+---
+
+## 正文输出与机器信封
+
+默认情况下，目录型入口直接输出标量；对象按现有规则提取 `content`、字符串 `text` 或字符串 `message`，其余字段作为元数据写入 stderr，未命中时输出格式化 JSON。它当前不支持 `--text-field`，也不应用 `actiondock.cli.textField` 默认声明；`describe` 会如实展示这些入口差异。
+
+需要完整结构化结果时，显式传入 `--json`：
+
+```bash
+node ./entry.mjs run list-prs --json -- repo=team4u/actiondock
+```
+
+此时 stdout 输出标准 JSON 信封：
 
 ```json
 {
@@ -110,7 +133,8 @@ node ./entry.mjs run get-pr --input-file ./input.json
 
 - 若执行成功，`ok` 为 `true`，业务数据承载于 `data` 字段。
 - 若执行失败，`ok` 为 `false`，错误信息承载于 `error` 字段（包含结构化错误码 `code` 与可读提示 `message`）。
-- 业务日志与调试信息统一输出至标准错误通道，确保标准输出纯净，便于下游工具通过管道无缝解析。
+- 业务日志与调试信息统一写入 stderr；需要程序化读取完整结果时使用 `--json`，不要假定默认输出必然是信封。
+- 默认终端写出沿用附加换行的策略，不承诺字节级透传。
 
 ---
 

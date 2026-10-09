@@ -110,7 +110,7 @@ export async function handleDescribe(ctx: CommandContext, subArgs: string[]): Pr
   if (isJson) {
     ctx.writeOut(JSON.stringify(payload, null, 2));
   } else {
-    ctx.writeOut(formatActionDetail(payload));
+    ctx.writeOut(formatActionDetail(payload, { supportsTextField: false }));
   }
   return ExitCode.SUCCESS;
 }
@@ -135,6 +135,7 @@ export async function handleRun(
 
   let inputStr: string | undefined;
   let inputFile: string | undefined;
+  let stdinField: string | undefined;
   let timeoutMs: number | undefined;
 
   const recognizedFlags = new Set(["--json", "--async"]);
@@ -181,6 +182,10 @@ export async function handleRun(
       inputFile = subArgs[++i];
     } else if (arg.startsWith("-f=")) {
       inputFile = arg.slice(3);
+    } else if (arg === "--stdin-field" && i + 1 < subArgs.length) {
+      stdinField = subArgs[++i];
+    } else if (arg.startsWith("--stdin-field=")) {
+      stdinField = arg.slice(14);
     } else if (arg.startsWith("-")) {
       const hint = "Hint: Separate action inputs from CLI options using '--', e.g.: ad run <id> [options] -- <param>=<val> or <param>:=<json>.";
       return ctx.emitError(
@@ -201,8 +206,10 @@ export async function handleRun(
     input = await resolveActionInput({
       input: inputStr,
       inputFile,
+      stdinField,
       flatArgs: actionArgs.length > 0 ? actionArgs : undefined,
       stdin: process.stdin,
+      signal,
     });
     const check = validateActionInputValue(input);
     if (!check.valid) {

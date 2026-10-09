@@ -2,6 +2,7 @@ import {
   checkGeneratedTypes,
   GENERATED_TYPES_OUTDATED_CODE,
   loadActions,
+  analyzeActionOutputContract,
 } from "@actiondock/core/project";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
@@ -43,7 +44,7 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
         }));
       }
 
-      const results: Array<{ id: string; valid: boolean; errors: string[] }> = [];
+      const results: Array<{ id: string; valid: boolean; errors: string[]; warnings?: string[] }> = [];
 
       for (const item of toValidate) {
         const errors: string[] = [];
@@ -57,10 +58,26 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
         if (outSchema && typeof outSchema !== "object") {
           errors.push("Invalid outputSchema object");
         }
+
+        const annotations = item.spec?.annotations ?? (item.act as any)?.annotations;
+        const contractAnalysis = analyzeActionOutputContract({
+          annotations,
+          outputSchema: outSchema,
+        });
+
+        if (contractAnalysis.errors.length > 0) {
+          for (const err of contractAnalysis.errors) {
+            errors.push(err);
+          }
+        }
+
+        const warnings: string[] = contractAnalysis.warnings.slice();
+
         results.push({
           id: item.id,
           valid: errors.length === 0,
           errors,
+          ...(warnings.length > 0 ? { warnings } : {}),
         });
       }
 

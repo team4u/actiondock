@@ -10,4 +10,5 @@ export * from "./file-input";
 export * from "./stdin-input";
 export * from "./input-resolver";
 export * from "./advice";
+export * from "./output-contract";
 export * from "./describe";

@@ -45,6 +45,7 @@ export function normalizeActionCollection(
         description: (v as any).description,
         inputSchema: (v as any).inputSchema,
         outputSchema: (v as any).outputSchema,
+        annotations: (v as any).annotations,
       };
     }
     return { actionsMap, actionSpecs };
@@ -61,6 +62,7 @@ export function normalizeActionCollection(
           description: item.description ?? act.description,
           inputSchema: item.inputSchema ?? act.inputSchema,
           outputSchema: item.outputSchema ?? act.outputSchema,
+          annotations: item.annotations ?? act.annotations,
         };
       }
     }
@@ -75,6 +77,7 @@ export function normalizeActionCollection(
         description: (v as any).description,
         inputSchema: (v as any).inputSchema,
         outputSchema: (v as any).outputSchema,
+        annotations: (v as any).annotations,
       };
     }
   }

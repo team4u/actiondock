@@ -82,7 +82,7 @@
 
 - 清单字段说明：
   - `actions`：声明 Action 标识符、执行源码入口、描述以及输入输出契约。其中 `inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范，推荐在字段或根对象层级添加 `examples` 示例数组，增强智能体参数识别精度。
-  - `annotations`：可选协议注解元数据。支持声明 `"actiondock.cli": { "textField": "<field>" }` 指定命令行默认正文输出字段，在终端同步调用时自动将该顶层自有字符串字段输出至 stdout，其余字段输出至 stderr。
+  - `annotations`：可选协议注解元数据。`"actiondock.cli": { "textField": "<field>" }` 指定普通 CLI 默认同步正文，将返回结果的该顶层自有字符串字段输出至 stdout，其余字段输出至 stderr。推荐在 `outputSchema` 中明确声明根对象和必填字符串字段；`ad describe` 展示选择方式，`ad validate` 拦截确定矛盾并报告风险警告。`--json` 保留完整结果，显式 `--text-field` 覆盖默认声明；目录型入口当前忽略该注解，保持原有输出规则。
   - `files`：声明需要随包构建与导出的本地源码或文件目录（如 `src`、`lib` 或辅助模块）。若 Action 内部通过相对路径引用了包内公共模块，必须在此字段声明；未声明的文件在 `ad validate` 与 `ad export skill` 时会触发完整性强校验并直接报错阻断。
 
 ---

@@ -35,11 +35,19 @@ export {
   runDoctorChecks,
 } from "../doctor/doctor";
 
-// 动作入参解析、校验与格式化（含 BOM 剥离与标准输入有界读取的单一事实源转引）
+// 动作入参解析、输出契约分析、校验与格式化（含 BOM 剥离与标准输入有界读取的单一事实源转引）
 export {
   resolveActionInput,
   buildActionDescribePayload,
+  formatActionDetail,
+  type FormatActionDetailOptions,
   ACTION_DESCRIBE_SYNTAX_REFERENCE,
+  inspectActionTextFieldAnnotation,
+  analyzeActionOutputContract,
+  type AnnotationInspectionResult,
+  type ActionOutputContractInput,
+  type ActionOutputContractAnalysis,
+  type OutputContractDiagnostic,
   mapInputValidationFailure,
   stripBom,
   readStdinBounded,

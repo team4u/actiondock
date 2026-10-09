@@ -129,7 +129,8 @@
       "uses": [],
       "tags": ["greeting", "demo"],
       "annotations": {
-        "audience": ["all"]
+        "audience": ["all"],
+        "actiondock.cli": { "textField": "message" }
       }
     }
   }
@@ -151,7 +152,10 @@
 - 分类标签：`tags`
   类型为字符串数组。用于在 `ad info` 与 `ad list` 中进行分类筛选。
 - 协议注解元数据：`annotations`
-  类型为键值映射对象。用于承载向下透传给 MCP 协议客户端或上层编排器的元数据注解。
+  类型为键值映射对象。用于承载协议适配器与调用入口相关的元数据。
+  - `"actiondock.cli": { "textField": "message" }` 声明普通 CLI 默认同步输出的正文字段，字段对应返回结果中顶层自有字符串属性，而非入参。推荐在 `outputSchema` 中明确声明根类型为对象、该字段为字符串并列入 `required`。
+  - `ad describe` 展示默认字段和消费方式，`ad validate` 拦截确定矛盾、对可选字段或无法静态确认的 Schema 给出警告。显式 `--text-field` 优先于默认声明，`--json` 忽略默认声明并保留完整信封。
+  - 该注解不改变业务返回值、运行记录或 SDK、HTTP、MCP 的结果。目录型入口当前不应用此注解，仍使用其现有 `content`、`text`、`message` 提取规则。
 
 ---
 

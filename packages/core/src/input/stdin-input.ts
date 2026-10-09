@@ -14,6 +14,15 @@ export interface ReadStdinBoundedOptions {
   byteStreamOnly?: boolean;
   /** 是否执行严格 UTF-8 校验与解码（默认 true） */
   strictUtf8?: boolean;
+  /**
+   * 原始文本模式（默认 false）。
+   *
+   * 语义差异（仅在 strictUtf8 下生效）：
+   * - 保留开头 BOM（U+FEFF）作为正文一部分，不执行剥离；
+   * - 编码失败映射为 INPUT_FILE_READ_FAILED（reason: "INVALID_UTF8"）读取失败，
+   *   而不是完整 JSON 场景的 INVALID_JSON 解析失败。
+   */
+  rawText?: boolean;
 }
 
 /**
@@ -22,7 +31,8 @@ export interface ReadStdinBoundedOptions {
  * 核心契约：
  * - 纯字节流策略拦截：若启用 byteStreamOnly 且流发射 string chunk，抛出 INPUT_FILE_READ_FAILED（reason: "INVALID_STREAM_CHUNK_TYPE"）。
  * - 终态竞态裁决（First Observed Terminal Event Wins）：EOF、limit、abort 谁先观测谁生效，后续事件仅执行清理，不篡改已确定的错误与结果。
- * - 严格 UTF-8 校验：在 strictUtf8 下通过 decodeUtf8Strict 校验并抛出结构化 INVALID_JSON 异常。
+ * - 严格 UTF-8 校验：在 strictUtf8 下通过 decodeUtf8Strict 校验并抛出结构化 INVALID_JSON 异常；
+ *   rawText 模式改为保留 BOM 的 fatal 解码，编码失败抛出 INPUT_FILE_READ_FAILED（reason: "INVALID_UTF8"）。
  *
  * @param stream 标准输入可读流，默认为 process.stdin
  * @param options 读取配置选项
@@ -36,6 +46,7 @@ export async function readStdinBounded(
   const signal = options?.signal;
   const byteStreamOnly = options?.byteStreamOnly ?? false;
   const strictUtf8 = options?.strictUtf8 ?? true;
+  const rawText = options?.rawText ?? false;
 
   // 启动前检查 abort
   if (signal?.aborted) {
@@ -152,8 +163,28 @@ export async function readStdinBounded(
       try {
         const fullBuffer = Buffer.concat(chunks);
         if (strictUtf8) {
-          const text = decodeUtf8Strict(fullBuffer, "full-json-stdin");
-          resolve(text);
+          if (rawText) {
+            // 原始文本模式：保留开头 BOM，编码失败视为读取失败而非 JSON 解析失败
+            try {
+              resolve(
+                new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+                  fullBuffer
+                )
+              );
+            } catch (err: unknown) {
+              reject(
+                inputFileReadFailed(
+                  "stdin",
+                  new Error(
+                    `Invalid UTF-8 encoding: ${err instanceof Error ? err.message : String(err)}`
+                  ),
+                  { reason: "INVALID_UTF8" }
+                )
+              );
+            }
+          } else {
+            resolve(decodeUtf8Strict(fullBuffer, "full-json-stdin"));
+          }
         } else {
           resolve(fullBuffer.toString("utf8"));
         }
