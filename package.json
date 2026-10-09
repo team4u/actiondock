@@ -1,6 +1,6 @@
 {
   "name": "actiondock-monorepo",
-  "version": "2.12.0",
+  "version": "2.13.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -21,12 +21,12 @@
     "docs:serve": "npx docsify-cli serve docs"
   },
   "dependencies": {
-    "@actiondock/builder": "^2.12.0",
-    "@actiondock/cli": "^2.12.0",
-    "@actiondock/core": "^2.12.0",
-    "@actiondock/mcp": "^2.12.0",
-    "@actiondock/sdk": "^2.12.0",
-    "@actiondock/testing": "^2.12.0"
+    "@actiondock/builder": "^2.13.0",
+    "@actiondock/cli": "^2.13.0",
+    "@actiondock/core": "^2.13.0",
+    "@actiondock/mcp": "^2.13.0",
+    "@actiondock/sdk": "^2.13.0",
+    "@actiondock/testing": "^2.13.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
