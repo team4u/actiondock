@@ -50,6 +50,7 @@ export type {
   ResolvedActionRef,
   ExecutionResult,
   RunRecord,
+  RunOrigin,
   ExecutionEvent,
 } from "@actiondock/sdk";
 export type {

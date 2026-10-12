@@ -1,3 +1,5 @@
+import type { RunOrigin } from "@actiondock/sdk";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 import { parseActionRef } from "../catalog/resolve-action";
 import { ActionDockError, ACTION_FORBIDDEN, PACKAGE_NOT_ALLOWED } from "../errors";
 import type { McpEndpointHandler } from "./mcp-endpoint";
@@ -443,4 +445,21 @@ export function assertPackageAllowedByPolicy(
   if (!isPackageAllowedByPolicy(packageId, policy)) {
     throw new PackageNotAllowedError(packageId);
   }
+}
+
+/**
+ * 构造受信任的服务端执行来源快照。
+ *
+ * 仅挑选 channel、viewName（默认 "default"）与 authenticated（视图配置非空有效令牌）。
+ * 严禁暴露令牌原文、片段或摘要。
+ */
+export function createServerRunOrigin(
+  policy: Pick<EffectiveServerPolicy, "viewName" | "token">,
+  channel: RunOrigin["channel"]
+): RunOrigin {
+  return snapshotRunOrigin({
+    channel,
+    viewName: policy.viewName || "default",
+    authenticated: Boolean(policy.token?.trim()),
+  })!;
 }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { linkPackage } from "@actiondock/core/registry";
 
@@ -378,6 +378,30 @@ export default defineAction({
     assert.ok(!(restrictedToolNames).includes("calc-secret"));
     assert.ok(!(restrictedToolNames).includes("manage"));
 
+    const mcpCalls = await Promise.all([
+      sendMcpRequest(`${serverUrl}/views/admin/mcp`, ADMIN_TOKEN, {
+        jsonrpc: "2.0", id: "admin-origin", method: "tools/call",
+        params: { name: "calc-add", arguments: { a: 1, b: 2 } },
+      }, adminInit.sessionId),
+      sendMcpRequest(`${serverUrl}/mcp`, RESTRICTED_TOKEN, {
+        jsonrpc: "2.0", id: "restricted-origin", method: "tools/call",
+        params: { name: "calc-add", arguments: { a: 3, b: 4 } },
+      }, restrictedInit.sessionId),
+    ]);
+    for (const [index, call] of mcpCalls.entries()) {
+      assert.strictEqual(call.status, 200, call.rawText);
+      assert.strictEqual(call.data?.error, undefined, call.rawText);
+      const execution = JSON.parse(call.data.result.content[0].text);
+      assert.strictEqual(execution.ok, true);
+      const detail = await fetch(`${serverUrl}/api/v2/runs/${execution.runId}`, {
+        headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+      });
+      assert.strictEqual(detail.status, 200);
+      assert.deepStrictEqual((await detail.json()).origin, {
+        channel: "mcp", viewName: ["admin", "restricted"][index], authenticated: true,
+      });
+    }
+
     // 2.3 禁用 MCP 的视图访问返回 404
     const noMcpRes = await sendMcpRequest(`${serverUrl}/views/no-mcp/mcp`, NO_MCP_TOKEN, {
       jsonrpc: "2.0",
@@ -517,6 +541,26 @@ export default defineAction({
     const allowedRunData = await allowedRunRes.json();
     assert.strictEqual(allowedRunData.ok, true);
     assert.strictEqual(allowedRunData.data.sum, 40);
+
+    const expectedHttpOrigin = { channel: "http", viewName: "restricted", authenticated: true };
+    const runDetail = await fetch(`${serverUrl}/api/v2/runs/${allowedRunData.runId}`, {
+      headers: { Authorization: `Bearer ${RESTRICTED_TOKEN}` },
+    });
+    assert.strictEqual(runDetail.status, 200);
+    assert.deepStrictEqual((await runDetail.json()).origin, expectedHttpOrigin);
+    const showArgs = [cliPath, "runs", "show", allowedRunData.runId, "--server", serverUrl, "--token", RESTRICTED_TOKEN];
+    const showOptions = {
+      cwd: tempHome,
+      env: { ...process.env, ACTIONDOCK_HOME: tempHome },
+      encoding: "utf-8" as const,
+      timeout: 10_000,
+    };
+    const jsonShow = spawnSync(process.execPath, [...showArgs, "--json"], showOptions);
+    assert.strictEqual(jsonShow.status, 0, jsonShow.stderr);
+    assert.deepStrictEqual(JSON.parse(jsonShow.stdout).origin, expectedHttpOrigin);
+    const humanShow = spawnSync(process.execPath, showArgs, showOptions);
+    assert.strictEqual(humanShow.status, 0, humanShow.stderr);
+    assert.match(humanShow.stdout, /Origin: +channel=http view=restricted authenticated=true/);
 
     // 5.2 在受限视图下尝试执行未授权动作拦截 403
     const forbiddenRunRes = await fetch(

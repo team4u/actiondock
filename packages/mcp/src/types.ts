@@ -8,7 +8,7 @@ import type {
   RuntimePlatform,
   RuntimeStorage,
 } from "@actiondock/core/package";
-import type { ActionDefinition } from "@actiondock/sdk";
+import type { ActionDefinition, RunOrigin } from "@actiondock/sdk";
 
 /**
  * ActionDock MCP 适配层初始化选项。
@@ -65,6 +65,10 @@ export interface ActionDockMcpOptions {
    * 仅在调用方自行持有实例并需要一次 close 同时释放 service 时置 true。
    */
   cascadeServiceClose?: boolean;
+  /**
+   * 运行来源追踪快照（若由受信任的服务端执行绑定）。
+   */
+  origin?: RunOrigin;
 }
 
 /**

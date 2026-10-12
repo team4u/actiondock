@@ -1,6 +1,7 @@
-import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
+import type { JsonValue, RuntimeError, RunOrigin, RunRecord } from "@actiondock/sdk";
 import { ActionDockError, RUN_PERSISTENCE_FAILED, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
+import { snapshotRunOrigin } from "./run-origin";
 
 /**
  * 运行记录落库参数（RunRecord 构造与写入的领域入参）。
@@ -15,6 +16,8 @@ export interface InitialRunRecordInput {
   rootRunId: string;
   /** 父级运行 ID（嵌套调用场景下建立调用链树） */
   parentRunId?: string;
+  /** 运行来源追踪快照 */
+  origin?: RunOrigin;
   /** 执行归属所有者标识 */
   ownerId?: string;
   /** 执行宿主会话标识 */
@@ -95,8 +98,10 @@ export function buildInitialRunRecord(
     runnerGenerationId,
     runnerHostSessionId,
   } = params;
+  const origin = snapshotRunOrigin(params.origin);
   const record: RunRecord = {
     id: runId,
+    ...(origin !== undefined ? { origin } : {}),
     rootRunId,
     parentRunId,
     packageId: targetPackageId,

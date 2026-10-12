@@ -1,3 +1,5 @@
+import { ActionDockError, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
+
 /**
  * 存储层 JSON 载荷统一安全解析工具。
  *
@@ -18,11 +20,13 @@
  *
  * @param raw 存储层原始 JSON 字符串
  * @param context 存储路径上下文描述（包含数据库位置、包标识与键名）
- * @returns 解析成功返回解析后的值；入参为空返回 undefined；解析失败返回原始字符串
+ * @param options 严格模式下解析失败直接报错，且不输出原始载荷片段
+ * @returns 解析成功返回解析后的值；入参为空返回 undefined；默认模式解析失败返回原始字符串
  */
 export function safeParseStoredJson<T = unknown>(
   raw: string | null | undefined,
-  context: string
+  context: string,
+  options?: { strict?: boolean }
 ): T | undefined {
   if (raw === null || raw === undefined) {
     return undefined;
@@ -30,6 +34,12 @@ export function safeParseStoredJson<T = unknown>(
   try {
     return JSON.parse(raw) as T;
   } catch (err) {
+    if (options?.strict) {
+      throw new ActionDockError(
+        RUN_REPOSITORY_UNAVAILABLE,
+        `Corrupted stored JSON at ${context}`
+      );
+    }
     const reason = err instanceof Error ? err.message : String(err);
     console.warn(`[actiondock] stored JSON corrupted at ${context}: ${reason}`);
     return raw as unknown as T;

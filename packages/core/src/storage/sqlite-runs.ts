@@ -3,6 +3,7 @@ import type { SqliteDriver, SqliteStatement, TerminalRunStatus, RunsRetentionPol
 import { isTerminalRunStatus, DEFAULT_MAX_RUNS_PER_PACKAGE, DEFAULT_MIN_RETAIN_RUNS, DEFAULT_RUNS_RETENTION_MS } from "./types";
 import type { Clock } from "./clock";
 import { safeParseStoredJson } from "./utils";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 import { isRunHostDead, type ProcessLivenessProbe } from "./run-liveness";
 import { ActionDockError, STORAGE_CLOSED, STORED_ERROR_DECODE_FAILED } from "../errors";
 
@@ -173,16 +174,18 @@ export class SqliteRunsStore {
   createRun(record: RunRecord | any): void {
     const stmt = this.getStatement(`
       INSERT INTO runs (
-        id, root_run_id, parent_run_id, package_id, package_instance_id,
+        id, root_run_id, parent_run_id, origin_json, package_id, package_instance_id,
         action_id, generation_id, owner_id, host_session_id, host_pid, heartbeat_at,
         status, input_json, output_json,
         error_json, started_at, finished_at, duration_ms
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const rootRunId = record.rootRunId || record.id;
     const parentRunId = record.parentRunId || null;
+    const origin = snapshotRunOrigin(record.origin);
+    const originJson = origin ? JSON.stringify(origin) : null;
     const packageInstanceId = record.packageInstanceId || record.packageId || this.packageId;
     const generationId = record.generationId || "1";
     const ownerId = record.ownerId || "local";
@@ -202,6 +205,7 @@ export class SqliteRunsStore {
       record.id,
       rootRunId,
       parentRunId,
+      originJson,
       record.packageId || this.packageId,
       packageInstanceId,
       record.actionId ?? "",
@@ -738,8 +742,16 @@ export class SqliteRunsStore {
           : { code: STORED_ERROR_DECODE_FAILED, message: String(error) }
         : undefined;
 
+    const rawOrigin = safeParseStoredJson<unknown>(
+      row.origin_json,
+      `runs.origin db=${this.dbPath} package=${this.packageId} run=${row.id}`,
+      { strict: true }
+    );
+    const origin = snapshotRunOrigin(rawOrigin);
+
     return {
       id: row.id,
+      ...(origin !== undefined ? { origin } : {}),
       rootRunId: row.root_run_id || row.id,
       parentRunId: row.parent_run_id || undefined,
       packageId: row.package_id,

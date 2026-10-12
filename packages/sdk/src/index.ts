@@ -55,6 +55,7 @@ export type {
   ProgressReporter,
   ReadResult,
   ResolvedActionRef,
+  RunOrigin,
   RunRecord,
   RunStatus,
   RuntimeError,

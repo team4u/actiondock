@@ -17,6 +17,7 @@ import {
   REQUEST_TOO_LARGE,
 } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
+import { createServerRunOrigin } from "../policy";
 import {
   filterActionsByPolicy,
   getSubPath,
@@ -359,10 +360,12 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     if (isAsync) {
       try {
+        const origin = createServerRunOrigin(policy, "http");
         const ticket = await service.execution.start(actionRefObj, input, {
           timeoutMs,
           config: configOverrides,
           requestId,
+          origin,
         });
 
         if (ticket.status === "failed") {
@@ -412,11 +415,13 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     // 同步执行模式
     try {
+      const origin = createServerRunOrigin(policy, "http");
       const result = await service.execution.run(actionRefObj, input, {
         signal: req.signal,
         timeoutMs,
         config: configOverrides,
         requestId,
+        origin,
       });
 
       let status = 200;

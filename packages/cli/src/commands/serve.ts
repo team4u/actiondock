@@ -12,6 +12,7 @@ import { parseActionRef } from "@actiondock/core/graph";
 import type { ActionDockManifest } from "@actiondock/core/project";
 import {
   formatHostForUrl,
+  createServerRunOrigin,
   type EffectiveServerPolicy,
   type ServerTlsOptions,
   type ServerViewOptions,
@@ -318,6 +319,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
                   packageAllowlist: view.packageAllowlist,
                   packageIds: view.packageAllowlist,
                   actionAllowlist: view.actionAllowlist,
+                  origin: createServerRunOrigin(view, "mcp"),
                 });
               },
               {

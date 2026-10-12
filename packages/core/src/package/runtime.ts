@@ -33,6 +33,7 @@ import {
 } from "../errors";
 import { createAbortError } from "../ipc/service";
 import { createRootInvocationContext, type InvocationContext, type RunOptions } from "../invocation/types";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionSpec,
@@ -694,6 +695,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       maxCallDepth: this.options.maxCallDepth,
       logger: this.options.logger,
       process: this.options.process ?? this.platform.process,
+      origin: options?.origin,
     });
   }
 
@@ -702,6 +704,8 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     input: JsonValue,
     options?: RunOptions
   ): Promise<ExecutionResult> {
+    const origin = snapshotRunOrigin(options?.origin);
+    const effectiveOptions = { ...options, origin };
     const service = await this.prepareExecution();
     let actionId = id;
     if (actionId.includes("/")) {
@@ -714,7 +718,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
         );
       }
     }
-    const context = this.buildRootInvocationContext(actionId, options);
+    const context = this.buildRootInvocationContext(actionId, effectiveOptions);
     return service.execute(actionId, input, context);
   }
 
@@ -723,6 +727,8 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     input: JsonValue,
     options?: RunOptions
   ): Promise<ExecutionTicket> {
+    const origin = snapshotRunOrigin(options?.origin);
+    const effectiveOptions = { ...options, origin };
     const service = await this.prepareExecution();
     let actionId = id;
     if (actionId.includes("/")) {
@@ -735,7 +741,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
         );
       }
     }
-    const context = this.buildRootInvocationContext(actionId, options);
+    const context = this.buildRootInvocationContext(actionId, effectiveOptions);
     return service.start(actionId, input, context);
   }
 

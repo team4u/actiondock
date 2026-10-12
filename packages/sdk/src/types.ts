@@ -653,11 +653,25 @@ export type RunStatus =
   | "interrupted";
 
 /**
+ * 运行来源追踪信息。
+ */
+export interface RunOrigin {
+  /** 触发运行的服务入口通道（REST API 或 MCP） */
+  readonly channel: "http" | "mcp";
+  /** 实际选中的服务视图名称（默认 "default"） */
+  readonly viewName: string;
+  /** 是否通过该视图配置的有效令牌完成鉴权 */
+  readonly authenticated: boolean;
+}
+
+/**
  * Action 执行运行历史记录。
  */
 export interface RunRecord {
   /** 全局唯一运行标识 */
   id: string;
+  /** 运行来源追踪快照（若由受信任的服务端执行生成） */
+  origin?: RunOrigin;
   /** 根调用运行标识 */
   rootRunId: string;
   /** 父级调用的运行标识 */

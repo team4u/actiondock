@@ -55,6 +55,7 @@ import {
   type RunOptions,
   createDefaultProcessOwner,
 } from "../invocation/types";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 import {
   ActionRegistry,
   isActionDefinitionObject,
@@ -619,6 +620,7 @@ export class DefaultExecutionService implements ExecutionService {
       process: opts.process || this.process,
       owner: opts.owner,
       requestId: opts.requestId,
+      origin: snapshotRunOrigin(opts.origin),
     };
   }
 
@@ -790,6 +792,7 @@ export class DefaultExecutionService implements ExecutionService {
       progress: context.progress,
       process: effectiveProcess,
       owner: effectiveOwner,
+      origin: context.origin,
     };
     return await invoker(childAction, childInput, invocationContext);
   }
@@ -990,8 +993,10 @@ export class DefaultExecutionService implements ExecutionService {
       message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
     };
     const rootRunId = context.rootRunId || context.parentRunId || runId;
+    const origin = snapshotRunOrigin(context.origin);
     const initialRun: RunRecord = {
       id: runId,
+      ...(origin !== undefined ? { origin } : {}),
       rootRunId,
       parentRunId: context.parentRunId,
       packageId: targetPackageId,
@@ -1070,6 +1075,7 @@ export class DefaultExecutionService implements ExecutionService {
       runId,
       rootRunId,
       parentRunId: context.parentRunId,
+      origin: context.origin,
       ownerId: context.principalId || context.tenantId || this.ownerId,
       hostSessionId: context.hostSessionId || this.hostSessionId,
       hostPid: this.hostPid,

@@ -4,9 +4,11 @@ import type {
   Logger,
   ProcessAPI,
   ProgressReporter,
+  RunOrigin,
 } from "@actiondock/sdk";
 import type { ProcessOwner } from "../process";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 
 export { createPackageIdentity };
 export type { PackageIdentity };
@@ -93,6 +95,8 @@ export interface InvocationContext {
   readonly process?: ProcessAPI;
   /** 进程属主身份 */
   readonly owner?: ProcessOwner;
+  /** 运行来源追踪快照 */
+  readonly origin?: RunOrigin;
 }
 
 /**
@@ -112,6 +116,7 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
   const runId = options.runId ?? crypto.randomUUID();
   const rootRunId = options.rootRunId ?? runId;
   const pkg = options.package;
+  const origin = snapshotRunOrigin(options.origin);
   return {
     runId,
     rootRunId,
@@ -130,6 +135,7 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
     logger: options.logger,
     progress: options.progress,
     process: options.process,
+    origin,
     owner: options.owner ??
       createDefaultProcessOwner({
         tenantId: options.tenantId,
@@ -172,6 +178,8 @@ export interface CreateRootInvocationContextOptions {
   progress?: ProgressReporter;
   /** 显式执行归属所有者契约 */
   owner?: ProcessOwner;
+  /** 运行来源追踪快照 */
+  origin?: RunOrigin;
 }
 
 /**
@@ -199,6 +207,7 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     owner: options.owner,
     tenantId: options.tenantId,
     principalId: options.principalId,
+    origin: options.origin,
   });
   return {
     runId: base.runId,
@@ -217,6 +226,7 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     progress: base.progress,
     process: base.process,
     owner: base.owner,
+    origin: base.origin,
   };
 }
 

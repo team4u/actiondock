@@ -58,6 +58,7 @@ export function initSchema(
           id TEXT PRIMARY KEY,
           root_run_id TEXT NOT NULL,
           parent_run_id TEXT,
+          origin_json TEXT,
           package_id TEXT NOT NULL,
           package_instance_id TEXT NOT NULL,
           action_id TEXT NOT NULL,
@@ -114,8 +115,12 @@ export function initSchema(
 
   // 确保存量旧版本数据库补充新增的列或表
   if (version !== 0) {
+    const columns = driver.prepare("PRAGMA table_info(runs);").all<{ name: string }>();
+    if (Array.isArray(columns) && !columns.some((c) => c.name === "origin_json")) {
+      driver.exec("ALTER TABLE runs ADD COLUMN origin_json TEXT;");
+    }
+
     try {
-      const columns = driver.prepare("PRAGMA table_info(runs);").all<{ name: string }>();
       if (Array.isArray(columns) && !columns.some((c) => c.name === "host_session_id")) {
         driver.exec("ALTER TABLE runs ADD COLUMN host_session_id TEXT;");
       }

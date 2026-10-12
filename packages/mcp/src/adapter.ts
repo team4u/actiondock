@@ -159,6 +159,7 @@ export async function createActionDockMcpServer(
         const result = await service.execution.run(action.id, input as JsonValue, {
           signal,
           timeoutMs: effectiveTimeoutMs,
+          origin: options.origin,
         });
         return toMcpResult(result);
       }

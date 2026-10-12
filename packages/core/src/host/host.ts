@@ -35,6 +35,7 @@ import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
+import { snapshotRunOrigin } from "../runtime/run-origin";
 import {
   ActionDockError,
   ACTION_NOT_FOUND,
@@ -242,6 +243,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         input?: unknown,
         opts?: RunOptions
       ): Promise<ExecutionResult> {
+        const origin = snapshotRunOrigin(opts?.origin);
         await self.ensureInitialized();
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         const cleanOpts: RunOptions = {
@@ -249,6 +251,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           timeoutMs: opts?.timeoutMs,
           config: opts?.config,
           requestId: opts?.requestId,
+          origin,
         };
         return self.runAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
       },
@@ -258,6 +261,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         input?: unknown,
         opts?: RunOptions
       ): Promise<ExecutionTicket> {
+        const origin = snapshotRunOrigin(opts?.origin);
         await self.ensureInitialized();
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         const cleanOpts: RunOptions = {
@@ -265,6 +269,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           timeoutMs: opts?.timeoutMs,
           config: opts?.config,
           requestId: opts?.requestId,
+          origin,
         };
         return self.startAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
       },
@@ -860,6 +865,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           progress: context.progress,
           process: context.process,
           owner: targetOwner,
+          origin: context.origin,
         };
 
         const ticket = await targetRuntime.startInvocation(
@@ -1017,8 +1023,10 @@ export class DefaultActionDockHost implements ActionDockHost {
     input: JsonValue,
     options: RunOptions = {}
   ): Promise<ExecutionResult> {
+    const origin = snapshotRunOrigin(options.origin);
+    const effectiveOptions = { ...options, origin };
     await this.ensureInitialized();
-    const ticket = await this.startAction(ref, input, options);
+    const ticket = await this.startAction(ref, input, effectiveOptions);
     if (!ticket.result) {
       throw new ActionDockError(EXECUTION_FAILED, `Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
@@ -1030,6 +1038,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     input: JsonValue,
     options: RunOptions = {}
   ): Promise<ExecutionTicket> {
+    const origin = snapshotRunOrigin(options.origin);
+    const effectiveOptions = { ...options, origin };
     await this.ensureInitialized();
     if (this.isClosed) {
       throw new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closed: new tasks rejected");
@@ -1112,13 +1122,14 @@ export class DefaultActionDockHost implements ActionDockHost {
     const rootContext = createRootInvocationContext({
       targetPackage: targetRuntime.identity,
       callStack: [rootKey],
-      signal: options.signal,
-      timeoutMs: options.timeoutMs,
-      config: options.config,
-      requestId: options.requestId,
+      signal: effectiveOptions.signal,
+      timeoutMs: effectiveOptions.timeoutMs,
+      config: effectiveOptions.config,
+      requestId: effectiveOptions.requestId,
       hostSessionId: this.hostSessionId,
       maxCallDepth: this.maxCallDepth,
       process: this.options.process,
+      origin: effectiveOptions.origin,
     });
 
     // 调度目标包执行服务

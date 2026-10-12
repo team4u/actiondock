@@ -3,6 +3,7 @@ import type {
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
+  RunOrigin,
   RunRecord,
 } from "@actiondock/sdk";
 import type {
@@ -41,6 +42,8 @@ export interface RunOptions {
   config?: Record<string, JsonValue>;
   /** 幂等请求标识 */
   requestId?: string;
+  /** 运行来源追踪快照 */
+  origin?: RunOrigin;
 }
 
 /**
