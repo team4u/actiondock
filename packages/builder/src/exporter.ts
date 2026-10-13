@@ -33,7 +33,8 @@ export class SkillExporter {
    */
   public async export(options: SkillExporterOptions): Promise<SkillExportResult> {
     const root = resolve(options.projectRoot);
-    const mode: "source" | "node" = options.mode === "node" ? "node" : "source";
+    const mode: "source" | "node" =
+      options.standalone === true || options.mode === "node" ? "node" : "source";
 
     // 调用 SelectionPlanner 执行声明式构建规划
     const plan = SelectionPlanner.plan({
@@ -54,14 +55,15 @@ export class SkillExporter {
       plan.externalProjectRoots && plan.externalProjectRoots.length > 0
     );
 
-    // 单包源码导出若依赖闭包含外部包，导成 mini-workspace 形态（packages/ 下带齐依赖包），和 bundle 统一成一个交付形状
+    // 单包源码导出若开启 bundleDeps 且依赖闭包含外部包，导成 mini-workspace 形态（packages/ 下带齐依赖包），和 bundle 统一成一个交付形状
     // 该复合分支会展开全部依赖包，无法保留调用方传入的 actions/playbooks 过滤选项；
     // 静默丢弃过滤会导致产物全量导出，必须显式拒绝并给出调整指引（CLI 侧已有 roots>1 守卫，此处补齐 composite 分支守卫）
     const hasFilters = Boolean(
       (options.actions && options.actions.length > 0) ||
         (options.playbooks && options.playbooks.length > 0)
     );
-    const willUseComposite = mode === "source" && !options._isSubpackage && hasExternalDeps;
+    const willUseComposite =
+      mode === "source" && !options._isSubpackage && hasExternalDeps && options.bundleDeps === true;
     if (hasFilters && willUseComposite) {
       throw new BuilderError(
         "Filtering options (--actions, --playbook) cannot be combined with a source export whose dependency closure spans external linked packages (composite mini-workspace output). Remove the filtering options to export the full closure, or adjust the 'uses' declarations so the closure stays within a single package.",
@@ -82,6 +84,7 @@ export class SkillExporter {
         workspaceRoot: options.workspaceRoot,
         skillMdPath: options.skillMdPath,
         customMdPath: options.customMdPath,
+        bundleDeps: options.bundleDeps,
       });
 
       return {

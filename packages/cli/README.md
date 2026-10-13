@@ -77,13 +77,16 @@ ad test
 ad mcp
 ```
 
-- 导出为便携式 Agent Skill 技能包：
+- 导出为便携式 Agent Skill 资产：
 ```bash
-# 导出源码模式技能
+# 默认源码模式浅导出（保留 uses 逻辑契约）
 ad export skill
 
-# 导出自包含 Node.js 目录模式技能
-ad export skill --mode node
+# 独立自包含 Node.js 目录型导出（免全局 ad 命令行）
+ad export skill --standalone --vendor-deps
+
+# 显式物化外部依赖导出（展开为微型工作区）
+ad export skill --bundle-deps
 ```
 
 - 构建 Node.js 目录交付产物：
@@ -188,7 +191,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad test` | 执行快速单元测试 |
 | `ad build` | 构建 Node.js 目录交付产物（支持 `--vendor-deps` 与 `--archive`） |
 | `ad pack` | 打包为标准 npm tarball（`.tgz`），支持 `--dry-run` |
-| `ad export skill` | 导出 Agent Skill 技能包（支持 `--mode source` 与 `--mode node`） |
+| `ad export skill` | 导出 Agent Skill 资产（默认单包源码浅导出，支持 `--standalone` 免全局工具自包含导出与 `--bundle-deps` 物化依赖） |
 | `ad link` / `unlink` | 注册或注销工作区全局路由与符号链接 |
 | `ad profile` | 管理远程执行节点凭证与环境配置 |
 | `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务（支持 `-P` 包白名单与 `-A` 动作白名单细粒度权限控制，原生支持 `--https` 自签名与生产证书） |

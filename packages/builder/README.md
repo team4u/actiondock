@@ -40,21 +40,29 @@ ActionDock 2.x 构建规划、目录交付与技能导出包。
 
 ### SkillExporter 与技能导出
 
-[SkillExporter](./src/exporter.ts) 与 `exportSkill` 导出函数将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
+[SkillExporter](./src/exporter.ts)、`exportSkill` 以及 `exportCompositeSkill` 导出函数将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
 
-- 生成 SKILL.md 指令：提取 Playbook 规程内容与工具元数据，合成符合智能体规范的操作指南文档与声明头部。
-- 源码模式技能导出：使用 `--mode source`（默认模式），保留 TypeScript 源码与依赖声明，适合具备 Node.js 运行环境的智能体容器直接运行。
+- 默认单包浅导出机制：默认采用单包源码浅闭包导出，仅复制当前包自身源码与规程，产物清单完整保留 `uses` 跨包逻辑契约，不物理拷贝外部包源码，单包结构纯粹透明，天然支持配合 `playbooks` 或 `actions` 执行规程驱动剪枝。
+- 显式外部依赖物化：支持 `bundleDeps` 选项。当显式开启且依赖闭包跨越外部已链接包时，自顶向下递归解析依赖链并将外部依赖包物理物化进产物根目录的 `packages/*` 子目录，展开为自包含的微型工作区产物结构；展开为复合形态时与过滤参数严格互斥（抛出 `FILTERS_UNSUPPORTED_FOR_COMPOSITE` 错误）。
+- 独立自包含 Node 目录型导出：支持 `standalone` 选项（等价于 `mode: "node"`），生成免全局 `ad` 命令行工具的自包含目录，内置独立运行脚本与说明书，配合 `vendorDeps` 可实现生产依赖完全内置。
 - 本地依赖完整性强校验：严格断言 Action 源码中的相对路径导入。若引用了未在 `actions` 且未在 `files` 字段中声明的本地模块，直接中断构建并抛出 `BuilderError`（错误码 `UNMET_LOCAL_DEPENDENCY`），彻底杜绝缺失依赖的产物分发。
-- 自包含 Node 目录技能导出：使用 `--mode node`，将自包含的 Node.js 交付目录与技能文档一体化打包，开箱即用。
-- 复合套件导出：支持 `--bundle` 选项将工作区内的多个包统一导出为复合工作区技能套件。
-- 压缩归档：支持 `--archive` 选项将导出的技能目录打包为 `.zip` 或 `.tar.gz` 格式。
+- 生成 SKILL.md 指令：提取 Playbook 规程内容与工具元数据，合成符合智能体规范的操作指南文档与声明头部。
+- 复合套件导出与说明书定制：支持 `exportCompositeSkill` 函数将工作区内的多个包统一导出为复合工作区技能套件；支持通过 `customMdPath` 注入插槽定制模板，通过 `skillMdOnly` 实现就地仅原位刷新说明书。
+- 压缩归档：支持 `archive` 选项将导出的技能目录打包为 `.zip` 或 `.tar.gz` 格式。
 
 ---
 
 ## 编程调用示例
 
 ```ts
-import { buildProject, packProject, SelectionPlanner, SkillExporter, exportSkill } from "@actiondock/builder";
+import {
+  buildProject,
+  packProject,
+  SelectionPlanner,
+  SkillExporter,
+  exportSkill,
+  exportCompositeSkill,
+} from "@actiondock/builder";
 
 // 计算依赖规划闭包
 const planner = new SelectionPlanner({ projectRoot: "/path/to/project" });
@@ -73,20 +81,34 @@ const packResult = await packProject({
   outDir: "./dist/npm",
 });
 
-// 导出 Agent Skill 资产（顶层便捷入口，内部委托 SkillExporter 实例方法）
+// 默认源码单包浅导出（支持规程定向裁剪）
 const skillResult = await exportSkill({
   projectRoot: "/path/to/project",
-  outDir: "./dist/skills",
+  outDir: "./dist/skills/review-pr",
   playbooks: ["review-pr"],
-  mode: "source",
 });
 
-// 或直接实例化 SkillExporter 定制导出
-const exporter = new SkillExporter();
-const customResult = await exporter.export({
+// 显式物化外部依赖导出（展开为微型工作区）
+const bundledResult = await exportSkill({
   projectRoot: "/path/to/project",
-  outDir: "./dist/skills-custom",
-  mode: "source",
+  outDir: "./dist/skills/bundled",
+  bundleDeps: true,
+});
+
+// 独立自包含 Node.js 目录型导出（免全局 ad 命令行，物化生产依赖）
+const standaloneResult = await exportSkill({
+  projectRoot: "/path/to/project",
+  outDir: "./dist/skills/standalone",
+  standalone: true,
+  vendorDeps: true,
+});
+
+// 复合套件聚合导出与就地原位刷新说明书
+const compositeResult = await exportCompositeSkill({
+  bundleName: "vip-agent-tools",
+  projectRoots: ["/path/to/pkg-a", "/path/to/pkg-b"],
+  outDir: "./dist/composite-skill",
+  customMdPath: "/path/to/SKILL.custom.md",
 });
 ```
 

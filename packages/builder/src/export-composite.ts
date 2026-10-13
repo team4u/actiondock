@@ -58,6 +58,12 @@ export async function exportCompositeImpl(
   if (!options.bundleName || !options.bundleName.trim()) {
     throw new BuilderError("bundleName is required for composite skill export.");
   }
+  if (options.standalone) {
+    throw new BuilderError(
+      "Composite Skill export currently only supports source mode. Standalone mode is not supported for composite bundles.",
+      "UNSUPPORTED_BUILD_MODE"
+    );
+  }
 
   const skillMdOnly = options.skillMdOnly === true;
   const customDeclaration = resolveCustomSkillDeclaration(options);
@@ -88,11 +94,11 @@ export async function exportCompositeImpl(
   let existingSkillPath: string | undefined;
 
   try {
-    // 收集并展开所有包含在依赖闭包中的外部项目根目录，确保 bundle 整包携带齐全部依赖
+    // 收集项目根目录；仅在显式指定 bundleDeps 时展开依赖闭包中的外部项目根目录
     const effectiveRoots = new Set<string>();
     for (const r of options.projectRoots) {
       effectiveRoots.add(resolve(r));
-      if (!skillMdOnly) {
+      if (!skillMdOnly && options.bundleDeps === true) {
         try {
           const p = SelectionPlanner.plan({ projectRoot: r });
           if (p.externalProjectRoots) {

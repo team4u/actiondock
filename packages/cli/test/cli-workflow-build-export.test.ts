@@ -115,9 +115,15 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
     assert.strictEqual(exportNodeProc.exitCode, 0);
     assert.strictEqual(existsSync(join(tempDir, "dist", "github-ops-skill", "entry.mjs")), true);
 
-    // 10c. export skill rejects --standalone
-    const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
-    assert.notStrictEqual(exportStandaloneProc.exitCode, 0);
+    // 10c. export skill --standalone (alias for --mode node)
+    const standaloneOut = join(tempDir, "dist", "github-ops-standalone");
+    const exportStandaloneProc = runCli(
+      ["export", "skill", "--standalone", "-o", standaloneOut],
+      tempDir
+    );
+    assert.strictEqual(exportStandaloneProc.exitCode, 0);
+    assert.strictEqual(existsSync(join(standaloneOut, "entry.mjs")), true);
+    assert.strictEqual(existsSync(join(standaloneOut, "SKILL.md")), true);
 
     // 10d. export skill with --playbook selective flag
     const selectiveOut = join(tempDir, "dist", "custom-skill");
@@ -162,6 +168,10 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
     assert.notStrictEqual(conflictProc.exitCode, 0);
     assert.ok((conflictProc.stderr.toString()).includes("Composite Skill export (--bundle) currently only supports source mode"));
 
+    const conflictStandaloneProc = runCli(["export", "skill", "--bundle", "suite", "--standalone"], tempDir);
+    assert.notStrictEqual(conflictStandaloneProc.exitCode, 0);
+    assert.ok((conflictStandaloneProc.stderr.toString()).includes("Composite Skill export (--bundle) currently only supports source mode"));
+
     const conflictSourceProc = runCli(["export", "skill", "--all", "--workspace"], tempDir);
     assert.notStrictEqual(conflictSourceProc.exitCode, 0);
     assert.ok((conflictSourceProc.stderr.toString()).includes("mutually exclusive"));
@@ -178,6 +188,77 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
       assert.ok((content).includes("Custom Pre-existing CLI Skill"));
     } finally {
       rmSync(preExistingSkillPath, { force: true });
+    }
+  });
+
+  it("exports skill with default shallow behavior preserving uses vs --bundle-deps", async () => {
+    const extDir = mkdtempSync(join(tmpdir(), "actiondock-cli-ext-"));
+    try {
+      initProject(extDir, { id: "team.ext-dep", name: "Ext Dependency" });
+      writeFileSync(
+        join(extDir, "actions", "calc.ts"),
+        `export default { id: "calc", run: () => 42 };`
+      );
+      const extCfgPath = join(extDir, "actiondock.json");
+      const extCfg = JSON.parse(readFileSync(extCfgPath, "utf-8"));
+      extCfg.actions = {
+        calc: { entry: "actions/calc.ts", description: "Calc action" },
+      };
+      writeFileSync(extCfgPath, JSON.stringify(extCfg, null, 2), "utf-8");
+
+      const linkProc = runCli(["link", extDir], tempDir);
+      assert.strictEqual(linkProc.exitCode, 0);
+
+      // Main package declares dependency on team.ext-dep/calc
+      const mainManifestPath = join(tempDir, "actiondock.json");
+      const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf-8"));
+      mainManifest.actions["calc-user"] = {
+        entry: "actions/greet.ts",
+        uses: ["team.ext-dep/calc"],
+      };
+      writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2), "utf-8");
+
+      // 1. Default shallow export: preserves uses, no packages/ dir
+      const shallowOut = join(tempDir, "dist", "shallow-skill");
+      const shallowProc = runCli(["export", "skill", "-o", shallowOut], tempDir);
+      assert.strictEqual(shallowProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(shallowOut, "packages")), false);
+      assert.strictEqual(existsSync(join(shallowOut, "actiondock.json")), true);
+
+      const exportedManifest = JSON.parse(readFileSync(join(shallowOut, "actiondock.json"), "utf-8"));
+      assert.deepStrictEqual(exportedManifest.actions["calc-user"].uses, ["team.ext-dep/calc"]);
+
+      // 2. Default shallow export supports filtering (--actions calc-user) without error
+      const shallowFilterOut = join(tempDir, "dist", "shallow-filter-skill");
+      const shallowFilterProc = runCli(
+        ["export", "skill", "--actions", "calc-user", "-o", shallowFilterOut],
+        tempDir
+      );
+      assert.strictEqual(shallowFilterProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(shallowFilterOut, "packages")), false);
+
+      // 3. --bundle-deps: materializes into micro-workspace with packages/ directory
+      const bundleDepsOut = join(tempDir, "dist", "bundled-skill");
+      const bundleDepsProc = runCli(
+        ["export", "skill", "--bundle-deps", "-o", bundleDepsOut],
+        tempDir
+      );
+      assert.strictEqual(bundleDepsProc.exitCode, 0);
+      assert.strictEqual(existsSync(join(bundleDepsOut, "packages")), true);
+      assert.strictEqual(existsSync(join(bundleDepsOut, "packages", "ext-dep")), true);
+
+      // 4. --bundle-deps with filter (--actions) is rejected
+      const bundleFilterProc = runCli(
+        ["export", "skill", "--bundle-deps", "--actions", "calc-user"],
+        tempDir
+      );
+      assert.notStrictEqual(bundleFilterProc.exitCode, 0);
+    } finally {
+      if (existsSync(extDir)) {
+        try {
+          rmSync(extDir, { recursive: true, force: true });
+        } catch {}
+      }
     }
   });
 

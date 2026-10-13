@@ -1187,6 +1187,32 @@ export default defineAction({
       assert.strictEqual(res.data.message, "Hello, SkillUser!");
     });
 
+    it("支持 standalone: true 选项将导出模式设为 node 目录型", async () => {
+      const manifest: ActionDockManifest = {
+        schemaVersion: 1,
+        id: "test.builder-fixture",
+        actions: {
+          "sample.greet": {
+            entry: "actions/greet.ts",
+            description: "Greet action",
+            uses: [],
+          },
+        },
+      };
+      saveManifest(tempDir, manifest);
+
+      const outDir = join(tempDir, "dist", "exported-standalone-skill");
+      const exportRes = await exportSkill({
+        projectRoot: tempDir,
+        standalone: true,
+        outDir,
+      });
+
+      assert.strictEqual(exportRes.mode, "node");
+      assert.strictEqual(existsSync(exportRes.skillDir), true);
+      assert.strictEqual(existsSync(join(exportRes.skillDir, "entry.mjs")), true);
+    });
+
     it("支持 .zip 与 .tar.gz 两种归档压缩格式", async () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
@@ -2205,12 +2231,24 @@ export default defineAction({
         };
         writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2));
 
-        // 1. 测试 exportCompositeSkill (即 export skill --bundle)
+        // 1. 验证复合导出在未传 bundleDeps: true 时不拉入外部包
+        const bundleOutNoDeps = join(tempDir, "dist", "roundtrip-bundle-no-deps");
+        const compositeNoDepsRes = await exportCompositeSkill({
+          bundleName: "test-roundtrip-suite-no-deps",
+          projectRoots: [tempDir],
+          outDir: bundleOutNoDeps,
+        });
+        assert.strictEqual(compositeNoDepsRes.packagesCount, 1);
+        const subpkgsNoDeps = readdirSync(join(bundleOutNoDeps, "packages"));
+        assert.deepStrictEqual(subpkgsNoDeps, ["builder-fixture"]);
+
+        // 验证复合导出在传 bundleDeps: true 时拉入外部包
         const bundleOut = join(tempDir, "dist", "roundtrip-bundle");
         const compositeRes = await exportCompositeSkill({
           bundleName: "test-roundtrip-suite",
           projectRoots: [tempDir],
           outDir: bundleOut,
+          bundleDeps: true,
         });
 
         assert.strictEqual(compositeRes.packagesCount, 2);
@@ -2250,11 +2288,34 @@ export default defineAction({
           }
         }
 
-        // 2. 测试单包源码导出：如果依赖闭包含外部包，导成 mini-workspace 形态
+        // 2. 验证单包默认导出即使含有外部 uses，也产出纯粹单包（不含 packages/），且 actiondock.json 保留 uses
+        const singleDefaultOut = join(tempDir, "dist", "roundtrip-single-default");
+        const singleDefaultRes = await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir: singleDefaultOut,
+        });
+
+        assert.strictEqual(existsSync(join(singleDefaultOut, "packages")), false);
+        assert.strictEqual(existsSync(join(singleDefaultOut, "actions", "greet.ts")), true);
+        assert.strictEqual(existsSync(join(singleDefaultOut, "actions", "calc.ts")), false);
+
+        const singleManifest = JSON.parse(
+          readFileSync(join(singleDefaultOut, "actiondock.json"), "utf-8")
+        );
+        assert.deepStrictEqual(Object.keys(singleManifest.actions), ["sample.greet"]);
+        assert.deepStrictEqual(singleManifest.actions["sample.greet"].uses, ["test.ext-tools/calc"]);
+
+        // 验证单包默认导出可成功执行 loadActions
+        const singleLoaded = await loadActions(singleDefaultOut);
+        assert.strictEqual(singleLoaded.has("sample.greet"), true);
+
+        // 3. 验证传入 bundleDeps: true 时，产出包含 packages/ 的微型工作区
         const singleOut = join(tempDir, "dist", "roundtrip-single-ws");
         const singleRes = await exportSkill({
           projectRoot: tempDir,
           mode: "source",
+          bundleDeps: true,
           outDir: singleOut,
         });
 
@@ -2376,7 +2437,7 @@ export default defineAction({
   });
 
   describe("SkillExporter: 复合导出边界行为与防御", () => {
-    it("单包导出传入过滤选项且闭包含外部依赖时显式拒绝而非静默全量导出", async () => {
+    it("单包浅导出支持过滤裁剪，bundleDeps 为 true 且传入过滤选项时拒绝", async () => {
       const extDir = mkdtempSync(join(tmpdir(), "ad-filter-composite-"));
       try {
         initProject(extDir, { id: "test.ext-filter-dep", name: "Ext Filter Dep" });
@@ -2397,12 +2458,35 @@ export default defineAction({
         mainManifest.actions["sample.greet"].uses = ["test.ext-filter-dep/calc"];
         writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2), "utf-8");
 
-        // actions 过滤 + 外部依赖闭包：应拒绝
+        // 验证单包浅导出（未传 bundleDeps）时，actions 过滤参数能够正常裁剪并成功导出
+        const filteredActionsRes = await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          actions: ["sample.greet"],
+          outDir: join(tempDir, "dist", "filter-shallow-actions"),
+        });
+        assert.strictEqual(existsSync(join(filteredActionsRes.skillDir, "packages")), false);
+        const filteredManifest = JSON.parse(
+          readFileSync(join(filteredActionsRes.skillDir, "actiondock.json"), "utf-8")
+        );
+        assert.deepStrictEqual(Object.keys(filteredManifest.actions), ["sample.greet"]);
+
+        // 验证单包浅导出（未传 bundleDeps）时，playbooks 过滤参数能够正常裁剪并成功导出
+        const filteredPlaybooksRes = await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          playbooks: ["greet-user"],
+          outDir: join(tempDir, "dist", "filter-shallow-playbooks"),
+        });
+        assert.strictEqual(existsSync(join(filteredPlaybooksRes.skillDir, "packages")), false);
+
+        // 验证传入 bundleDeps: true 且传入 actions 过滤参数时，正确抛出 FILTERS_UNSUPPORTED_FOR_COMPOSITE
         let errActions: any;
         try {
           await exportSkill({
             projectRoot: tempDir,
             mode: "source",
+            bundleDeps: true,
             actions: ["sample.greet"],
             outDir: join(tempDir, "dist", "filter-composite-a"),
           });
@@ -2412,12 +2496,13 @@ export default defineAction({
         assert.ok(errActions instanceof BuilderError);
         assert.strictEqual(errActions.code, "FILTERS_UNSUPPORTED_FOR_COMPOSITE");
 
-        // playbooks 过滤 + 外部依赖闭包：同样应拒绝
+        // 验证传入 bundleDeps: true 且传入 playbooks 过滤参数时，正确抛出 FILTERS_UNSUPPORTED_FOR_COMPOSITE
         let errPlaybooks: any;
         try {
           await exportSkill({
             projectRoot: tempDir,
             mode: "source",
+            bundleDeps: true,
             playbooks: ["greet-user"],
             outDir: join(tempDir, "dist", "filter-composite-b"),
           });
@@ -2427,10 +2512,11 @@ export default defineAction({
         assert.ok(errPlaybooks instanceof BuilderError);
         assert.strictEqual(errPlaybooks.code, "FILTERS_UNSUPPORTED_FOR_COMPOSITE");
 
-        // 不带过滤时仍可正常走复合导出路径
+        // 传入 bundleDeps: true 且不带过滤时仍可正常走复合导出路径
         const okRes = await exportSkill({
           projectRoot: tempDir,
           mode: "source",
+          bundleDeps: true,
           outDir: join(tempDir, "dist", "filter-composite-ok"),
         });
         assert.strictEqual(existsSync(join(okRes.skillDir, "packages", "builder-fixture")), true);

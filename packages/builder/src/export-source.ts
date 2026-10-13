@@ -19,7 +19,7 @@ import {
   serializePlanManifest,
 } from "./manifest";
 import { copyPlanEntries } from "./stage-sources";
-import type { SelectionPlan, SkillExporterOptions } from "./types";
+import { isOwnAction, type SelectionPlan, type SkillExporterOptions } from "./types";
 import {
   buildConfigForTemplates,
   writeSkillMd,
@@ -54,7 +54,7 @@ export function stageSourceSkill(
     () =>
       generateSourceSkillMd(
         configForTemplates,
-        plan.actions,
+        plan.actions.filter((a) => isOwnAction(a)),
         plan.playbooks
       )
   );

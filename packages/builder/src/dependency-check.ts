@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { isPathOutsideBoundary } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
-import type { SelectionPlan } from "./types";
+import { isOwnAction, type SelectionPlan } from "./types";
 
 /**
  * 移除源码中的单行与多行注释，防止注释内的相对路径字符串误触发依赖解析。
@@ -152,6 +152,7 @@ export function assertRelativeDependenciesIntegrity(
   const collectedPaths = new Set<string>();
 
   for (const act of plan.actions) {
+    if (!isOwnAction(act)) continue;
     if (act.resolvedPath) {
       collectedPaths.add(toRealPath(act.resolvedPath));
     }
@@ -166,6 +167,7 @@ export function assertRelativeDependenciesIntegrity(
   // 待校验文件队列（包括全部 Action 及其收集的 TS/JS 模块）
   const queue: Array<{ file: string; actionId: string }> = [];
   for (const act of plan.actions) {
+    if (!isOwnAction(act)) continue;
     if (act.resolvedPath && existsSync(act.resolvedPath)) {
       queue.push({ file: toRealPath(act.resolvedPath), actionId: act.id });
     }

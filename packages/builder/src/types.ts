@@ -326,6 +326,10 @@ export interface SkillExporterOptions {
   projectRoot: string;
   /** 导出模式：source 源码型 Skill 或 node 目录型 Skill（默认 source） */
   mode?: "source" | "node";
+  /** 独立自包含模式（若为 true 则将导出模式设为 node 目录型） */
+  standalone?: boolean;
+  /** 是否将跨包依赖物理物化为微型工作区复合结构（默认 false） */
+  bundleDeps?: boolean;
   /** 导出产物目标目录（默认输出至 dist 目录） */
   outDir?: string;
   /** 是否执行归档压缩，亦可直接指定归档格式 */
@@ -408,6 +412,10 @@ export interface CompositeSkillExportOptions {
   projectRoots: string[];
   /** 复合套件输出目标目录（默认输出至 dist 目录） */
   outDir?: string;
+  /** 是否将外部依赖物理物化进复合产物（默认 false） */
+  bundleDeps?: boolean;
+  /** 独立自包含模式（复合导出暂不支持） */
+  standalone?: boolean;
   /** 复合技能描述信息 */
   description?: string;
   /** 是否执行归档压缩，亦可直接指定归档格式 */

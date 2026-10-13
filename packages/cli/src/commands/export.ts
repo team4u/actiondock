@@ -36,6 +36,14 @@ export function registerExportCommand(program: Command, context?: CliContext): v
       "Export multiple packages as a unified composite Skill bundle (defaults to workspace directory name if omitted)"
     )
     .option("-m, --mode <mode>", "Skill export mode ('source' or 'node')", "source")
+    .option(
+      "--bundle-deps",
+      "Materialize and bundle external package dependencies into the exported skill"
+    )
+    .option(
+      "--standalone",
+      "Export self-contained Node.js directory that does not require global ad CLI (alias for --mode node)"
+    )
     .option("-o, --out <path>", "Output skill directory")
     .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions", parseListOption)
     .option("-a, --actions <actions...>", "Only export specific action(s)", parseListOption)
@@ -48,9 +56,9 @@ export function registerExportCommand(program: Command, context?: CliContext): v
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
     .action(async (rawOptions, cmd) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const mode = options.mode === "node" ? "node" : "source";
+      const mode = options.standalone || options.mode === "node" ? "node" : "source";
 
-      if (options.bundle && mode === "node") {
+      if (options.bundle !== undefined && (options.standalone || mode === "node")) {
         throw new ExecutionError(
           "Composite Skill export (--bundle) currently only supports source mode. Please use '--mode source' to export as a composite workspace Skill."
         );
@@ -110,9 +118,9 @@ export function registerExportCommand(program: Command, context?: CliContext): v
         }
       }
 
-      if (roots.length > 1 && (options.actions || options.playbook)) {
+      if ((roots.length > 1 || options.bundle !== undefined) && (options.actions || options.playbook)) {
         throw new ExecutionError(
-          "Filtering options (--actions, --playbook) can only be used when exporting a single package."
+          "Filtering options (--actions, --playbook) cannot be combined with composite bundle export (--bundle) or multiple packages."
         );
       }
 
@@ -137,6 +145,8 @@ export function registerExportCommand(program: Command, context?: CliContext): v
             skillMdPath: options.skillMd,
             customMdPath: options.customMd,
             skillMdOnly: options.skillMdOnly,
+            bundleDeps: Boolean(options.bundleDeps),
+            standalone: Boolean(options.standalone),
           });
 
           renderResult(result, {
@@ -190,6 +200,8 @@ export function registerExportCommand(program: Command, context?: CliContext): v
               vendorDeps: options.vendorDeps,
               allowInstallScripts: options.allowInstallScripts,
               requireReproducible: options.requireReproducible,
+              bundleDeps: Boolean(options.bundleDeps),
+              standalone: Boolean(options.standalone),
             });
             results.push(res);
           }
@@ -235,6 +247,8 @@ export function registerExportCommand(program: Command, context?: CliContext): v
           vendorDeps: options.vendorDeps,
           allowInstallScripts: options.allowInstallScripts,
           requireReproducible: options.requireReproducible,
+          bundleDeps: Boolean(options.bundleDeps),
+          standalone: Boolean(options.standalone),
         });
 
         renderResult(result, {
