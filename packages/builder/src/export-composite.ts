@@ -170,7 +170,10 @@ export async function exportCompositeImpl(
       });
     }
 
-    existingSkillPath = skillMdOnly ? undefined : findExistingCompositeSkillMd(options);
+    const shouldCheckExisting =
+      !skillMdOnly &&
+      (Boolean(options.skillMdPath) || !customDeclaration);
+    existingSkillPath = shouldCheckExisting ? findExistingCompositeSkillMd(options) : undefined;
     const description =
       options.description ||
       customDeclaration?.description ||

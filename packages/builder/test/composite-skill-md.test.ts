@@ -207,5 +207,51 @@ describe("Composite SKILL.md custom declaration", () => {
     assert.ok((md).includes("## 参考文档"));
     assert.strictEqual(existsSync(join(outDir, "packages", "pkg-a", "actiondock.json")), true);
   });
+
+  it("composite export prioritizes custom declaration over implicit pre-existing SKILL.md", async () => {
+    createFixturePackage(workspaceDir, "pkg-a", "test.pkg-a", "a.echo");
+    writeFileSync(join(workspaceDir, "SKILL.md"), "# Pre-existing Workspace SKILL.md\n", "utf-8");
+    writeFileSync(join(workspaceDir, "SKILL.custom.md"), CUSTOM_DECLARATION, "utf-8");
+
+    const outDir = join(tempDir, "bundle-priority");
+    const result = await exportCompositeSkill({
+      bundleName: "test-bundle",
+      projectRoots: [join(workspaceDir, "pkg-a")],
+      workspaceRoot: workspaceDir,
+      outDir,
+    });
+
+    assert.strictEqual(result.usedExistingSkillMd, undefined);
+    const md = readFileSync(join(outDir, "SKILL.md"), "utf-8");
+    assert.ok(md.includes("description: 自定义复合套件描述"));
+    assert.ok(md.includes("### 数据目录持久化软链"));
+  });
+
+  it("composite export throws error when skillMdPath and customMdPath are both specified", async () => {
+    createFixturePackage(workspaceDir, "pkg-a", "test.pkg-a", "a.echo");
+    await assert.rejects(
+      () =>
+        exportCompositeSkill({
+          bundleName: "test-bundle",
+          projectRoots: [join(workspaceDir, "pkg-a")],
+          skillMdPath: "some/static.md",
+          customMdPath: "some/custom.md",
+        }),
+      /cannot be used together/
+    );
+  });
+
+  it("composite export throws error when explicit skillMdPath does not exist", async () => {
+    createFixturePackage(workspaceDir, "pkg-a", "test.pkg-a", "a.echo");
+    await assert.rejects(
+      () =>
+        exportCompositeSkill({
+          bundleName: "test-bundle",
+          projectRoots: [join(workspaceDir, "pkg-a")],
+          skillMdPath: join(tempDir, "non-existent-skill.md"),
+        }),
+      /Skill document file not found/
+    );
+  });
 });
 

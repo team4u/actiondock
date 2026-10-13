@@ -46,8 +46,7 @@ ActionDock 2.x 构建规划、目录交付与技能导出包。
 - 显式外部依赖物化：支持 `bundleDeps` 选项。当显式开启且依赖闭包跨越外部已链接包时，自顶向下递归解析依赖链并将外部依赖包物理物化进产物根目录的 `packages/*` 子目录，展开为自包含的微型工作区产物结构；展开为复合形态时与过滤参数严格互斥（抛出 `FILTERS_UNSUPPORTED_FOR_COMPOSITE` 错误）。
 - 独立自包含 Node 目录型导出：支持 `standalone` 选项（等价于 `mode: "node"`），生成免全局 `ad` 命令行工具的自包含目录，内置独立运行脚本与说明书，配合 `vendorDeps` 可实现生产依赖完全内置。
 - 本地依赖完整性强校验：严格断言 Action 源码中的相对路径导入。若引用了未在 `actions` 且未在 `files` 字段中声明的本地模块，直接中断构建并抛出 `BuilderError`（错误码 `UNMET_LOCAL_DEPENDENCY`），彻底杜绝缺失依赖的产物分发。
-- 生成 SKILL.md 指令：提取 Playbook 规程内容与工具元数据，合成符合智能体规范的操作指南文档与声明头部。
-- 复合套件导出与说明书定制：支持 `exportCompositeSkill` 函数将工作区内的多个包统一导出为复合工作区技能套件；支持通过 `customMdPath` 注入插槽定制模板，通过 `skillMdOnly` 实现就地仅原位刷新说明书。
+- 说明书定制与复合套件导出：支持单包与复合套件通过 `customMdPath` 注入插槽定制模板（或放置 `SKILL.custom.md` 自动发现）；支持 `exportCompositeSkill` 函数将工作区内的多个包统一导出为复合工作区技能套件；支持通过 `skillMdOnly` 实现就地仅原位刷新说明书。
 - 压缩归档：支持 `archive` 选项将导出的技能目录打包为 `.zip` 或 `.tar.gz` 格式。
 
 ---

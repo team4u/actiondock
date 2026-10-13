@@ -176,6 +176,13 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
     assert.notStrictEqual(conflictSourceProc.exitCode, 0);
     assert.ok((conflictSourceProc.stderr.toString()).includes("mutually exclusive"));
 
+    const conflictSkillCustomProc = runCli(
+      ["export", "skill", "--skill-md", "some/path.md", "--custom-md", "some/custom.md"],
+      tempDir
+    );
+    assert.notStrictEqual(conflictSkillCustomProc.exitCode, 0);
+    assert.ok((conflictSkillCustomProc.stderr.toString()).includes("cannot be used together"));
+
     // 10f. export skill with pre-existing SKILL.md reuse
     const preExistingSkillPath = join(tempDir, "SKILL.md");
     writeFileSync(preExistingSkillPath, "# Custom Pre-existing CLI Skill\n", "utf-8");
@@ -188,6 +195,25 @@ describe("CLI Workflow - Build, Export & Distribution", () => {
       assert.ok((content).includes("Custom Pre-existing CLI Skill"));
     } finally {
       rmSync(preExistingSkillPath, { force: true });
+    }
+
+    // 10g. export skill with --custom-md on single package
+    const customDeclPath = join(tempDir, "my.custom.md");
+    writeFileSync(
+      customDeclPath,
+      "---\ndescription: CLI 自定义描述\n---\n\n<!-- actiondock:slot append -->\n## 自定义段落\n\n单包 CLI 测试追加。\n",
+      "utf-8"
+    );
+    try {
+      const customOut = join(tempDir, "dist", "custom-cli-skill");
+      const customProc = runCli(["export", "skill", "--custom-md", customDeclPath, "-o", customOut], tempDir);
+      assert.strictEqual(customProc.exitCode, 0);
+      const customContent = readFileSync(join(customOut, "SKILL.md"), "utf-8");
+      assert.ok(customContent.includes("description: CLI 自定义描述"));
+      assert.ok(customContent.includes("## 自定义段落"));
+      assert.ok(customContent.includes("单包 CLI 测试追加。"));
+    } finally {
+      rmSync(customDeclPath, { force: true });
     }
   });
 

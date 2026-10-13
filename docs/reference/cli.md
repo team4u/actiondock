@@ -205,7 +205,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ad export skill [-P, --package <id...>] [--workspace] [--all] [--bundle [name]] [-m, --mode <mode>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-z, --archive] [--skill-md <path>] [--custom-md <path>] [--skill-md-only] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
   ```
   导出面向智能体的 Agent Skill 目录。支持 `-m, --mode source`（默认源码型）与 `-m, --mode node`（自包含 Node.js 目录型）。
-  复合导出（`--bundle`）支持 `--custom-md <path>` 指定自定义说明书（`SKILL.custom.md`，含槽位段落与可选 description 覆盖；缺省时自动发现工作区根目录/当前目录下的同名文件），以及 `--skill-md-only` 就地仅重生成复合 SKILL.md（始终重新生成，忽略已有 SKILL.md，不拷贝子包产物）。
+  单包导出与复合导出（`--bundle`）均支持 `--custom-md <path>` 指定自定义说明书（`SKILL.custom.md`，含插槽段落与可选 description 覆盖；缺省时自动发现项目包根目录或工作区根目录/当前目录下的同名文件）；复合导出支持 `--skill-md-only` 就地仅重生成复合 SKILL.md（始终重新生成，忽略已有 SKILL.md，不拷贝子包产物）。
 
 ---
 

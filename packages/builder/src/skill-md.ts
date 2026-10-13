@@ -27,12 +27,20 @@ export function findExistingSingleSkillMd(
   explicitPath?: string,
   pkgSlug?: string
 ): string | undefined {
-  if (explicitPath && existsSync(explicitPath)) {
+  if (explicitPath) {
+    if (!existsSync(explicitPath)) {
+      throw new BuilderError(
+        `Skill document file not found: '${explicitPath}'`
+      );
+    }
     try {
       if (statSync(explicitPath).isFile()) return resolve(explicitPath);
     } catch {
       // 忽略文件属性读取异常
     }
+    throw new BuilderError(
+      `Skill document path is not a regular file: '${explicitPath}'`
+    );
   }
 
   const candidates = [
@@ -68,12 +76,20 @@ export function findExistingSingleSkillMd(
 export function findExistingCompositeSkillMd(
   options: CompositeSkillExportOptions
 ): string | undefined {
-  if (options.skillMdPath && existsSync(options.skillMdPath)) {
+  if (options.skillMdPath) {
+    if (!existsSync(options.skillMdPath)) {
+      throw new BuilderError(
+        `Skill document file not found: '${options.skillMdPath}'`
+      );
+    }
     try {
       if (statSync(options.skillMdPath).isFile()) return resolve(options.skillMdPath);
     } catch {
       // 忽略文件属性读取异常
     }
+    throw new BuilderError(
+      `Skill document path is not a regular file: '${options.skillMdPath}'`
+    );
   }
 
   const bundleSlug = getPackageSlug(options.bundleName);
@@ -118,11 +134,16 @@ export function findExistingCompositeSkillMd(
 }
 
 /**
- * 解析复合技能自定义说明书：显式 customMdPath 优先（缺失即报错），
- * 否则按 `SKILL.custom.md` 约定名在工作区根目录与当前目录自动发现。
+ * 解析技能自定义说明书：显式 customMdPath 优先（缺失即报错），
+ * 否则单包导出按项目根目录，复合导出按工作区根目录与当前目录自动发现 `SKILL.custom.md`。
  */
 export function resolveCustomSkillDeclaration(
-  options: CompositeSkillExportOptions
+  options: {
+    projectRoot?: string;
+    customMdPath?: string;
+    workspaceRoot?: string;
+    projectRoots?: string[];
+  }
 ): (CompositeCustomDeclaration & { file: string }) | undefined {
   let filePath: string | undefined;
 
@@ -133,14 +154,48 @@ export function resolveCustomSkillDeclaration(
       );
     }
     filePath = resolve(options.customMdPath);
+  } else if (options.projectRoot) {
+    const root = resolve(options.projectRoot);
+    const candidates = [
+      join(root, COMPOSITE_CUSTOM_DECLARATION_FILE),
+      join(root, "skill.custom.md"),
+      join(root, "skills", COMPOSITE_CUSTOM_DECLARATION_FILE),
+      join(root, "skills", "skill.custom.md"),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        try {
+          if (statSync(candidate).isFile()) {
+            filePath = candidate;
+            break;
+          }
+        } catch {
+          // 忽略文件属性读取异常
+        }
+      }
+    }
   } else {
     const searchDirs = [options.workspaceRoot, process.cwd()].filter(Boolean) as string[];
     for (const dir of searchDirs) {
-      const candidate = join(resolve(dir), COMPOSITE_CUSTOM_DECLARATION_FILE);
-      if (existsSync(candidate)) {
-        filePath = candidate;
-        break;
+      const candidates = [
+        join(resolve(dir), COMPOSITE_CUSTOM_DECLARATION_FILE),
+        join(resolve(dir), "skill.custom.md"),
+        join(resolve(dir), "skills", COMPOSITE_CUSTOM_DECLARATION_FILE),
+        join(resolve(dir), "skills", "skill.custom.md"),
+      ];
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+          try {
+            if (statSync(candidate).isFile()) {
+              filePath = candidate;
+              break;
+            }
+          } catch {
+            // 忽略文件属性读取异常
+          }
+        }
       }
+      if (filePath) break;
     }
   }
 
@@ -161,12 +216,21 @@ export function resolveCustomSkillDeclaration(
 export function writeSkillMd(
   root: string,
   destDir: string,
-  options: { skipSkillMd?: boolean; skillMdPath?: string; pkgSlug: string },
+  options: {
+    skipSkillMd?: boolean;
+    skillMdPath?: string;
+    pkgSlug: string;
+    hasCustomDeclaration?: boolean;
+  },
   generate: () => string
 ): string | undefined {
-  const existingSkill = options.skipSkillMd
-    ? undefined
-    : findExistingSingleSkillMd(root, options.skillMdPath, options.pkgSlug);
+  const shouldCheckExisting =
+    !options.skipSkillMd &&
+    (Boolean(options.skillMdPath) || !options.hasCustomDeclaration);
+
+  const existingSkill = shouldCheckExisting
+    ? findExistingSingleSkillMd(root, options.skillMdPath, options.pkgSlug)
+    : undefined;
 
   if (existingSkill) {
     const destSkillMd = join(destDir, "SKILL.md");

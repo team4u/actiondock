@@ -22,6 +22,7 @@ import { copyPlanEntries } from "./stage-sources";
 import { isOwnAction, type SelectionPlan, type SkillExporterOptions } from "./types";
 import {
   buildConfigForTemplates,
+  resolveCustomSkillDeclaration,
   writeSkillMd,
 } from "./skill-md";
 
@@ -45,17 +46,32 @@ export function stageSourceSkill(
   const actionsDir = plan.actionsDir || "actions";
   const playbooksDir = plan.playbooksDir || "playbooks";
 
+  const customDeclaration = resolveCustomSkillDeclaration({
+    projectRoot: root,
+    customMdPath: options.customMdPath,
+    workspaceRoot: options.workspaceRoot,
+  });
+
   const configForTemplates = buildConfigForTemplates(plan, actionsDir, playbooksDir);
 
   const usedExistingSkillMd = writeSkillMd(
     root,
     skillDir,
-    { skipSkillMd: options.skipSkillMd, skillMdPath: options.skillMdPath, pkgSlug },
+    {
+      skipSkillMd: options.skipSkillMd,
+      skillMdPath: options.skillMdPath,
+      pkgSlug,
+      hasCustomDeclaration: Boolean(customDeclaration),
+    },
     () =>
       generateSourceSkillMd(
         configForTemplates,
         plan.actions.filter((a) => isOwnAction(a)),
-        plan.playbooks
+        plan.playbooks,
+        {
+          customSections: customDeclaration?.sections,
+          description: customDeclaration?.description,
+        }
       )
   );
 

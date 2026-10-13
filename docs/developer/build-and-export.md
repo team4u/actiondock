@@ -182,19 +182,18 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经�
   ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
   ```
 
-### 自定义复合技能说明书（SKILL.custom.md）
+### 自定义技能说明书（SKILL.custom.md）
 
-复合技能套件的 `SKILL.md` 默认由官方模板依据各子包清单自动生成。若需注入宿主或团队特有的内容（如环境初始化步骤、凭据配置约定），无需手写整份说明书——在工作区根目录放置 `SKILL.custom.md` 自定义说明书，导出时会按槽位自动拼入官方模板：
+无论是单包技能导出还是多包复合技能套件导出，`SKILL.md` 默认由官方模板依据包清单与规程定义自动生成。若需注入宿主或团队特有的内容（如环境初始化步骤、特殊配置声明、支持渠道说明），无需手工维护整份说明书——在包根目录或工作区根目录放置 `SKILL.custom.md` 自定义说明书，导出时会按插槽自动拼入官方模板：
 
 ```markdown
 ---
-description: 覆盖复合套件的 description 元数据（可选）
+description: 覆盖技能的 description 元数据（可选）
 ---
 
 <!-- actiondock:slot after-init -->
-### 数据目录持久化软链（宿主专用）
-
-（宿主相关的初始化说明……）
+### 宿主环境特殊声明
+此操作包需配置特殊环境变量。
 
 <!-- actiondock:slot append -->
 ## 参考文档
@@ -202,28 +201,35 @@ description: 覆盖复合套件的 description 元数据（可选）
 - 团队内部知识库
 ```
 
-可用插槽决定自定义段落的插入位置：
+可用插槽决定自定义段落的插入位置（单包与复合套件共用同一套插槽体系）：
 
-| 插槽名称 | 插入位置 |
-| :--- | :--- |
-| `intro` | 标题与简介之后、参数契约调阅之前 |
-| `after-describe` | 参数契约调阅之后 |
-| `after-actions` | Action 工具清单之后 |
-| `after-playbooks` | 推荐操作规程之后 |
-| `after-invoke` | 标准调用命令之后 |
-| `after-init` | 故障排查与环境安装指引之后 |
-| `append` | 文档末尾 |
+| 插槽名称 | 单包导出插入位置 | 复合套件导出插入位置 |
+| :--- | :--- | :--- |
+| `intro` | 标题与简介之后 | 标题与简介之后 |
+| `after-init` | 运行时与注册指引之后 | 故障排查与环境安装指引之后 |
+| `after-describe` | 动作参数契约调阅之后 | 动作参数契约调阅之后 |
+| `after-invoke` | 标准调用命令与响应解析之后 | 标准调用命令与响应解析之后 |
+| `after-playbooks` | 业务操作规程之后 | 推荐操作规程之后 |
+| `after-actions` | Action 目录与配置状态之后 | 可用 Action 工具清单之后 |
+| `append` | 文档末尾 | 文档末尾 |
 
 - 标记行之前的内容自动归入 `append` 插槽；未知插槽名称会直接报错拦截。
-- frontmatter 的 `description` 仅在导出命令未显式传入描述时生效。
+- frontmatter 中的 `description` 支持覆盖默认生成的技能描述。
+- 单包导出命令（`ad export skill`）会自动发现项目根目录下的 `SKILL.custom.md`；复合导出命令（`ad export skill --bundle ...`）会自动发现工作区根目录或当前目录下的 `SKILL.custom.md`；两者均可通过 `--custom-md <path>` 显式指定文件路径。
 
-复合导出命令（`ad export skill --bundle ...`）会自动发现工作区根目录或当前目录下的 `SKILL.custom.md`，亦可通过 `--custom-md <path>` 显式指定：
+单包导出示例：
+
+```bash
+ad export skill -o ./dist/my-skill --custom-md ./SKILL.custom.md
+```
+
+复合套件导出示例：
 
 ```bash
 ad export skill --bundle vip-agent-tools --out ./dist/vip-agent-tools-skill
 ```
 
-日常维护中，当 Action 目录与规程索引随清单变化时，可就地仅重生成 `SKILL.md`（始终重新生成，不重复拷贝子包代码与文件资产）：
+日常维护中，复合套件若仅需更新说明书而无需重复拷贝代码与资产，可就地刷新说明书：
 
 ```bash
 ad export skill --bundle vip-agent-tools --skill-md-only

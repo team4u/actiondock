@@ -32,6 +32,13 @@ export class SkillExporter {
    * @returns 导出产物详细描述
    */
   public async export(options: SkillExporterOptions): Promise<SkillExportResult> {
+    if (options.skillMdPath && options.customMdPath) {
+      throw new BuilderError(
+        "Options 'skillMdPath' and 'customMdPath' cannot be used together. Specify 'skillMdPath' to reuse an existing static document, or 'customMdPath' to customize template generation with custom slots.",
+        "INVALID_EXPORT_OPTIONS"
+      );
+    }
+
     const root = resolve(options.projectRoot);
     const mode: "source" | "node" =
       options.standalone === true || options.mode === "node" ? "node" : "source";
@@ -166,6 +173,12 @@ export class SkillExporter {
   public async exportComposite(
     options: CompositeSkillExportOptions
   ): Promise<CompositeSkillExportResult> {
+    if (options.skillMdPath && options.customMdPath) {
+      throw new BuilderError(
+        "Options 'skillMdPath' and 'customMdPath' cannot be used together. Specify 'skillMdPath' to reuse an existing static document, or 'customMdPath' to customize template generation with custom slots.",
+        "INVALID_EXPORT_OPTIONS"
+      );
+    }
     return exportCompositeImpl(options, (opts) => this.export(opts));
   }
 }

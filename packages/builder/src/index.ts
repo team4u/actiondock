@@ -19,6 +19,24 @@ export { allocatePackageDirName } from "./manifest";
 // 构建规划器
 export { SelectionPlanner } from "./planner";
 
+// 技能说明书自定义契约与解析
+export {
+  COMPOSITE_CUSTOM_DECLARATION_FILE,
+  COMPOSITE_CUSTOM_SLOTS,
+  SKILL_CUSTOM_DECLARATION_FILE,
+  SKILL_CUSTOM_SLOTS,
+  parseCustomSections,
+  parseCustomSkillDeclaration,
+} from "./skill";
+export type {
+  CompositeCustomDeclaration,
+  CompositeCustomSection,
+  CompositeCustomSlot,
+  SkillCustomDeclaration,
+  SkillCustomSection,
+  SkillCustomSlot,
+} from "./skill";
+
 // 公共契约与配置类型
 export type {
   ArchiveFormat,

@@ -49,7 +49,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
     .option("-a, --actions <actions...>", "Only export specific action(s)", parseListOption)
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .option("--skill-md <path>", "Use specified existing SKILL.md file instead of auto-generating")
-    .option("--custom-md <path>", "Custom skill declaration (SKILL.custom.md) with slot-marked sections and optional frontmatter description for composite bundles (auto-discovered at workspace root when omitted)")
+    .option("--custom-md <path>", "Custom skill declaration (SKILL.custom.md) with slot-marked sections and optional frontmatter description (auto-discovered at package or workspace root when omitted)")
     .option("--skill-md-only", "Bundle mode only: regenerate only the composite SKILL.md in place (always regenerates, ignores any existing SKILL.md)")
     .option("--vendor-deps", "Materialize locked production dependencies into the exported skill")
     .option("--allow-install-scripts", "Allow lifecycle install scripts to run during dependency materialization")
@@ -57,6 +57,12 @@ export function registerExportCommand(program: Command, context?: CliContext): v
     .action(async (rawOptions, cmd) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const mode = options.standalone || options.mode === "node" ? "node" : "source";
+
+      if (options.skillMd && options.customMd) {
+        throw new ExecutionError(
+          "Options --skill-md and --custom-md cannot be used together. Use --skill-md to reuse an existing documentation file, or --custom-md to customize the generated document with custom slots."
+        );
+      }
 
       if (options.bundle !== undefined && (options.standalone || mode === "node")) {
         throw new ExecutionError(
@@ -197,6 +203,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
               playbooks: options.playbook,
               actions: options.actions,
               skillMdPath: options.skillMd,
+              customMdPath: options.customMd,
               vendorDeps: options.vendorDeps,
               allowInstallScripts: options.allowInstallScripts,
               requireReproducible: options.requireReproducible,
@@ -244,6 +251,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
           playbooks: options.playbook,
           actions: options.actions,
           skillMdPath: options.skillMd,
+          customMdPath: options.customMd,
           vendorDeps: options.vendorDeps,
           allowInstallScripts: options.allowInstallScripts,
           requireReproducible: options.requireReproducible,

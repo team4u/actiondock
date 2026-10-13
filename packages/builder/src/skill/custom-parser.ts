@@ -1,8 +1,9 @@
 import { BuilderError } from "../errors";
 
 /**
- * 复合技能自定义说明书（SKILL.custom.md）的槽位，
+ * 自定义技能说明书（SKILL.custom.md）的槽位，
  * 决定自定义段落插入到官方模板生成结果中的位置。
+ * 单包导出与复合套件导出共用同一套槽位体系。
  */
 export type CompositeCustomSlot =
   | "intro"
@@ -12,6 +13,8 @@ export type CompositeCustomSlot =
   | "after-playbooks"
   | "after-invoke"
   | "append";
+
+export type SkillCustomSlot = CompositeCustomSlot;
 
 export const COMPOSITE_CUSTOM_SLOTS: readonly CompositeCustomSlot[] = [
   "intro",
@@ -23,19 +26,26 @@ export const COMPOSITE_CUSTOM_SLOTS: readonly CompositeCustomSlot[] = [
   "append",
 ];
 
-/** 工作区内约定俗成的复合技能自定义说明书文件名。 */
+export const SKILL_CUSTOM_SLOTS = COMPOSITE_CUSTOM_SLOTS;
+
+/** 约定俗成的自定义技能说明书文件名（单包与复合套件通用）。 */
 export const COMPOSITE_CUSTOM_DECLARATION_FILE = "SKILL.custom.md";
+export const SKILL_CUSTOM_DECLARATION_FILE = COMPOSITE_CUSTOM_DECLARATION_FILE;
 
 export interface CompositeCustomSection {
   slot: CompositeCustomSlot;
   content: string;
 }
 
+export type SkillCustomSection = CompositeCustomSection;
+
 export interface CompositeCustomDeclaration {
   /** 自定义说明书 frontmatter 中声明的 description 覆盖值 */
   description?: string;
   sections: CompositeCustomSection[];
 }
+
+export type SkillCustomDeclaration = CompositeCustomDeclaration;
 
 export const CUSTOM_SLOT_MARKER_PATTERN = /^\s*<!--\s*actiondock:slot\s+([a-zA-Z][a-zA-Z0-9-]*)\s*-->\s*$/;
 

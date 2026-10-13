@@ -22,6 +22,7 @@ import { generateStandaloneSkillMd } from "./skill/templates";
 import { writeRuntimeReferenceFile } from "./export-source";
 import {
   buildConfigForTemplates,
+  resolveCustomSkillDeclaration,
   writeSkillMd,
 } from "./skill-md";
 import { createArchive, resolveArchiveFormat } from "./export-archive";
@@ -402,10 +403,21 @@ export async function exportNodeSkill(
     requireReproducible: options.requireReproducible,
   });
 
+  const customDeclaration = resolveCustomSkillDeclaration({
+    projectRoot: root,
+    customMdPath: options.customMdPath,
+    workspaceRoot: options.workspaceRoot,
+  });
+
   const usedExistingSkillMd = writeSkillMd(
     root,
     targetSkillDir,
-    { skipSkillMd: options.skipSkillMd, skillMdPath: options.skillMdPath, pkgSlug },
+    {
+      skipSkillMd: options.skipSkillMd,
+      skillMdPath: options.skillMdPath,
+      pkgSlug,
+      hasCustomDeclaration: Boolean(customDeclaration),
+    },
     () => {
       const configForTemplates = buildConfigForTemplates(
         plan,
@@ -416,7 +428,11 @@ export async function exportNodeSkill(
         configForTemplates,
         plan.actions,
         plan.playbooks,
-        "node ./entry.mjs"
+        "node ./entry.mjs",
+        {
+          customSections: customDeclaration?.sections,
+          description: customDeclaration?.description,
+        }
       );
     }
   );

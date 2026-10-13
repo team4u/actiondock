@@ -358,7 +358,7 @@ export interface SkillExporterOptions {
   skipDependencyValidation?: boolean;
   /** 内部标识：是否作为复合套件子包导出（避免闭包再次触发嵌套 mini-workspace） */
   _isSubpackage?: boolean;
-  /** 自定义复合技能说明书文件路径 */
+  /** 自定义技能说明书（SKILL.custom.md）文件路径；缺省时自动在项目或工作区根目录下发现同名文件 */
   customMdPath?: string;
   /** 所属 Workspace 根目录（可选） */
   workspaceRoot?: string;

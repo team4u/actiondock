@@ -14,9 +14,9 @@ export type SkillPlaybookItem =
   | PlaybookDefinition
   | { id: string; filePath: string; name?: string; description?: string; actions?: string[] };
 
-function getCleanSkillMetadata(config: ProjectConfig) {
+function getCleanSkillMetadata(config: ProjectConfig, descriptionOverride?: string) {
   const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
-  const desc = config.description || `AI Agent skill for ${config.name} (${config.id})`;
+  const desc = descriptionOverride || config.description || `AI Agent skill for ${config.name} (${config.id})`;
   return { cleanName, desc };
 }
 
@@ -255,25 +255,29 @@ export const RUNTIME_REFERENCE_REL_PATH = "references/actiondock-runtime.md";
 export function generateSourceSkillMd(
   config: ProjectConfig,
   actions: SkillActionItem[],
-  playbooks: SkillPlaybookItem[]
+  playbooks: SkillPlaybookItem[],
+  options?: {
+    customSections?: CompositeCustomSection[];
+    description?: string;
+  }
 ): string {
-  const { cleanName, desc } = getCleanSkillMetadata(config);
+  const { cleanName, desc } = getCleanSkillMetadata(config, options?.description);
   const pkgId = config.id;
   const firstAction = actions[0]?.id || "sample.greet";
 
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
 
-  return `---
+  const sIntro = `---
 name: ${cleanName}
 description: ${desc}
 ---
 
 # ${config.name} (${config.id})
 
-${desc}
+${desc}`;
 
-## ActionDock 运行时
+  const sInit = `## ActionDock 运行时
 
 本技能为 **ActionDock 源码型技能包**。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
 
@@ -285,25 +289,27 @@ ${desc}
 ad link "<skill_root>"
 \`\`\`
 
-> \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装生产依赖。
+> \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装生产依赖。`;
 
-### 动作参数契约按需调阅
+  const sDescribe = `### 动作参数契约按需调阅
 
 在调用未知参数的 Action 前，可在终端执行命令查阅该 Action 的输入输出模式与详细说明：
 
 \`\`\`bash
 ad describe ${pkgId}/${firstAction}
-\`\`\`
+\`\`\``;
 
-### 执行 Action
+  const sInvoke = `### 执行 Action
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
 
 ${renderInvocationGuidance(`ad describe ${pkgId}/${firstAction}`, `ad run ${pkgId}/${firstAction}`)}
 
-${renderJsonEnvelopeSection("envelope")}
-${playbookSection}
----
+${renderJsonEnvelopeSection("envelope")}`;
+
+  const sPlaybooks = playbookSection.trim();
+
+  const sActions = `---
 
 ## Action 目录
 
@@ -323,49 +329,76 @@ ad config set KEY VALUE --package ${pkgId}
 # 查看与检索状态数据
 ad state list --package ${pkgId}
 ad state get KEY --package ${pkgId}
-\`\`\`
+\`\`\``;
 
-${renderTroubleshootingSection(RUNTIME_REFERENCE_REL_PATH)}
-`;
+  const sTroubleshooting = renderTroubleshootingSection(RUNTIME_REFERENCE_REL_PATH);
+
+  const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
+    { slot: "intro", text: sIntro },
+    { slot: "after-init", text: sInit },
+    { slot: "after-describe", text: sDescribe },
+    { slot: "after-invoke", text: sInvoke },
+    { slot: "after-playbooks", text: sPlaybooks },
+    { slot: "after-actions", text: sActions },
+    { slot: "append", text: sTroubleshooting },
+  ];
+
+  const customSections = options?.customSections ?? [];
+  for (const section of [...customSections].reverse()) {
+    const anchorIndex = parts.findIndex((p) => p.slot === section.slot);
+    parts.splice(anchorIndex + 1, 0, { slot: section.slot, text: section.content });
+  }
+
+  return (
+    parts
+      .filter((p) => p.text.trim().length > 0)
+      .map((p) => p.text.trim())
+      .join("\n\n") + "\n"
+  );
 }
 
 export function generateStandaloneSkillMd(
   config: ProjectConfig,
   actions: SkillActionItem[],
   playbooks: SkillPlaybookItem[],
-  binaryRelPath = "./bin/action-bin"
+  binaryRelPath = "./bin/action-bin",
+  options?: {
+    customSections?: CompositeCustomSection[];
+    description?: string;
+  }
 ): string {
-  const { cleanName, desc } = getCleanSkillMetadata(config);
+  const { cleanName, desc } = getCleanSkillMetadata(config, options?.description);
   const firstAction = actions[0]?.id || "sample.greet";
 
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions);
 
-  return `---
+  const sIntro = `---
 name: ${cleanName}
 description: ${desc}
 ---
 
 # ${config.name} (${config.id})
 
-${desc}
+${desc}`;
 
-
-### 动作参数契约按需调阅
+  const sDescribe = `### 动作参数契约按需调阅
 
 在调用未知参数的 Action 前，可在终端执行命令查阅该 Action 的输入输出模式与详细说明：
 
 \`\`\`bash
 ${binaryRelPath} describe ${firstAction}
-\`\`\`
+\`\`\``;
 
-### 执行 Action
+  const sInvoke = `### 执行 Action
 
 ${renderInvocationGuidance(`${binaryRelPath} describe ${firstAction}`, `${binaryRelPath} run ${firstAction}`)}
 
-${renderJsonEnvelopeSection("result")}
-${playbookSection}
----
+${renderJsonEnvelopeSection("result")}`;
+
+  const sPlaybooks = playbookSection.trim();
+
+  const sActions = `---
 
 ## Action 目录
 
@@ -385,9 +418,9 @@ ${binaryRelPath} config set KEY VALUE
 # 查看与检索状态数据
 ${binaryRelPath} state list
 ${binaryRelPath} state get KEY
-\`\`\`
+\`\`\``;
 
----
+  const sTroubleshooting = `---
 
 ## 故障排查与依赖自愈指引（按需查阅）
 
@@ -398,8 +431,30 @@ ${binaryRelPath} state get KEY
 npm install --omit=dev
 \`\`\`
 
-完整环境安装与自愈指引按需查阅：[${RUNTIME_REFERENCE_REL_PATH}](${RUNTIME_REFERENCE_REL_PATH})
-`;
+完整环境安装与自愈指引按需查阅：[${RUNTIME_REFERENCE_REL_PATH}](${RUNTIME_REFERENCE_REL_PATH})`;
+
+  const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
+    { slot: "intro", text: sIntro },
+    { slot: "after-init", text: "" },
+    { slot: "after-describe", text: sDescribe },
+    { slot: "after-invoke", text: sInvoke },
+    { slot: "after-playbooks", text: sPlaybooks },
+    { slot: "after-actions", text: sActions },
+    { slot: "append", text: sTroubleshooting },
+  ];
+
+  const customSections = options?.customSections ?? [];
+  for (const section of [...customSections].reverse()) {
+    const anchorIndex = parts.findIndex((p) => p.slot === section.slot);
+    parts.splice(anchorIndex + 1, 0, { slot: section.slot, text: section.content });
+  }
+
+  return (
+    parts
+      .filter((p) => p.text.trim().length > 0)
+      .map((p) => p.text.trim())
+      .join("\n\n") + "\n"
+  );
 }
 
 export interface CompositeSkillPackageInfo {
