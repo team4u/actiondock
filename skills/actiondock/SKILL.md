@@ -51,7 +51,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
 | **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use`、`ad profile update` | 管理远端 Runner 服务的连接凭证、内网证书忽略与当前切换目标 | [cli.md](references/cli.md) |
 | **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离与 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
-| **本地开发软链挂载** | `ad link [path]`、`ad unlink [id|path]` | 本地源码快速试跑或多包联调，登记至本机全局路由表 | [cli.md](references/cli.md) |
+| **全局注册与路由挂载** | `ad link [path]`、`ad unlink [id|path]` | 注册源码包至全局路由表实现共享，亦支持本地开发联调与复合包挂载 | [cli.md](references/cli.md) |
 | **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 
 ---
@@ -72,7 +72,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
 - 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 编码顾问） -> 确定性调用（`ad run <action> [control-options] -- <assignments...>` 或配合 `--input` / `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
-- 项目工程依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
+- 项目工程依赖消费与全局共享：推荐通过 `ad link .` 将源码包或技能注册至本机全局路由表实现全员共享；跨包调度通过清单 `uses` 声明权限并由 `ctx.actions.invoke` 逻辑寻址调度；亦支持使用 `ad add <package>` 引入物理锁定依赖。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
 ### 作业流二：作为开发者创建与扩展 Action
@@ -126,7 +126,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
 - 脚手架命令原则：新增 Action 工具使用 `ad action create <id>`，命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程使用 `ad playbook create <id>`。
-- 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
+- 依赖共享与权限管理准则：生产与协作环境以源码模式与全局注册共享为核心，通过 `ad link` 将技能包登记至本机全局路由表（`~/.actiondock/registry.json`）供全局共享；跨包调度必须在发起方清单的 `uses` 列表中显式声明（支持完全限定名、通配符与裸包名），严禁未声明调用；独立闭环工程若需物理锁死版本亦可使用 `ad add`。
 - 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。

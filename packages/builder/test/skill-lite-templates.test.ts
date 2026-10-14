@@ -106,6 +106,14 @@ describe("技能说明轻量化", () => {
     // 默认调用示例不再无条件携带 --json
     assert.ok(!md.includes("--json -- ASSIGNMENT"));
     assert.ok(!md.includes("--json --input-file"));
+
+    // 标准初始化流程：先安装依赖再 link
+    assert.ok(md.includes("npm install --omit=dev"));
+    assert.ok(md.includes("ad link"));
+    const idxInstall = md.indexOf("npm install --omit=dev");
+    const idxLink = md.indexOf("ad link");
+    assert.ok(idxInstall > 0);
+    assert.ok(idxLink > idxInstall);
   });
 
   it("独立运行型模板不展开完整 Schema", () => {
@@ -150,6 +158,14 @@ describe("技能说明轻量化", () => {
     const customIdx = md.indexOf("## 自定义段落");
     assert.ok(actionsIdx > 0);
     assert.ok(customIdx > actionsIdx);
+
+    // 标准初始化流程：先安装依赖再 link
+    assert.ok(md.includes("npm install --omit=dev"));
+    assert.ok(md.includes("ad link"));
+    const idxInstall = md.indexOf("npm install --omit=dev");
+    const idxLink = md.indexOf("ad link");
+    assert.ok(idxInstall > 0);
+    assert.ok(idxLink > idxInstall);
   });
 
   it("运行参考内容承载完整安装指引与按需排查原则", () => {

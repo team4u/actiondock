@@ -136,16 +136,18 @@ describe("Composite SKILL.md custom declaration", () => {
       customSections: parseCustomSkillDeclaration(CUSTOM_DECLARATION).sections,
     });
 
+    const idxInit = md.indexOf("## ActionDock 运行时");
+    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxDescribe = md.indexOf("## 动作参数契约按需调阅");
     const idxTroubleshoot = md.indexOf("## 故障排查与环境安装指引");
-    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxAppend = md.indexOf("## 参考文档");
 
     assert.ok(!(md).includes("## ActionDock 运行时初始化"));
-    assert.ok((idxDescribe) > -1);
-    assert.ok((idxTroubleshoot) > idxDescribe);
-    assert.ok((idxSoftLink) > idxTroubleshoot);
-    assert.ok((idxAppend) > idxSoftLink);
+    assert.ok(idxInit > -1);
+    assert.ok(idxSoftLink > idxInit);
+    assert.ok(idxDescribe > idxSoftLink);
+    assert.ok(idxTroubleshoot > idxDescribe);
+    assert.ok(idxAppend > idxTroubleshoot);
 
     // frontmatter description 为未覆盖的原始描述
     assert.ok((md).includes("description: 套件描述"));
@@ -179,12 +181,16 @@ describe("Composite SKILL.md custom declaration", () => {
     assert.ok((md).includes("`test.pkg-b/b.ping`: b.ping description"));
     assert.ok((md).includes("- [pb-a](./pkg-a/playbooks/pb-a.md): pb-a description"));
 
+    const idxInit = md.indexOf("## ActionDock 运行时");
+    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxDescribe = md.indexOf("## 动作参数契约按需调阅");
     const idxTroubleshoot = md.indexOf("## 故障排查与环境安装指引");
-    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     assert.ok(!(md).includes("## ActionDock 运行时初始化"));
-    assert.ok((idxSoftLink) > idxTroubleshoot);
-    assert.ok((md.indexOf("## 参考文档")) > idxSoftLink);
+    assert.ok(idxInit > -1);
+    assert.ok(idxSoftLink > idxInit);
+    assert.ok(idxDescribe > idxSoftLink);
+    assert.ok(idxTroubleshoot > idxDescribe);
+    assert.ok((md.indexOf("## 参考文档")) > idxTroubleshoot);
   });
 
   it("full composite export bakes custom sections into the bundle SKILL.md", async () => {

@@ -279,17 +279,21 @@ ${desc}`;
 
   const sInit = `## ActionDock 运行时
 
-本技能为 **ActionDock 源码型技能包**。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
+本技能为 ActionDock 源码型技能包。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
 
-### 注册与链接（全局调用）
+### 安装依赖与注册链接
 
-本技能面向全局挂载使用：在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\` 并完成注册链接，之后可在任意工作目录通过完全限定 ID 全局调用：
+本技能面向全局挂载使用。在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\`。标准流程为先安装生产依赖，再执行注册链接，之后可在任意工作目录通过完全限定 ID 全局调用：
 
 \`\`\`bash
+# 安装生产依赖
+cd "<skill_root>" && npm install --omit=dev
+
+# 注册并链接到 ActionDock
 ad link "<skill_root>"
 \`\`\`
 
-> \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装生产依赖。`;
+> \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。若后续依赖发生变更，可重新执行上述安装依赖与链接命令更新环境。`;
 
   const sDescribe = `### 动作参数契约按需调阅
 
@@ -516,6 +520,24 @@ description: ${description}
 
 ${description}`;
 
+  const sInit = `## ActionDock 运行时
+
+本技能为 ActionDock 复合技能套件，聚合了多个功能包。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
+
+### 安装依赖与注册链接
+
+本技能面向全局挂载使用。在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\`。标准流程为先安装复合套件聚合生产依赖，再执行注册链接，之后可在任意工作目录通过完全限定 ID 全局调用：
+
+\`\`\`bash
+# 安装复合套件聚合依赖
+cd "<skill_root>" && npm install --omit=dev
+
+# 注册并链接工作区子包到 ActionDock
+ad link "<skill_root>"
+\`\`\`
+
+> \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。\`ad link\` 天然具备幂等性，可安全重复调用。若后续依赖发生变更，可重新执行上述安装依赖与链接命令更新环境。`;
+
   const sDescribe = `## 动作参数契约按需调阅
 
 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。在调用未知参数的 Action 前，可在终端执行命令查阅输入输出约束：
@@ -551,12 +573,12 @@ ${renderJsonEnvelopeSection("envelope", { withDescriptions: false })}`;
 
   const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
     { slot: "intro", text: sIntro },
+    { slot: "after-init", text: sInit },
     { slot: "after-describe", text: sDescribe },
     { slot: "after-actions", text: sActions },
     { slot: "after-playbooks", text: sPlaybooks },
     { slot: "after-invoke", text: sInvoke },
-    { slot: "after-init", text: sTroubleshooting },
-    { slot: "append", text: "" },
+    { slot: "append", text: sTroubleshooting },
   ];
 
   // 自定义段落按文件顺序插入到对应槽位（倒序插入保证同槽位多段保持先后）

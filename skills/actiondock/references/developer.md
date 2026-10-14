@@ -170,19 +170,25 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 ---
 
-## 动作级联调用与依赖声明
+## 动作级联调用与跨包依赖声明
 
 Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通过物理相对路径直接导入其他 Action 源码：
 
 - 同包内部 Action 调用：
-  - 在发起方 Action 的 `uses` 清单中填入目标 Action 的短标识符。
-  - 源码中直接通过标识符调度：`await ctx.actions.invoke("validate-token", {})`。
-- 跨包外部 Action 调用：
-  - 在工程根目录执行 `ad add <package>` 安装并锁定外部包，更新 `actiondock.lock.json`。
-  - 在发起方 Action 的 `uses` 清单中填入目标 Action 的完全限定标识符。
-  - 源码中使用完全限定标识符或结构化 `ActionRef` 调度：
+  - 清单声明短标识符：在发起方 Action 的 `uses` 清单中填入目标 Action 的短标识符，如 `"uses": ["validate-token"]`。
+  - 源码短标识符调度：直接通过标识符调度：`await ctx.actions.invoke("validate-token", {})`。
+
+- 全局注册表包的使用与跨包引用（首选生产共享模式）：
+  - 资产挂载与全局共享：在源码模式下，外部 Action 包或导出的浅模式技能分发至宿主机器后，在对应包根目录执行 `ad link .`，登记至本机全局路由表（`~/.actiondock/registry.json`）。该包即可在当前机器内被所有智能体与工程全局共享。
+  - 依赖拓扑自动并入：运行时构建依赖图时会自动扫描本机全局路由表中的有效包，将其直接作为依赖节点并入依赖图拓扑。在调用方工程中无需执行 `ad add`，亦无需在清单根级的 `dependencies` 中添加物理映射。
+  - 清单权限显式声明：即使目标包在全局注册表中可见，出于安全治理与闭包防死锁要求，发起调用的 Action 仍必须在其自身的 `actiondock.json` 中声明权限。未声明即调用将被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 清单 uses 字段的三种授权语法：
+    - 完全限定形式（推荐）：`"<package-id>/<action-id>"`，精准授权指定动作（如 `"team4u.deploy-tools/health-check"`）。
+    - 包级通配形式：`"<package-id>/*"`，授权目标包下的全部动作（如 `"team4u.deploy-tools/*"`）。
+    - 裸包名形式：`"<package-id>"`，等效于授权该包下的全部动作（如 `"team4u.deploy-tools"`）。
+  - 源码逻辑调度语法：
     ```typescript
-    // 方式一：字符串完全限定标识符
+    // 方式一：字符串完全限定标识符（推荐）
     const res = await ctx.actions.invoke("team4u.deploy-tools/health-check", { env: "prod" });
 
     // 方式二：结构化 ActionRef 对象
@@ -191,8 +197,24 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
       actionId: "health-check",
     }, { env: "prod" });
     ```
+  - 终端直接调用：任意终端目录下均可直接调用已注册的全局动作：
+    ```bash
+    ad run team4u.deploy-tools/health-check -- env=prod
+    ```
+
+- 物理锁定依赖模式（传统闭环工程机制）：
+  - 若项目需要脱离本机全局注册表、在当前独立工程目录内锁死依赖版本与内容摘要，可在工程根目录执行 `ad add <package>` 安装依赖并写入 `actiondock.lock.json`。
+  - 权限声明与源码调度规则与上述跨包语法完全保持一致。
+
+- 复合包与多包工作区内部引用规范：
+  - 工程结构与全局注册：多包复合套件（由 `ad export skill --bundle` 导出或多包工作区）包含多个子包目录（如 `packages/*`），每个子包拥有独立的 `actiondock.json`。在聚合根目录执行 `ad link . -r`（或 `ad link .`）可批量将所有子包登记至全局路由表。
+  - 复合包同子包内调用：使用短标识符，清单声明 `"uses": ["local-action"]`，源码调度 `await ctx.actions.invoke("local-action", input)`。
+  - 复合包跨子包调用：不同子包具有不同的 `id`，跨子包调用属于标准跨包调度。调用方子包的 Action 清单必须在 `uses` 中声明被调用子包的动作限定名或包名通配符（如 `"uses": ["sub-pkg-b/worker", "sub-pkg-c/*"]`）；源码中必须使用完全限定标识符 `await ctx.actions.invoke("sub-pkg-b/worker", input)`。
+  - 严禁物理穿越导入：各子包即使处于同一工作区文件树相邻目录下，也严禁使用相对路径直接 `import` 其他子包的源码，必须通过 `ctx.actions.invoke` 经由运行时分发调度，确保调用链追踪（`rootId`、`parentId`）与取消信号（`ctx.signal`）完整传递。
+
 - 级联调用红线与边界约束：
-  - 显式声明原则：未在清单 `uses` 中声明的级联调用，即使目标代码物理可见，执行时也会被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 显式声明原则：未在清单 `uses` 中声明的级联调用，即使目标代码物理可见或已全局挂载，执行时也会被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 传递依赖隔离原则：若目标包属于间接传递依赖，直接调用将被拦截，除非被直接依赖包可见的 Playbook 显式委托。
   - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
   - 环路死锁保护：系统内置环路检测与递归配额保护，当调用链成环时抛出 `ACTION_CALL_CYCLE`，派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
 

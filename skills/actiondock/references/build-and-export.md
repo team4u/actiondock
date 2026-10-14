@@ -23,24 +23,34 @@ ActionDock 支持三种标准化交付形态：
 
 通过 `ad export skill` 可将 Action 包导出为可供主流智能体客户端（Claude Desktop、OpenClaw、Cursor 等）识别的技能目录。
 
-### 单包导出与规程裁剪
+### 单包浅模式导出与规程裁剪
 
 ```bash
-# 默认源码型导出
+# 默认源码浅模式导出（推荐生产共享形态）
 ad export skill -P team4u.github-tools --out ./dist/github-tools-skill
 
-# 依赖物化型导出
+# 依赖物化型导出（免安装、自包含交付）
 ad export skill -P team4u.github-tools --mode node --vendor-deps --out ./dist/github-tools-node
 
 # 规程驱动裁剪导出（仅保留该规程及其依赖的 Action 闭包）
 ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
 ```
 
-### 源码导出边界与依赖完整性规范
+### 源码浅模式导出与全局注册共享最佳实践
 
-- **包内公共代码显式纳管**：源码型技能默认仅拷贝在清单中注册的 Action 源码文件与 Playbook 规程。若 Action 引用了包内其他代码目录（如 `src/`、`lib/`）或公共辅助模块，必须在 `actiondock.json` 的 `files` 字段中显式声明该目录（例如 `"files": ["src"]`）。
-- **相对导入完整性强校验**：导出时构建规划器会自动扫描 Action 的相对路径导入。若检测到 Action 引用了未被 `actions` 且未被 `files` 收集的本地文件，将直接报错阻断（错误码 `UNMET_LOCAL_DEPENDENCY`），彻底杜绝交付缺失依赖的损坏产物。
-- **外部依赖冷启动就绪**：源码型技能仅携带源码与依赖清单，消费端在执行前需在技能根目录下执行 `npm install --omit=dev`；若需要免安装、全内嵌的自包含交付，应使用 `--mode node --vendor-deps`。
+- 浅模式导出轻量定位：`ad export skill` 默认采用源码浅模式导出，仅包含当前包的源码、`actiondock.json` 与 `SKILL.md`，其下游跨包依赖以纯逻辑 `uses` 声明保留，不携带庞大冗余的外部依赖副本。
+- 消费端全局注册共享：
+  - 产物部署至宿主环境后，标准流程为先在技能根目录下安装生产依赖：
+    ```bash
+    npm install --omit=dev
+    ```
+  - 依赖安装完成后，执行链接命令登记至本机全局路由表（`~/.actiondock/registry.json`）：
+    ```bash
+    ad link .
+    ```
+  - 该命令将技能包登记至全局路由表，使得当前机器上的所有智能体、命令行调用以及其他 Action 工程均可直接识别并共享调用该技能，达成零冗余共享。
+- 包内公共代码显式纳管：源码型技能默认仅拷贝在清单中注册的 Action 源码文件与 Playbook 规程。若 Action 引用了包内其他代码目录（如 `src/`、`lib/`）或公共辅助模块，必须在 `actiondock.json` 的 `files` 字段中显式声明该目录（例如 `"files": ["src"]`）。
+- 相对导入完整性强校验：导出时构建规划器会自动扫描 Action 的相对路径导入。若检测到 Action 引用了未被 `actions` 且未被 `files` 收集的本地文件，将直接报错阻断（错误码 `UNMET_LOCAL_DEPENDENCY`），彻底杜绝交付缺失依赖的损坏产物。
 
 ### 多包工作区批量导出
 
@@ -57,6 +67,8 @@ ad export skill --workspace --out ./dist/skills
 # 聚合当前工作区为单一复合技能
 ad export skill --bundle vip-agent-tools --out ./dist/vip-agent-tools-skill
 ```
+
+- 复合套件批量全局注册：复合技能套件部署后，标准流程为先在聚合根目录下安装生产依赖（`npm install --omit=dev`），再执行 `ad link . -r`（或 `ad link .`），系统会自动递归识别并挂载全部子包至全局路由表，实现工作区内所有子包以及工作区外部的平级互通与全局共享。
 
 ---
 
