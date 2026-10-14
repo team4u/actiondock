@@ -133,6 +133,15 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       .option("-P, --package <id>", "Target package ID or path")
       .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
       .option("-a, --action <actionId>", "Filter by action ID")
+      .option("--channel <channel>", "Filter by run origin channel (e.g. http, mcp)")
+      .option("--status <status>", "Filter by run status (e.g. success, failed, running)")
+      .option("--offset <count>", "Number of records to skip", "0")
+      .option("--with-total", "Include total matched count in output")
+      .option("--since <time>", "Filter runs started at or after specified time (ISO 8601 or timestamp)")
+      .option("--until <time>", "Filter runs started at or before specified time (ISO 8601 or timestamp)")
+      .option("--root-run-id <id>", "Filter by root execution run ID")
+      .option("--parent-run-id <id>", "Filter by parent execution run ID")
+      .option("--view <viewName>", "Filter by service virtual view name")
       .option("--request-id <id>", "Filter by idempotency request ID (repeatable)", collectRepeatableOption, [])
       .option("-n, --limit <count>", "Maximum number of records to return", "20")
   )
@@ -145,6 +154,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const { shouldFallback } = resolveFallbackStrategy(options);
       const limit = Number.parseInt(options.limit, 10) || 20;
+      const offset = Number.parseInt(options.offset, 10) || 0;
       const requestIds = normalizeRequestIds(options.requestId);
       const scope = resolveLocalRunScope(options.package);
 
@@ -160,15 +170,27 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
           const records = await service.runs.list({
             packageId: options.package,
             actionId: options.action,
+            status: options.status,
+            channel: options.channel,
+            view: options.view,
+            since: options.since,
+            until: options.until,
+            rootRunId: options.rootRunId,
+            parentRunId: options.parentRunId,
             requestIds: requestIds.length > 0 ? requestIds : undefined,
+            offset: effectiveIntent ? 0 : offset,
             limit: queryLimit,
+            withTotal: Boolean(options.withTotal),
           });
 
           // 若处于本地无项目环境且无任何软链接包，则直接输出友好提示
           if (resolved.type === "local" && !scope.targetPackageRoot) {
             const linked = listLinkedPackages(context?.customHome);
             if (linked.length === 0) {
-              renderResult([], {
+              const emptyPayload = options.withTotal
+                ? { total: 0, items: [], limit, offset }
+                : [];
+              renderResult(emptyPayload, {
                 json: options.json,
                 humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
                 context,
@@ -184,9 +206,35 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
             shouldFallback
           );
 
-          const capped = filterRes.items.slice(0, limit);
+          const capped = effectiveIntent
+            ? filterRes.items.slice(offset, offset + limit)
+            : filterRes.items.slice(0, limit);
 
-          renderResult(capped, {
+          let total: number | undefined;
+          if (options.withTotal) {
+            if (typeof service.runs.count === "function") {
+              total = await service.runs.count({
+                packageId: options.package,
+                actionId: options.action,
+                status: options.status,
+                channel: options.channel,
+                view: options.view,
+                since: options.since,
+                until: options.until,
+                rootRunId: options.rootRunId,
+                parentRunId: options.parentRunId,
+                requestIds: requestIds.length > 0 ? requestIds : undefined,
+              });
+            } else {
+              total = records.length;
+            }
+          }
+
+          const payload = options.withTotal
+            ? { total: total ?? capped.length, items: capped, limit, offset }
+            : capped;
+
+          renderResult(payload, {
             json: options.json,
             humanFormatter: () => {
               let title = "Execution Runs";
@@ -197,7 +245,18 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
               } else {
                 title = "Execution Runs (Linked Packages)";
               }
-              return renderRunsList(capped, title, filterRes.isFallback, effectiveIntent);
+              return renderRunsList(capped, title, filterRes.isFallback, effectiveIntent, {
+                total,
+                limit,
+                offset,
+                channel: options.channel,
+                status: options.status,
+                view: options.view,
+                since: options.since,
+                until: options.until,
+                rootRunId: options.rootRunId,
+                parentRunId: options.parentRunId,
+              });
             },
             context,
           });

@@ -270,8 +270,12 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出执行历史 (`ad runs list`)：
   ```bash
-  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [--request-id <id>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json]
+  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [--channel <channel>] [--status <status>] [--offset <count>] [--with-total] [--since <time>] [--until <time>] [--root-run-id <id>] [--parent-run-id <id>] [--view <viewName>] [--request-id <id>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json]
   ```
+  支持按来源通道过滤：`--channel <channel>` 可精准筛选服务入口通道（如 `http` 或 `mcp`）。
+  支持按执行状态过滤：`--status <status>` 可按生命周期终态或在途状态过滤（如 `success`、`failed`、`running`）。
+  支持分页与统计元数据：`--offset <count>` 可跳过指定记录数，配合 `-n, --limit <count>` 实现可靠分页；指定 `--with-total` 且传入 `--json` 时，输出格式由数组扩展为包含 `total`、`items`、`limit`、`offset` 的分页结构体。
+  支持时间与层级过滤：`--since` 与 `--until` 支持按执行开始时间区间筛选；`--root-run-id` 与 `--parent-run-id` 支持关联检索级联调用树。
   支持按幂等请求标识过滤：`--request-id` 可重复传入多个，框架经 idempotency_keys 反查关联的运行记录（仅限当前包范围），命中记录在列表与机器模式输出中携带 `requestId` 字段。未命中时返回空集合且退出码为 0。
 
 - 查看单次执行详情 (`ad runs show`)：

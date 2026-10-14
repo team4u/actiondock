@@ -101,6 +101,18 @@ export interface ListRunsOptions {
   actionId?: string;
   /** 运行终态状态筛选 */
   status?: string;
+  /** 运行通道筛选（如 http、mcp） */
+  channel?: string;
+  /** 服务视图名称筛选（如 default、admin） */
+  view?: string;
+  /** 起始时间筛选（UTC ISO 8601 或时间戳字符串，匹配 startedAt >= since） */
+  since?: string;
+  /** 截止时间筛选（UTC ISO 8601 或时间戳字符串，匹配 startedAt <= until） */
+  until?: string;
+  /** 根运行标识筛选 */
+  rootRunId?: string;
+  /** 父运行标识筛选 */
+  parentRunId?: string;
   /** 模糊意图检索模式 */
   intent?: string;
   /** 幂等请求标识集合（经 idempotency_keys 反查关联运行记录） */
@@ -109,6 +121,8 @@ export interface ListRunsOptions {
   offset?: number;
   /** 最大返回记录条数限制 */
   limit?: number;
+  /** 是否需要附带总数统计 */
+  withTotal?: boolean;
   /** 取消信号，用于中止读取请求 */
   signal?: AbortSignal;
   /** 包白名单过滤集合（可选） */

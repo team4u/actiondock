@@ -64,18 +64,32 @@ export async function fetchRemoteRuns(
     status?: string;
     actionId?: string;
     packageId?: string;
+    channel?: string;
+    view?: string;
+    since?: string;
+    until?: string;
+    rootRunId?: string;
+    parentRunId?: string;
+    withTotal?: boolean;
     intent?: string;
     limit?: number;
     offset?: number;
     requestIds?: string[];
   } & RemoteClientRequestOptions
-): Promise<{ ok: boolean; total?: number; items: RunRecord[] }> {
+): Promise<{ ok: boolean; total?: number; items: RunRecord[]; limit?: number; offset?: number }> {
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/runs${buildQueryString({
       status: options?.status,
       actionId: options?.actionId,
       packageId: options?.packageId,
+      channel: options?.channel,
+      view: options?.view,
+      since: options?.since,
+      until: options?.until,
+      rootRunId: options?.rootRunId,
+      parentRunId: options?.parentRunId,
+      withTotal: options?.withTotal ? true : undefined,
       intent: options?.intent,
       limit: options?.limit,
       offset: options?.offset,

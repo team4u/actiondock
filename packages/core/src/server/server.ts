@@ -73,9 +73,21 @@ export async function launchHttpServer(
  * 面向 ActionDockService 服务端口，负责中间件流转、认证拦截与路由分发。
  */
 export async function startActionDockServer(
-  options: ServerOptions = {}
+  arg1?: ServerOptions | ActionDockService,
+  arg2?: ServerOptions
 ): Promise<ActionDockServerInstance> {
-  const hostString = options.hostname ?? options.host ?? "127.0.0.1";
+  let options: ServerOptions;
+  if (arg1 && typeof arg1 === "object" && ("discovery" in arg1 || "execution" in arg1 || "runs" in arg1)) {
+    options = { ...(arg2 || {}), service: arg1 as ActionDockService };
+  } else {
+    options = (arg1 as ServerOptions) || {};
+  }
+  const hostString =
+    typeof options.hostname === "string"
+      ? options.hostname
+      : typeof options.host === "string"
+        ? options.host
+        : "127.0.0.1";
 
   const port = options.port ?? 5177;
   const host = hostString;

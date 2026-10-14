@@ -41,6 +41,34 @@ export interface RunsRetentionPolicy {
 }
 
 /**
+ * 运行记录通用检索与统计过滤选项。
+ */
+export interface RunsQueryFilterOptions {
+  /** 目标动作标识筛选 */
+  actionId?: string;
+  /** 运行生命周期状态筛选 */
+  status?: string;
+  /** 运行通道筛选（如 http、mcp） */
+  channel?: string;
+  /** 服务视图名称筛选（如 default、admin） */
+  view?: string;
+  /** 起始时间筛选（匹配 started_at >= since） */
+  since?: string;
+  /** 截止时间筛选（匹配 started_at <= until） */
+  until?: string;
+  /** 根运行标识筛选 */
+  rootRunId?: string;
+  /** 父运行标识筛选 */
+  parentRunId?: string;
+  /** 最大返回记录条数限制 */
+  limit?: number;
+  /** 偏移游标条数（跳过的记录数） */
+  offset?: number;
+  /** 幂等请求标识列表（经 idempotency_keys 反查） */
+  requestIds?: string[];
+}
+
+/**
  * SQLite 基础参数值类型。
  */
 export type SqlValue = null | number | string | Uint8Array;
@@ -242,9 +270,9 @@ export interface RuntimeStorage {
     finishedAt?: string
   ): void;
   getRun(id: string): RunRecord | null;
-  listRuns(options?: { actionId?: string; status?: string; limit?: number; offset?: number }): RunRecord[];
+  listRuns(options?: RunsQueryFilterOptions): RunRecord[];
   /** 统计符合条件的运行记录总数 */
-  countRuns?(options?: { actionId?: string; status?: string; requestIds?: string[] }): number;
+  countRuns?(options?: RunsQueryFilterOptions): number;
   /** 查询单条运行记录并补齐幂等请求标识关联（详情路径专用） */
   getRunWithRequestId?(id: string): RunRecord | null;
   clearRuns(options?: {
@@ -284,9 +312,9 @@ export interface RuntimeStorage {
    * 不同宿主会话，ownerId 天然不一致；requestId 本身即跨进程全局唯一的外部
    * 事实源，包维度隔离已提供足够边界。
    */
-  listRunsByRequestIds?(requestIds: string[]): RunRecord[];
+  listRunsByRequestIds?(requestIds: string[], options?: RunsQueryFilterOptions): RunRecord[];
   /** 按客户端幂等请求标识反查关联运行记录总数 */
-  countRunsByRequestIds?(requestIds: string[], options?: { actionId?: string; status?: string }): number;
+  countRunsByRequestIds?(requestIds: string[], options?: RunsQueryFilterOptions): number;
   /** 反查运行记录关联的幂等请求标识映射（仅限当前包范围，无关联时不含对应键） */
   getRunRequestIds?(runIds: string[]): Record<string, string>;
 

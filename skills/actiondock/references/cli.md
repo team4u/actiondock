@@ -158,8 +158,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 列出历史执行记录 (`ad runs list`)：
   ```bash
-  ad runs list [patterns...] [-a, --action <actionId>] [--request-id <id>] [-n, --limit <count>] [-P, --package <id>]
+  ad runs list [patterns...] [-a, --action <actionId>] [--channel <channel>] [--status <status>] [--offset <count>] [--with-total] [--since <time>] [--until <time>] [--root-run-id <id>] [--parent-run-id <id>] [--view <viewName>] [--request-id <id>] [-n, --limit <count>] [-P, --package <id>]
   ```
+  支持通道、状态、时间区间与分页过滤：`--channel <channel>`（如 `http`、`mcp`）、`--status <status>`、`--offset <count>`、`--since`、`--until`；配合 `--with-total` 在 `--json` 下输出包含 `total`、`items`、`limit`、`offset` 的分页结构体。
   支持按幂等请求标识反查：`--request-id` 可重复传入多个，命中记录携带 `requestId` 字段。
 
 - 查看执行记录详情 (`ad runs show`)：

@@ -1189,6 +1189,12 @@ export class DefaultActionDockHost implements ActionDockHost {
           const batch = await runtime.listRuns({
             actionId: query.actionId,
             status: query.status,
+            channel: query.channel,
+            view: query.view,
+            since: query.since,
+            until: query.until,
+            rootRunId: query.rootRunId,
+            parentRunId: query.parentRunId,
             requestIds: query.requestIds,
             limit: BATCH_SIZE,
             offset: batchOffset,
@@ -1205,13 +1211,21 @@ export class DefaultActionDockHost implements ActionDockHost {
             packageId: (r as any).packageId || runtime.packageId,
           }));
 
-          const filtered = filterByIntent(
-            normalized,
+          let filtered = normalized;
+          if (query.channel) filtered = filtered.filter((r) => r.origin?.channel === query.channel);
+          if (query.view) filtered = filtered.filter((r) => r.origin?.viewName === query.view);
+          if (query.since) filtered = filtered.filter((r) => r.startedAt >= query.since!);
+          if (query.until) filtered = filtered.filter((r) => r.startedAt <= query.until!);
+          if (query.rootRunId) filtered = filtered.filter((r) => r.rootRunId === query.rootRunId);
+          if (query.parentRunId) filtered = filtered.filter((r) => r.parentRunId === query.parentRunId);
+
+          const intentMatched = filterByIntent(
+            filtered,
             intentStr,
             [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
             false
           );
-          matchedRecords.push(...filtered);
+          matchedRecords.push(...intentMatched);
 
           if (matchedRecords.length >= neededCount) {
             break;
@@ -1234,6 +1248,12 @@ export class DefaultActionDockHost implements ActionDockHost {
             const batch = await runtime.listRuns({
               actionId: query.actionId,
               status: query.status,
+              channel: query.channel,
+              view: query.view,
+              since: query.since,
+              until: query.until,
+              rootRunId: query.rootRunId,
+              parentRunId: query.parentRunId,
               requestIds: query.requestIds,
               limit: BATCH_SIZE,
               offset: batchOffset,
@@ -1250,13 +1270,21 @@ export class DefaultActionDockHost implements ActionDockHost {
               packageId: (r as any).packageId || runtime.packageId,
             }));
 
-            const filtered = filterByIntent(
-              normalized,
+            let filtered = normalized;
+            if (query.channel) filtered = filtered.filter((r) => r.origin?.channel === query.channel);
+            if (query.view) filtered = filtered.filter((r) => r.origin?.viewName === query.view);
+            if (query.since) filtered = filtered.filter((r) => r.startedAt >= query.since!);
+            if (query.until) filtered = filtered.filter((r) => r.startedAt <= query.until!);
+            if (query.rootRunId) filtered = filtered.filter((r) => r.rootRunId === query.rootRunId);
+            if (query.parentRunId) filtered = filtered.filter((r) => r.parentRunId === query.parentRunId);
+
+            const intentMatched = filterByIntent(
+              filtered,
               intentStr,
               [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
               false
             );
-            matchedRecords.push(...filtered);
+            matchedRecords.push(...intentMatched);
 
             if (batch.length < BATCH_SIZE) {
               break;
@@ -1345,6 +1373,12 @@ export class DefaultActionDockHost implements ActionDockHost {
           const batch = await runtime.listRuns({
             actionId: query.actionId,
             status: query.status,
+            channel: query.channel,
+            view: query.view,
+            since: query.since,
+            until: query.until,
+            rootRunId: query.rootRunId,
+            parentRunId: query.parentRunId,
             requestIds: query.requestIds,
             limit: BATCH_SIZE,
             offset: batchOffset,
@@ -1361,13 +1395,21 @@ export class DefaultActionDockHost implements ActionDockHost {
             packageId: (r as any).packageId || runtime.packageId,
           }));
 
-          const filtered = filterByIntent(
-            normalized,
+          let filtered = normalized;
+          if (query.channel) filtered = filtered.filter((r) => r.origin?.channel === query.channel);
+          if (query.view) filtered = filtered.filter((r) => r.origin?.viewName === query.view);
+          if (query.since) filtered = filtered.filter((r) => r.startedAt >= query.since!);
+          if (query.until) filtered = filtered.filter((r) => r.startedAt <= query.until!);
+          if (query.rootRunId) filtered = filtered.filter((r) => r.rootRunId === query.rootRunId);
+          if (query.parentRunId) filtered = filtered.filter((r) => r.parentRunId === query.parentRunId);
+
+          const intentMatched = filterByIntent(
+            filtered,
             intentStr,
             [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
             false
           );
-          count += filtered.length;
+          count += intentMatched.length;
 
           if (batch.length < BATCH_SIZE) {
             break;
@@ -1388,6 +1430,12 @@ export class DefaultActionDockHost implements ActionDockHost {
         const all = await runtime.listRuns({
           actionId: query?.actionId,
           status: query?.status,
+          channel: query?.channel,
+          view: query?.view,
+          since: query?.since,
+          until: query?.until,
+          rootRunId: query?.rootRunId,
+          parentRunId: query?.parentRunId,
           requestIds: query?.requestIds,
           limit: 100_000,
           signal: effectiveSignal,
@@ -1395,7 +1443,14 @@ export class DefaultActionDockHost implements ActionDockHost {
         if (effectiveSignal?.aborted) {
           throw createAbortError(effectiveSignal.reason);
         }
-        total += all.length;
+        let filtered = all;
+        if (query?.channel) filtered = filtered.filter((r) => r.origin?.channel === query.channel);
+        if (query?.view) filtered = filtered.filter((r) => r.origin?.viewName === query.view);
+        if (query?.since) filtered = filtered.filter((r) => r.startedAt >= query.since!);
+        if (query?.until) filtered = filtered.filter((r) => r.startedAt <= query.until!);
+        if (query?.rootRunId) filtered = filtered.filter((r) => r.rootRunId === query.rootRunId);
+        if (query?.parentRunId) filtered = filtered.filter((r) => r.parentRunId === query.parentRunId);
+        total += filtered.length;
       }
     }
     return total;

@@ -1,5 +1,18 @@
 import type { RunRecord } from "@actiondock/sdk";
 
+export interface RenderRunsListFilterOptions {
+  total?: number;
+  limit?: number;
+  offset?: number;
+  channel?: string;
+  status?: string;
+  view?: string;
+  since?: string;
+  until?: string;
+  rootRunId?: string;
+  parentRunId?: string;
+}
+
 /**
  * 格式化渲染执行记录列表。
  */
@@ -7,10 +20,28 @@ export function renderRunsList(
   items: Array<{ id: string; actionId: string; packageId?: string; status: string; startedAt: string }>,
   scopeLabel: string = "Execution Runs",
   isFallback: boolean = false,
-  intent?: string
+  intent?: string,
+  filterOptions?: RenderRunsListFilterOptions
 ): string {
   const lines: string[] = [];
-  lines.push(`${scopeLabel} (${items.length}):\n`);
+
+  const filterBadges: string[] = [];
+  if (filterOptions?.channel) filterBadges.push(`channel='${filterOptions.channel}'`);
+  if (filterOptions?.status) filterBadges.push(`status='${filterOptions.status}'`);
+  if (filterOptions?.view) filterBadges.push(`view='${filterOptions.view}'`);
+  if (filterOptions?.since) filterBadges.push(`since='${filterOptions.since}'`);
+  if (filterOptions?.until) filterBadges.push(`until='${filterOptions.until}'`);
+  if (filterOptions?.rootRunId) filterBadges.push(`rootRunId='${filterOptions.rootRunId}'`);
+  if (filterOptions?.parentRunId) filterBadges.push(`parentRunId='${filterOptions.parentRunId}'`);
+
+  const filterSummary = filterBadges.length > 0 ? ` [${filterBadges.join(", ")}]` : "";
+
+  if (typeof filterOptions?.total === "number") {
+    lines.push(`${scopeLabel} (showing ${items.length} of ${filterOptions.total}${filterSummary}):\n`);
+  } else {
+    lines.push(`${scopeLabel} (${items.length}${filterSummary}):\n`);
+  }
+
   if (isFallback && intent) {
     lines.push(`(No runs matched intent '${intent}', showing all runs)\n`);
   }

@@ -1159,12 +1159,30 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       if (typeof storage.listRunsByRequestIds !== "function") {
         return [];
       }
-      let records = storage.listRunsByRequestIds(options.requestIds);
+      let records = storage.listRunsByRequestIds(options.requestIds, options);
       if (options.actionId) {
         records = records.filter((r) => r.actionId === options.actionId);
       }
       if (options.status) {
         records = records.filter((r) => r.status === options.status);
+      }
+      if (options.channel) {
+        records = records.filter((r) => r.origin?.channel === options.channel);
+      }
+      if (options.view) {
+        records = records.filter((r) => r.origin?.viewName === options.view);
+      }
+      if (options.since) {
+        records = records.filter((r) => r.startedAt >= options.since!);
+      }
+      if (options.until) {
+        records = records.filter((r) => r.startedAt <= options.until!);
+      }
+      if (options.rootRunId) {
+        records = records.filter((r) => r.rootRunId === options.rootRunId);
+      }
+      if (options.parentRunId) {
+        records = records.filter((r) => r.parentRunId === options.parentRunId);
       }
       records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
       if (typeof options.offset === "number" && options.offset > 0) {
@@ -1179,6 +1197,12 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     const records = storage.listRuns({
       actionId: options?.actionId,
       status: options?.status,
+      channel: options?.channel,
+      view: options?.view,
+      since: options?.since,
+      until: options?.until,
+      rootRunId: options?.rootRunId,
+      parentRunId: options?.parentRunId,
       limit: options?.limit,
       offset: options?.offset,
     });
@@ -1207,17 +1231,41 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       return storage.countRuns({
         actionId: options?.actionId,
         status: options?.status,
+        channel: options?.channel,
+        view: options?.view,
+        since: options?.since,
+        until: options?.until,
+        rootRunId: options?.rootRunId,
+        parentRunId: options?.parentRunId,
         requestIds: options?.requestIds,
       });
     }
     if (options?.requestIds && options.requestIds.length > 0) {
       if (typeof storage.listRunsByRequestIds === "function") {
-        let records = storage.listRunsByRequestIds(options.requestIds);
+        let records = storage.listRunsByRequestIds(options.requestIds, options);
         if (options.actionId) {
           records = records.filter((r) => r.actionId === options.actionId);
         }
         if (options.status) {
           records = records.filter((r) => r.status === options.status);
+        }
+        if (options.channel) {
+          records = records.filter((r) => r.origin?.channel === options.channel);
+        }
+        if (options.view) {
+          records = records.filter((r) => r.origin?.viewName === options.view);
+        }
+        if (options.since) {
+          records = records.filter((r) => r.startedAt >= options.since!);
+        }
+        if (options.until) {
+          records = records.filter((r) => r.startedAt <= options.until!);
+        }
+        if (options.rootRunId) {
+          records = records.filter((r) => r.rootRunId === options.rootRunId);
+        }
+        if (options.parentRunId) {
+          records = records.filter((r) => r.parentRunId === options.parentRunId);
         }
         return records.length;
       }
@@ -1226,9 +1274,24 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     const records = storage.listRuns({
       actionId: options?.actionId,
       status: options?.status,
+      channel: options?.channel,
+      view: options?.view,
+      since: options?.since,
+      until: options?.until,
+      rootRunId: options?.rootRunId,
+      parentRunId: options?.parentRunId,
       limit: 100_000,
     });
-    return records.length;
+    let filtered = records;
+    if (options?.actionId) filtered = filtered.filter((r) => r.actionId === options.actionId);
+    if (options?.status) filtered = filtered.filter((r) => r.status === options.status);
+    if (options?.channel) filtered = filtered.filter((r) => r.origin?.channel === options.channel);
+    if (options?.view) filtered = filtered.filter((r) => r.origin?.viewName === options.view);
+    if (options?.since) filtered = filtered.filter((r) => r.startedAt >= options.since!);
+    if (options?.until) filtered = filtered.filter((r) => r.startedAt <= options.until!);
+    if (options?.rootRunId) filtered = filtered.filter((r) => r.rootRunId === options.rootRunId);
+    if (options?.parentRunId) filtered = filtered.filter((r) => r.parentRunId === options.parentRunId);
+    return filtered.length;
   }
 
   async clearRuns(options?: {

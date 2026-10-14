@@ -1,5 +1,5 @@
 import type { JsonValue, Logger, RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { SqliteDriver, SqliteStatement, TerminalRunStatus, RunsRetentionPolicy, IdempotencyRecord, IdempotencyCheckResult } from "./types";
+import type { SqliteDriver, SqliteStatement, TerminalRunStatus, RunsRetentionPolicy, IdempotencyRecord, IdempotencyCheckResult, RunsQueryFilterOptions } from "./types";
 import { isTerminalRunStatus, DEFAULT_MAX_RUNS_PER_PACKAGE, DEFAULT_MIN_RETAIN_RUNS, DEFAULT_RUNS_RETENTION_MS } from "./types";
 import type { Clock } from "./clock";
 import { safeParseStoredJson } from "./utils";
@@ -302,7 +302,7 @@ export class SqliteRunsStore {
     return record;
   }
 
-  listRuns(options: { actionId?: string; status?: string; limit?: number; offset?: number } = {}): RunRecord[] {
+  listRuns(options: RunsQueryFilterOptions = {}): RunRecord[] {
     const limit = options.limit || 50;
     let sql = "SELECT * FROM runs WHERE package_id = ?";
     const params: any[] = [this.packageId];
@@ -313,6 +313,30 @@ export class SqliteRunsStore {
     if (options.status) {
       sql += " AND status = ?";
       params.push(options.status);
+    }
+    if (options.channel) {
+      sql += " AND json_extract(origin_json, '$.channel') = ?";
+      params.push(options.channel);
+    }
+    if (options.view) {
+      sql += " AND json_extract(origin_json, '$.viewName') = ?";
+      params.push(options.view);
+    }
+    if (options.since) {
+      sql += " AND started_at >= ?";
+      params.push(options.since);
+    }
+    if (options.until) {
+      sql += " AND started_at <= ?";
+      params.push(options.until);
+    }
+    if (options.rootRunId) {
+      sql += " AND root_run_id = ?";
+      params.push(options.rootRunId);
+    }
+    if (options.parentRunId) {
+      sql += " AND parent_run_id = ?";
+      params.push(options.parentRunId);
     }
     sql += " ORDER BY started_at DESC LIMIT ?";
     params.push(limit);
@@ -330,7 +354,7 @@ export class SqliteRunsStore {
    * 支持按 actionId、status 以及包含 requestIds 的反查场景统计总数。
    */
   countRuns(
-    options: { actionId?: string; status?: string; requestIds?: string[] } = {},
+    options: RunsQueryFilterOptions = {},
     isClosed = false
   ): number {
     if (isClosed) return 0;
@@ -355,6 +379,30 @@ export class SqliteRunsStore {
         sql += " AND runs.status = ?";
         params.push(options.status);
       }
+      if (options.channel) {
+        sql += " AND json_extract(runs.origin_json, '$.channel') = ?";
+        params.push(options.channel);
+      }
+      if (options.view) {
+        sql += " AND json_extract(runs.origin_json, '$.viewName') = ?";
+        params.push(options.view);
+      }
+      if (options.since) {
+        sql += " AND runs.started_at >= ?";
+        params.push(options.since);
+      }
+      if (options.until) {
+        sql += " AND runs.started_at <= ?";
+        params.push(options.until);
+      }
+      if (options.rootRunId) {
+        sql += " AND runs.root_run_id = ?";
+        params.push(options.rootRunId);
+      }
+      if (options.parentRunId) {
+        sql += " AND runs.parent_run_id = ?";
+        params.push(options.parentRunId);
+      }
       const stmt = this.getStatement(sql);
       const row = stmt.get<{ count: number }>(...params);
       return row?.count ?? 0;
@@ -370,6 +418,30 @@ export class SqliteRunsStore {
       sql += " AND status = ?";
       params.push(options.status);
     }
+    if (options.channel) {
+      sql += " AND json_extract(origin_json, '$.channel') = ?";
+      params.push(options.channel);
+    }
+    if (options.view) {
+      sql += " AND json_extract(origin_json, '$.viewName') = ?";
+      params.push(options.view);
+    }
+    if (options.since) {
+      sql += " AND started_at >= ?";
+      params.push(options.since);
+    }
+    if (options.until) {
+      sql += " AND started_at <= ?";
+      params.push(options.until);
+    }
+    if (options.rootRunId) {
+      sql += " AND root_run_id = ?";
+      params.push(options.rootRunId);
+    }
+    if (options.parentRunId) {
+      sql += " AND parent_run_id = ?";
+      params.push(options.parentRunId);
+    }
     const stmt = this.getStatement(sql);
     const row = stmt.get<{ count: number }>(...params);
     return row?.count ?? 0;
@@ -381,7 +453,7 @@ export class SqliteRunsStore {
   countRunsByRequestIds(
     isClosed: boolean,
     requestIds: string[],
-    options: { actionId?: string; status?: string } = {}
+    options: RunsQueryFilterOptions = {}
   ): number {
     return this.countRuns({ ...options, requestIds }, isClosed);
   }
@@ -400,22 +472,59 @@ export class SqliteRunsStore {
    * 当前包，保证多包共库（全局库）时不越界读取其他包的运行记录。
    * 不按 owner_id 过滤：写入方与查询方分属不同宿主进程，ownerId 必然不同。
    */
-  listRunsByRequestIds(isClosed: boolean, requestIds: string[]): RunRecord[] {
+  listRunsByRequestIds(
+    isClosed: boolean,
+    requestIds: string[],
+    options: RunsQueryFilterOptions = {}
+  ): RunRecord[] {
     if (isClosed || requestIds.length === 0) return [];
     const uniqueIds = Array.from(new Set(requestIds.filter((id) => typeof id === "string" && id.length > 0)));
     if (uniqueIds.length === 0) return [];
 
-    const sql = `
+    let sql = `
       SELECT runs.*, ik.request_id AS request_id
       FROM runs
       INNER JOIN idempotency_keys AS ik ON ik.run_id = runs.id
       WHERE runs.package_id = ?
         AND ik.request_id IN (${SqliteRunsStore.placeholders(uniqueIds.length)})
-      ORDER BY runs.started_at DESC
     `;
+    const params: any[] = [this.packageId, ...uniqueIds];
+    if (options.actionId) {
+      sql += " AND runs.action_id = ?";
+      params.push(options.actionId);
+    }
+    if (options.status) {
+      sql += " AND runs.status = ?";
+      params.push(options.status);
+    }
+    if (options.channel) {
+      sql += " AND json_extract(runs.origin_json, '$.channel') = ?";
+      params.push(options.channel);
+    }
+    if (options.view) {
+      sql += " AND json_extract(runs.origin_json, '$.viewName') = ?";
+      params.push(options.view);
+    }
+    if (options.since) {
+      sql += " AND runs.started_at >= ?";
+      params.push(options.since);
+    }
+    if (options.until) {
+      sql += " AND runs.started_at <= ?";
+      params.push(options.until);
+    }
+    if (options.rootRunId) {
+      sql += " AND runs.root_run_id = ?";
+      params.push(options.rootRunId);
+    }
+    if (options.parentRunId) {
+      sql += " AND runs.parent_run_id = ?";
+      params.push(options.parentRunId);
+    }
+    sql += " ORDER BY runs.started_at DESC";
     const stmt = this.getStatement(sql);
-    const rows = stmt.all<any>(this.packageId, ...uniqueIds);
-    const records = rows.map((r) => this.mapRunRecord(r));
+    const rows = stmt.all<any>(...params);
+    let records = rows.map((r) => this.mapRunRecord(r));
     // requestId 来自联查列，直接补齐（mapRunRecord 无法从 runs 行还原）
     const requestIdByRunId = new Map<string, string>();
     for (const row of rows) {
@@ -427,6 +536,15 @@ export class SqliteRunsStore {
       const requestId = requestIdByRunId.get(record.id);
       if (requestId) record.requestId = requestId;
     }
+    // 内存过滤适配
+    if (options.actionId) records = records.filter((r) => r.actionId === options.actionId);
+    if (options.status) records = records.filter((r) => r.status === options.status);
+    if (options.channel) records = records.filter((r) => r.origin?.channel === options.channel);
+    if (options.view) records = records.filter((r) => r.origin?.viewName === options.view);
+    if (options.since) records = records.filter((r) => r.startedAt >= options.since!);
+    if (options.until) records = records.filter((r) => r.startedAt <= options.until!);
+    if (options.rootRunId) records = records.filter((r) => r.rootRunId === options.rootRunId);
+    if (options.parentRunId) records = records.filter((r) => r.parentRunId === options.parentRunId);
     return records;
   }
 

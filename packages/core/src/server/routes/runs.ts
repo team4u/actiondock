@@ -32,6 +32,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const status = url.searchParams.get("status") || undefined;
       const actionId = url.searchParams.get("actionId") || undefined;
       const packageId = url.searchParams.get("packageId") || undefined;
+      const channel = url.searchParams.get("channel") || undefined;
+      const view = url.searchParams.get("view") || undefined;
+      const since = url.searchParams.get("since") || undefined;
+      const until = url.searchParams.get("until") || undefined;
+      const rootRunId = url.searchParams.get("rootRunId") || undefined;
+      const parentRunId = url.searchParams.get("parentRunId") || undefined;
+      const withTotal = url.searchParams.get("withTotal") === "true";
       const intent = url.searchParams.get("intent") || undefined;
       // requestId 反查：支持 requestId 与 requestIds 重复查询参数，将每一个参数值作为原样字符串保存
       const requestIds = [
@@ -102,6 +109,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         actionId,
         status,
         packageId,
+        channel,
+        view,
+        since,
+        until,
+        rootRunId,
+        parentRunId,
+        withTotal,
         intent,
         requestIds: requestIds.length > 0 ? requestIds : undefined,
         signal: req.signal,
@@ -208,9 +222,11 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         }
       }
 
-      const responseData: { ok: true; items: RunRecord[]; total?: number } = {
+      const responseData: { ok: true; items: RunRecord[]; total?: number; limit: number; offset: number } = {
         ok: true,
         items: runs,
+        limit,
+        offset,
       };
       if (typeof total === "number") {
         responseData.total = total;

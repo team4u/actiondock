@@ -14,6 +14,7 @@ import { NodeSqliteDriver } from "./sqlite-driver";
 import {
   type IdempotencyCheckResult,
   type IdempotencyRecord,
+  type RunsQueryFilterOptions,
   type RunsRetentionPolicy,
   type RuntimeStorage,
   type SqliteDriver,
@@ -220,11 +221,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.runsStore.getRun(id);
   }
 
-  listRuns(options: { actionId?: string; status?: string; limit?: number; offset?: number } = {}): RunRecord[] {
+  listRuns(options: RunsQueryFilterOptions = {}): RunRecord[] {
     return this.runsStore.listRuns(options);
   }
 
-  countRuns(options: { actionId?: string; status?: string; requestIds?: string[] } = {}): number {
+  countRuns(options: RunsQueryFilterOptions = {}): number {
     return this.runsStore.countRuns(options, this.isClosed);
   }
 
@@ -250,11 +251,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.runsStore.getIdempotencyRecord(this.isClosed, ownerId, actionRef, requestId);
   }
 
-  listRunsByRequestIds(requestIds: string[]): RunRecord[] {
-    return this.runsStore.listRunsByRequestIds(this.isClosed, requestIds);
+  listRunsByRequestIds(requestIds: string[], options: RunsQueryFilterOptions = {}): RunRecord[] {
+    return this.runsStore.listRunsByRequestIds(this.isClosed, requestIds, options);
   }
 
-  countRunsByRequestIds(requestIds: string[], options: { actionId?: string; status?: string } = {}): number {
+  countRunsByRequestIds(requestIds: string[], options: RunsQueryFilterOptions = {}): number {
     return this.runsStore.countRunsByRequestIds(this.isClosed, requestIds, options);
   }
 
