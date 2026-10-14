@@ -80,12 +80,13 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 步骤一：工程初始化。执行 `ad init [directory] -i <package-id> -n <name>` 生成标准工程骨架。
 - 步骤二：新建模板代码。执行 `ad action create <action-id> -d "描述" -i "name:string, count?:number" -o "message:string"` 脚手架生成初始源码并在清单中注册（命令行支持基础类型简写与可选标记）。
 - 步骤三：完善清单契约。若存在字段描述、枚举、嵌套结构或复杂约束，在 `actiondock.json` 中扩展标准 JSON Schema，推荐通过 `examples` 字段补充示例以消除模型理解歧义。
-- 步骤四：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
-- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
-- 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
-- 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
-- 步骤八：编排业务规程。执行 `ad playbook create <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
-- 步骤九：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](references/build-and-export.md)。
+- 步骤四：明确依赖与调度范围。同包动作互调自然合法，默认豁免 `uses` 声明（在源码中直接通过短标识符调用即可）；若出于显式说明或构建裁剪目的在清单中配置 `uses`，同包内部必须严格使用短标识符（如 `export-schema-ddl`），严禁包含本包包名前缀（如 `pkg/export-schema-ddl`，否则规划器解析索引不匹配会导致报错条目未找到）；跨包依赖方可在 `uses` 中配置完全限定标识符。
+- 步骤五：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
+- 步骤六：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
+- 步骤七：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在；若校验单一动作，使用短标识符。
+- 步骤八：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
+- 步骤九：编排业务规程。执行 `ad playbook create <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
+- 步骤十：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](references/build-and-export.md)。
 
 ### 作业流三：安全执行与长任务追踪
 
