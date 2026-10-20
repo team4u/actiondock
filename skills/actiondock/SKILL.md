@@ -106,7 +106,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
   - 严格校验：正文字段缺失、非字符串或返回数据非对象时明确报错退出；`--text-field` 与 `--json`、`--async` 互斥并在执行前以退出码 2 退出。
   - 机器信封：如需程序化消费标准 JSON 信封，传入 `--json`，此时忽略默认正文注解。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消；多条后台任务可用 `ad runs watch [ids...]` 阻塞等待全部终态后聚合退出，主控后台派工拿不到 runId 时可在派工命令携带 `--request-id`，再用同标识 `ad runs watch --request-id <id>` 反查等待。
-- 配置覆盖与安全持久化：调试时使用 `-c KEY=value`（字符串）或 `-c KEY:=json`（严格 JSON 解析且数值为有限数，不物化路径，解析错误退出码 2）临时覆盖；生产使用 `ad config set <KEY> <VALUE>` 持久化注入（全量替换与写前模式校验，失败报 `CONFIG_VALUE_INVALID` 且原值不变）。复杂敏感对象推荐通过 `printf '%s' '{...}' | ad config set <KEY> -P <pkg> --stdin` 管道注入以防命令历史泄露；系统严禁回显明文，`ad config list` 与 `ad config get` 始终返回安全脱敏视图，`--reveal` 仅向标准错误输出提示。拒绝 `*` 通配符实键。
+- 配置覆盖与安全持久化：调试时使用 `-c KEY=value`（字符串）或 `-c KEY:=json`（严格 JSON 解析且数值为有限数，不物化路径，解析错误退出码 2）临时覆盖；生产使用 `ad config set <KEY> <VALUE>` 持久化注入（全量替换与写前模式校验，失败报 `CONFIG_VALUE_INVALID` 且原值不变）。复杂敏感对象推荐通过 `printf '%s' '{...}' | ad config set <KEY> -P <pkg> --stdin` 管道注入以防命令历史泄露；系统严禁回显明文，`ad config list` 与 `ad config get` 始终返回安全脱敏视图且不提供明文查看参数。拒绝 `*` 通配符实键。
 
 ---
 

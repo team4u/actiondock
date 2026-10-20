@@ -9,7 +9,7 @@ import {
 } from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { ArgumentError, packageNotFoundError } from "../../errors";
-import { formatSingleConfigDisplay, renderResult, writeStderr } from "../../renderer";
+import { formatSingleConfigDisplay, renderResult } from "../../renderer";
 import { resolveMergedConfigEntry } from "../../services/config-merge";
 import type { CliContext } from "../../types";
 import {
@@ -34,10 +34,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       .option("-P, --package <id>", "Target package ID or path")
       .option("-g, --global", "Get from global configuration")
   )
-    .option(
-      "--reveal, --show-secrets",
-      "Request secrets display (secrets remain redacted for security; notice printed to stderr)"
-    )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .action(async (key: string, rawOptions: any, cmd: any) => {
@@ -46,8 +42,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
         throw new ArgumentError("Configuration key is required");
       }
       assertConcreteConfigKey(key);
-
-      const reveal = Boolean(options.reveal || options.showSecrets);
 
       // 远端服务分支
       const target = resolveTargetFromOptions(options, context);
@@ -82,13 +76,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
               redactedPaths: [],
             };
 
-        if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
-          writeStderr(
-            "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-            context
-          );
-        }
-
         renderResult(payload, {
           json: options.json,
           humanFormatter: () => formatSingleConfigDisplay(payload),
@@ -119,13 +106,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
               redactedPaths: confView?.redactedPaths ?? [],
             };
 
-            if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
-              writeStderr(
-                "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-                context
-              );
-            }
-
             renderResult(payload, {
               json: options.json,
               humanFormatter: () => formatSingleConfigDisplay(payload),
@@ -141,8 +121,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
             key,
             projConfig.id,
             declaredItem,
-            service,
-            reveal
+            service
           );
 
           const payload = {
@@ -153,13 +132,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
             configured: merged.configured,
             redactedPaths: merged.redactedPaths,
           };
-
-          if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
-            writeStderr(
-              "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-              context
-            );
-          }
 
           renderResult(payload, {
             json: options.json,

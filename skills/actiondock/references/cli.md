@@ -259,9 +259,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 - 运行时配置管理 (`ad config`)：
   ```bash
   # 列出配置项（安全脱敏视图）
-  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal]
+  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>]
   # 读取配置安全视图
-  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal]
+  ad config get <key> [-g, --global] [-P, --package <id>]
   # 写入配置键值（全量替换，写前校验）
   ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin]
   # 删除配置项
@@ -271,7 +271,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # 输出环境导出语句
   ad config env [identifier]
   ```
-  - 安全脱敏视图：`ad config list` 与 `ad config get` 始终返回脱敏安全数据。敏感整项展示 `<hidden>`，未配置项展示 `<not configured>`。`--reveal` 或 `--show-secrets` 仅保留兼容性并在标准错误输出安全提示，系统严禁回显明文。
+  - 安全脱敏视图：`ad config list` 与 `ad config get` 始终返回脱敏安全数据。敏感整项展示 `<hidden>`，未配置项展示 `<not configured>`。系统不提供任何明文查看参数，原 `--reveal` 与 `--show-secrets` 已移除；需要原值请在 Action 内通过 `ctx.config.get` 读取。
   - 标准输入传递敏感对象：写入敏感对象时，推荐配合管道与 `--stdin` 参数传入，避免命令历史暴露凭据：
     ```bash
     printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin

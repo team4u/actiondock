@@ -6,7 +6,7 @@ import {
 } from "@actiondock/core/project";
 import type { Command } from "commander";
 import { packageNotFoundError } from "../../errors";
-import { renderConfigList, renderResult, writeStderr } from "../../renderer";
+import { renderConfigList, renderResult } from "../../renderer";
 import { buildMergedConfigEntries, type MergedConfigEntry } from "../../services/config-merge";
 import type { CliContext } from "../../types";
 import {
@@ -36,10 +36,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       .option("-g, --global", "Show only global configurations")
   )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
-    .option(
-      "--reveal, --show-secrets",
-      "Request secrets display (secrets remain redacted for security; notice printed to stderr)"
-    )
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
@@ -48,7 +44,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const { shouldFallback } = resolveFallbackStrategy(options);
-      const reveal = Boolean(options.reveal || options.showSecrets);
 
       // 远端服务分支
       const remoteTargetInfo = resolveTargetFromOptions(options, context);
@@ -80,13 +75,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
           [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
           shouldFallback
         );
-
-        if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
-          writeStderr(
-            "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-            context
-          );
-        }
 
         renderResult(filterRes.items, {
           json: options.json,
@@ -132,13 +120,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
               shouldFallback
             );
 
-            if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
-              writeStderr(
-                "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-                context
-              );
-            }
-
             renderResult(filterRes.items, {
               json: options.json,
               humanFormatter: () =>
@@ -156,7 +137,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
           const projConfig = loadProjectConfig(root);
 
           // 跨作用域合并视图单一事实源
-          const merged = await buildMergedConfigEntries(root, service, reveal);
+          const merged = await buildMergedConfigEntries(root, service);
 
           const filterRes = filterWithFallbackInfo(
             merged,
@@ -164,13 +145,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
             shouldFallback
           );
-
-          if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
-            writeStderr(
-              "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
-              context
-            );
-          }
 
           renderResult(filterRes.items, {
             json: options.json,

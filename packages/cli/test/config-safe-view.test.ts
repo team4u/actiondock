@@ -152,19 +152,19 @@ describe("CLI Config Safe View & Template Management", () => {
     assert.strictEqual(jsonPayload.value.password, "********");
   });
 
-  it("--reveal 和 --show-secrets 在遇到敏感项时向 stderr 打印提示，且严禁在 stdout 泄露原文", async () => {
+  it("--reveal 与 --show-secrets 不再是合法参数，敏感项仍严格脱敏", async () => {
     await runCliAsync(["config", "set", "TOP_SECRET", "super_secret_999"], tempDir);
 
     const getReveal = await runCliAsync(["config", "get", "TOP_SECRET", "--reveal"], tempDir);
-    assert.strictEqual(getReveal.exitCode, 0);
-    assert.strictEqual(getReveal.stdout.toString().trim(), "<hidden>");
-    assert.strictEqual(getReveal.stdout.toString().includes("super_secret_999"), false);
-    assert.ok(getReveal.stderr.toString().includes("Note: Secret values are redacted"));
+    assert.notStrictEqual(getReveal.exitCode, 0, "--reveal 参数应被拒绝");
 
     const listReveal = await runCliAsync(["config", "list", "--show-secrets"], tempDir);
-    assert.strictEqual(listReveal.exitCode, 0);
-    assert.strictEqual(listReveal.stdout.toString().includes("super_secret_999"), false);
-    assert.ok(listReveal.stderr.toString().includes("Note: Secret values are redacted"));
+    assert.notStrictEqual(listReveal.exitCode, 0, "--show-secrets 参数应被拒绝");
+
+    const getSecret = await runCliAsync(["config", "get", "TOP_SECRET"], tempDir);
+    assert.strictEqual(getSecret.exitCode, 0);
+    assert.strictEqual(getSecret.stdout.toString().trim(), "<hidden>");
+    assert.strictEqual(getSecret.stdout.toString().includes("super_secret_999"), false);
   });
 
   it("config schema 针对模板单独展示 TEMPLATE 状态及 matchCount，且不参与 missing 统计与 default 不泄漏", async () => {

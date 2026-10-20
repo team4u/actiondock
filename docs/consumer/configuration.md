@@ -93,7 +93,7 @@ GITHUB_TOKEN=ghp_xxxx ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
   ad config list -g
   ```
 
-- 读取配置项安全视图（系统不提供明文回显接口，`--reveal` 仅向标准错误输出安全提示）：
+- 读取配置项安全视图（系统不提供明文回显接口，也不提供明文查看参数）：
   ```bash
   ad config get GITHUB_TOKEN
   ad config get GITHUB_TOKEN -g

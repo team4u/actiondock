@@ -54,7 +54,7 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
         options,
         context,
         async (service) => {
-          const merged = await buildMergedConfigEntries(root, service, false);
+          const merged = await buildMergedConfigEntries(root, service);
           const mergedByKey = new Map(merged.map((entry) => [entry.key, entry]));
 
           const projectConfigList = (await service.management?.config.list(projConfig.id)) ?? [];

@@ -28,20 +28,17 @@ export interface MergedConfigEntry {
  * 解析单个配置键的合并视图。
  *
  * 核心管理 view 已是唯一值与来源事实源，杜绝二次解析 env、本地 default 兜底与重复打码。
- * reveal 参数保留以兼容公共接口契约，但做忽略处理，严禁明文泄露。
  *
  * @param key 配置键名
  * @param packageId 包标识（用于包级作用域寻址）
  * @param declaredItem 工程声明的配置项定义（可选）
  * @param service 已创建的 Service 服务实例
- * @param _reveal 是否揭示敏感值明文（已安全忽略）
  */
 export async function resolveMergedConfigEntry(
   key: string,
   packageId: string,
   declaredItem: ConfigItemDefinition | undefined,
-  service: ActionDockService,
-  _reveal?: boolean
+  service: ActionDockService
 ): Promise<{
   value?: unknown;
   source: MergedConfigEntry["source"];
@@ -78,12 +75,10 @@ export async function resolveMergedConfigEntry(
  *
  * @param root 工程根目录
  * @param service 已创建的 Service 服务实例
- * @param _reveal 是否揭示敏感值明文（已安全忽略）
  */
 export async function buildMergedConfigEntries(
   root: string,
-  service: ActionDockService,
-  _reveal?: boolean
+  service: ActionDockService
 ): Promise<MergedConfigEntry[]> {
   const projConfig = loadProjectConfig(root);
   const declared = projConfig.config || {};

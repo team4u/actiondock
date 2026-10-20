@@ -242,9 +242,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 - 配置管理 (`ad config`)：
   ```bash
   # 列出配置项（安全视图）
-  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--data-dir <path>] [--json]
+  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--data-dir <path>] [--json]
   # 读取配置安全视图
-  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--data-dir <path>] [--json]
+  ad config get <key> [-g, --global] [-P, --package <id>] [--data-dir <path>] [--json]
   # 写入配置键值（全量替换，写前校验）
   ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin] [--data-dir <path>]
   # 删除配置项
@@ -252,7 +252,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   # 查看项目配置声明模式
   ad config schema [identifier] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
-  - 安全脱敏与选项表现：`ad config list` 与 `ad config get` 始终返回安全脱敏数据。敏感整项在终端中展示为 `<hidden>`，未配置项展示为 `<not configured>`。选项 `--reveal` 或 `--show-secrets` 仅保留参数兼容，执行时向标准错误输出安全提示，系统严禁回显明文。
+  - 安全脱敏与选项表现：`ad config list` 与 `ad config get` 始终返回安全脱敏数据。敏感整项在终端中展示为 `<hidden>`，未配置项展示为 `<not configured>`。系统不提供任何明文查看参数，原 `--reveal` 与 `--show-secrets` 已移除；需要原值请在 Action 内通过 `ctx.config.get` 读取。
   - 标准输入注入敏感对象：写入包含敏感字段的对象配置时，使用 `--stdin` 避免命令行历史记录泄漏真实值：
     ```bash
     printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
