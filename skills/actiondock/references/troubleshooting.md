@@ -31,13 +31,13 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 
 | 错误代码 | 产生原因 | 标准排查与自愈步骤 |
 | :--- | :--- | :--- |
-| `INVALID_JSON` | 输入内容不符合 JSON 语法规范（如单引号未转义、属性名未加双引号、空文件或空标准输入等）。 | 检查传入的 JSON 语法；复杂结构推荐先保存为独立文件并通过 `--input-file <path>` 传递。 |
-| `INVALID_FLAT_ARGUMENT` | 扁平赋值语法错误、非法属性名或非法数组索引（如前导零、负数、科学计数法等）或包含原型污染敏感属性。 | 检查赋值语法，确保属性名符合 `[A-Za-z_][A-Za-z0-9_-]*`，数组索引为非负连续整数，杜绝 `__proto__` 等属性。 |
+| `INVALID_JSON` | 要求 JSON 的输入不符合语法规范（如属性名未加双引号、空 JSON 文件或空 JSON 标准输入）。 | 检查 JSON 语法。配置与状态的完整位置值及非空 `--stdin` 使用 JSON 或字符串兼容解码，不要求普通字符串为 JSON；`:=` 的严格解析错误见 `INVALID_JSON_LITERAL`。 |
+| `INVALID_FLAT_ARGUMENT` | 扁平赋值语法错误、非法属性名或数组索引、原型污染敏感属性，或 `--stdin-field` 字段名为空、含点路径或危险键。 | 检查赋值与顶层字段名，属性名符合 `[A-Za-z_][A-Za-z0-9_-]*`，数组索引为非负连续整数，杜绝 `__proto__` 等属性；`config/state set` 仅识别 `--` 后的扁平赋值，位置值 `'a=b'` 仍为字符串。 |
 | `INVALID_JSON_LITERAL` | `path:=json` 中的 JSON 字面量解析失败或包含非有限数（`Infinity`、`-Infinity`、`NaN`）。 | 检查 `:=` 后的 JSON 语法是否合法，确保所有数值满足 `Number.isFinite`。 |
-| `INPUT_PATH_CONFLICT` | 扁平参数路径冲突（叶节点/容器冲突、对象/数组冲突、重复路径赋值或非连续稀疏数组）。 | 检查路径层级与类型，确保数组索引从 0 开始连续编号，杜绝同名键重复赋值与结构覆盖冲突。 |
+| `INPUT_PATH_CONFLICT` | 扁平参数路径冲突（叶节点/容器冲突、对象/数组冲突、重复路径赋值或非连续稀疏数组），或与 stdin 绑定字段冲突。 | 检查路径层级与类型，确保数组索引从 0 开始连续编号；扁平赋值不能重复写入 stdin 绑定字段或其子路径。`run`、配置、状态与独立入口共用这些检查。 |
 | `FLAT_INPUT_LIMIT_EXCEEDED` | 扁平参数超出安全限制，或 `--stdin-field` 绑定后的最终入参序列化大小超出默认 10MiB 上限；合并字段及 JSON 转义放大均计入大小。 | 缩减或分批处理正文与补充字段；`MAX_MATERIALIZED_BYTES` 表示最终入参超限。改用文件不会解除输入大小限制。 |
 | `INPUT_LIMIT_EXCEEDED` | JSON 输入或 stdin 源字节超过默认 10MiB 上限。 | 缩减或分批处理输入；`MAX_INPUT_BYTES` 表示源字节超限，与最终入参大小限制独立生效。 |
-| `INPUT_CONFLICT` | 扁平参数、`--input`、`--input-file` 混用，或 `--stdin-field` 与 `--input` / `--input-file` 混用。 | 原有三种输入方式仅选其一；原始文本绑定可与扁平赋值组合，不可与内联或文件 JSON 输入混用。 |
+| `INPUT_CONFLICT` | `run` 混用扁平参数、`--input`、`--input-file`，或字段绑定与 JSON 输入混用；`config/state set` 混用完整位置值、`--stdin` 与结构化模式。 | `run` 原有三种输入仅选其一。配置或状态写入在完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）中择一；`--stdin-field` 可单独使用或与扁平赋值组合，不能与完整值或 `--stdin` 组合。 |
 | `INPUT_FILE_NOT_FOUND` | `--input-file` 指定的目标文件在文件系统中不存在。 | 检查文件物理路径是否准确，或改用标准输入管道 `--input-file -` 传递数据。 |
 | `INPUT_FILE_READ_FAILED` | 读取输入文件或标准输入流发生底层错误（如目标为目录、权限不足，或 `--stdin-field` 正文含非法 UTF-8 字节）。 | 检查文件权限与流可用性；原始文本场景确认输入为合法 UTF-8 编码。 |
 | `INPUT_NOT_JSON` | 输入参数包含非有限数（NaN 或 Infinity）、循环引用或函数等非法类型。 | 检查调用参数，确保传递合法的纯 JSON 格式数据。推荐使用 `--input-file <path>` 传递。 |
@@ -120,7 +120,10 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
   - 边界：调整配置后重新装配宿主；不以切换 CLI 默认 Profile 替代内部绑定，不记录凭据，不把断链视作未执行。详见 [action-bindings.md](action-bindings.md)。
 - 配置项缺失自愈：
   - 适用现象：执行 Action 报错提示未注入必填配置。
-  - 自愈流程：执行 `ad config schema [pkg]` 查看所需配置项与模板定义 -> 执行 `ad config set <key> <value>` 注入持久化配置（敏感对象使用标准输入管道：`printf '%s' '{...}' | ad config set <key> -P <pkg> --stdin`）。
+  - 自愈流程：执行 `ad config schema [pkg]` 查看所需配置项与模板定义 -> 组装完整配置值再写入。敏感字段可引用已有环境变量：`printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root`；受控完整文件可用 `ad config set MYSQL_191 --stdin < connection.json`，不要把真实密码直接写入命令文本。
 - 配置写入校验失败自愈 (CONFIG_VALUE_INVALID)：
   - 适用现象：执行 `ad config set` 报错 `CONFIG_VALUE_INVALID`。
-  - 自愈流程：执行 `ad config schema [pkg]` 查验模式约束与受限字段 -> 修正输入数据，按整键全量替换重新写入（不支持掩码数据回写、部分更新或对象合并）。
+  - 自愈流程：执行 `ad config schema [pkg]` 查验模式约束与受限字段 -> 修正完整输入，按整键全量替换重新写入。扁平赋值与字段绑定不会合并旧对象，缺少密码等必填字段也会失败并保留旧值；不支持掩码回写或部分更新。
+- 配置与状态输入失败：
+  - 模式冲突、扁平赋值解析与路径错误均在读取 stdin 或实际写入前以参数错误退出，退出码为 2，不吞错或部分写入；不要靠追加另一种输入方式掩盖错误，完整规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+  - `--stdin` 空输入报参数错误；`--stdin-field` 空输入则绑定为空字符串，保留 BOM、换行与全部空白，不猜测 JSON。字段绑定只改变输入渠道，不自动加密或脱敏状态，状态读取可能显示原文，不能按配置安全视图的保护程度使用。

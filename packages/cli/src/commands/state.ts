@@ -17,6 +17,8 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError, NO_PROJECT_NO_LINKED_MESSAGE } from "../errors";
 import { renderResult, renderStateList, writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
+import { addStoredValueOptions, splitStoredValueArgs } from "../utils/value-input";
+import { resolveStoredValue } from "../services/value-input";
 import {
   applyTargetOptions,
   getEffectiveOptions,
@@ -434,34 +436,30 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       );
     });
 
-  // state set <key> <value>
-  applyTargetOptions(
+  // state set 只更换输入编码，不改变状态作用域和整键替换语义。
+  addStoredValueOptions(applyTargetOptions(
     stateCmd
-      .command("set <key> <value>")
-      .description("Set state key-value (supports JSON value, composite 'ns:key', and --ttl)")
+      .command("set <key> [values...]")
+      .description("Replace state using a complete value, stdin, or flat assignments after '--'")
       .option("-P, --package <id>", "Target package ID or path")
       .option("-a, --action <id>", "Action identifier scope")
       .option("-n, --namespace <ns>", "Explicit namespace scope for key")
       .option("--ttl <seconds>", "Time-To-Live expiration in seconds")
-  )
+  ))
     .option("--data-dir <path>", "Custom database storage directory")
-    .action(async (rawKey: string, rawVal: string, rawOptions: any, cmd: any) => {
+    .addHelpText("after", "\nExamples:\n  ad state set KEY '[1,2]'\n  ad state set KEY -- count:=2 nested.name=alice\n  ad state set KEY -n drafts --stdin-field content -- title=Draft < article.md\n\nEach command replaces the complete value; existing fields are not merged.")
+    .action(async (rawKey: string, values: string[], rawOptions: any, cmd: Command) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      if (!rawKey || rawVal === undefined) {
-        throw new ArgumentError("Both key and value are required for state set");
-      }
-
-      let parsedVal: unknown = rawVal;
-      try {
-        parsedVal = JSON.parse(rawVal);
-      } catch {
-        parsedVal = rawVal;
-      }
-
+      if (!rawKey) throw new ArgumentError("State key is required");
       const ttlSec = options.ttl ? parseInt(options.ttl, 10) : undefined;
       if (options.ttl && (isNaN(ttlSec!) || ttlSec! <= 0)) {
         throw new ArgumentError(`Invalid --ttl value: '${options.ttl}'. Must be a positive integer.`);
       }
+      const parsedVal = await resolveStoredValue({
+        ...splitStoredValueArgs(cmd, values),
+        fromStdin: Boolean(options.stdin),
+        stdinField: options.stdinField,
+      }, context);
 
       // 惰性作用域缓存：仅本地分支求值一次，避免远端模式触发包寻址副作用
       let scope: StateScope | undefined;
@@ -476,7 +474,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const targetScope = resolveScope(resolved);
           const address = resolveStateAddress(targetScope.effectiveKey, options, context);
 
-          await service.management?.state.set(targetScope.packageId, actionId, address.key, parsedVal as any, {
+          context?.control?.signal?.throwIfAborted();
+          await service.management?.state.set(targetScope.packageId, actionId, address.key, parsedVal, {
             namespace: address.namespace,
             ttl: ttlSec,
           });

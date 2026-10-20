@@ -255,11 +255,11 @@ export class StandaloneDispatcher {
           break;
 
         case "config":
-          code = await handleConfig(ctx, subArgs);
+          code = await handleConfig(ctx, subArgs, argv.includes("--") ? actionArgs : undefined, control?.signal);
           break;
 
         case "state":
-          code = await handleState(ctx, subArgs);
+          code = await handleState(ctx, subArgs, argv.includes("--") ? actionArgs : undefined, control?.signal);
           break;
 
         default:

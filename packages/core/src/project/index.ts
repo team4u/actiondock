@@ -59,7 +59,11 @@ export {
 
 // 动作入参解析、输出契约分析、校验与格式化（含 BOM 剥离与标准输入有界读取的单一事实源转引）
 export {
+  resolveInput,
   resolveActionInput,
+  resolveValueInput,
+  hasValueInput,
+  parseValueLiteral,
   buildActionDescribePayload,
   formatActionDetail,
   type FormatActionDetailOptions,
@@ -73,7 +77,10 @@ export {
   mapInputValidationFailure,
   stripBom,
   readStdinBounded,
+  type ResolveInputOptions,
+  type ResolveValueInputOptions,
   type ResolveActionInputOptions,
+  type InputResolutionPolicy,
   type ReadStdinBoundedOptions,
 } from "../input/index";
 export { validateActionInputValue } from "../value-validator";

@@ -256,6 +256,15 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 ### 运行时配置与状态持久化 (`ad config`, `ad state`)
 
+`config set` 与 `state set` 共用以下输入规则，独立运行入口也相同：
+
+- 完整位置值：`[value]` 必须在 `--` 前，合法 JSON 自动解码，支持根数组与标量，否则保留为字符串。`ad state set note 'a=b'` 仍写入字符串，不猜为扁平赋值。
+- 扁平对象：仅识别 `--` 后的赋值，`path=value` 保留字符串，`path:=json` 严格解析 JSON；点路径、从 0 开始的连续数组、重复或结构冲突及危险键检查均继承 `ad run`，根节点为对象。
+- 完整标准输入：`--stdin` 读取全部内容，裁剪末尾 CR/LF，再按 JSON 或普通字符串解码；空输入报参数错误。配置原有语义不变，状态新增相同能力。
+- 原始字段绑定：`--stdin-field <field>` 将 stdin 原始文本绑定为指定顶层字段的字符串值，保留 BOM、换行与全部空白，不猜测 JSON，空输入为空字符串。字段名不得为空、含点路径或危险键；可单独使用或与扁平赋值组合。
+- 互斥与错误：完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）互斥；`--stdin-field` 不与完整值或 `--stdin` 组合。模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝，不吞错或部分写入。
+- 大小与取消：管道读取沿用默认 10MiB 源字节上限与取消语义；字段绑定后最终对象序列化也受默认 10MiB 上限约束，补充字段与 JSON 转义放大均计入大小。字段绑定只改变输入渠道，不自动加密或脱敏状态。
+
 - 运行时配置管理 (`ad config`)：
   ```bash
   # 列出配置项（安全脱敏视图）
@@ -263,7 +272,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # 读取配置安全视图
   ad config get <key> [-g, --global] [-P, --package <id>]
   # 写入配置键值（全量替换，写前校验）
-  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin]
+  ad config set <key> [value] [-g, --global] [-P, --package <id>] [--stdin | --stdin-field <field>] [-- <assignments...>]
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>]
   # 查看包配置模式（通配模板单列 TEMPLATE 并统计 matchCount）
@@ -272,11 +281,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ad config env [identifier]
   ```
   - 安全脱敏视图：`ad config list` 与 `ad config get` 始终返回脱敏安全数据。敏感整项展示 `<hidden>`，未配置项展示 `<not configured>`。系统不提供任何明文查看参数，原 `--reveal` 与 `--show-secrets` 已移除；需要原值请在 Action 内通过 `ctx.config.get` 读取。
-  - 标准输入传递敏感对象：写入敏感对象时，推荐配合管道与 `--stdin` 参数传入，避免命令历史暴露凭据：
+  - 标准输入注入：敏感字段从已有环境变量读取，完整对象可从受控文件读取，避免把真实密码直接写入命令文本：
     ```bash
-    printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
+    printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
+    ad config set MYSQL_191 --stdin < connection.json
     ```
-  - 写入原子性与写前校验：全键替换写入并在写前严格校验，校验失败报 `CONFIG_VALUE_INVALID`（错误明细严禁携带实际输入值）且原值保持不变。不支持掩码回写、部分更新与对象合并。
+  - 写入原子性与写前校验：先组装完整值，再按模式校验并整键替换；缺少密码等必填字段时也报 `CONFIG_VALUE_INVALID`（错误明细严禁携带实际输入值），原值保持不变。扁平赋值不是局部更新，不支持掩码回写、部分更新与对象合并。
   - 拒绝通配符实键：`get`、`set` 与 `delete` 严格拒绝包含 `*` 的实键操作。
   - 模板诊断支持：通配模板键（如 `MYSQL_*`）单列在模式视图中并不判缺失，环境变量满足度体检自动跳过模板。列表不枚举仅在环境变量中存在的模板实例，但可按具体键执行 `get`。
   - 视图元数据：`--json` 包含 `configured`、`secret`、`source`、`value` 与 `redactedPaths`。`source` 与核心 `ConfigSource` 契约一致，仅取 `override`、`package`、`global`、`env`、`default` 或 `null`：临时覆盖（`ad run -c`）为 `override`，包级持久化为 `package`，全局持久化为 `global`，环境变量为 `env`，真实生效的声明默认值为 `default`，整链未命中为 `null`。`configured` 仅对显式来源为 `true`，`default` 与 `null` 均为 `false`；敏感默认值存在时仍会隐藏。路径使用标准 JSON Pointer，根为 `""`，属性转义采用 `~0` 与 `~1`。
@@ -292,12 +302,18 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # 读取状态值
   ad state get <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>]
   # 写入状态键值（支持秒级过期 TTL）
-  ad state set <key> <value> [--ttl <seconds>] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>]
+  ad state set <key> [value] [--ttl <seconds>] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--stdin | --stdin-field <field>] [-- <assignments...>]
   # 删除状态项
   ad state delete <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>]
   # 清空状态数据
   ad state clear [prefix] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--all]
   ```
+  - 状态仍为整键替换，不合并旧对象；`-a` Action 作用域、`-n` 命名空间、`ns:key` 复合键与 `--ttl` 秒级存活时间规则不变。
+  - 原始正文可与补充字段组合写入：
+    ```bash
+    ad state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md
+    ```
+  - 状态读取可能显示原文，不具有配置安全视图的自动脱敏保障；stdin 不是凭据安全存储机制。
 
 ---
 

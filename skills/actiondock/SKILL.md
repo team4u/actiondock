@@ -106,7 +106,15 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
   - 严格校验：正文字段缺失、非字符串或返回数据非对象时明确报错退出；`--text-field` 与 `--json`、`--async` 互斥并在执行前以退出码 2 退出。
   - 机器信封：如需程序化消费标准 JSON 信封，传入 `--json`，此时忽略默认正文注解。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消；多条后台任务可用 `ad runs watch [ids...]` 阻塞等待全部终态后聚合退出，主控后台派工拿不到 runId 时可在派工命令携带 `--request-id`，再用同标识 `ad runs watch --request-id <id>` 反查等待。
-- 配置覆盖与安全持久化：调试时使用 `-c KEY=value`（字符串）或 `-c KEY:=json`（严格 JSON 解析且数值为有限数，不物化路径，解析错误退出码 2）临时覆盖；生产使用 `ad config set <KEY> <VALUE>` 持久化注入（全量替换与写前模式校验，失败报 `CONFIG_VALUE_INVALID` 且原值不变）。复杂敏感对象推荐通过 `printf '%s' '{...}' | ad config set <KEY> -P <pkg> --stdin` 管道注入以防命令历史泄露；系统严禁回显明文，`ad config list` 与 `ad config get` 始终返回安全脱敏视图且不提供明文查看参数。拒绝 `*` 通配符实键。
+- 配置覆盖：调试时使用 `-c KEY=value`（字符串）或 `-c KEY:=json`（严格 JSON 解析且数值为有限数，不物化路径，解析错误退出码 2）临时覆盖。
+- 配置与状态写入：`ad config set <key> [value] [options] [-- <assignments...>]` 与 `ad state set <key> [value] [options] [-- <assignments...>]` 共用输入规则，独立入口也相同。完整位置值在 `--` 前，合法 JSON 自动解码（支持根数组与标量），否则为字符串；`'a=b'` 不猜为扁平赋值。仅 `--` 后识别扁平赋值，`=` 为字符串、`:=` 为严格 JSON，路径与安全检查继承 `run`。
+  - `--stdin` 读取完整值并裁剪末尾 CR/LF，再按 JSON 或字符串解码，空输入报错；`--stdin-field <field>` 则把原始文本绑定到顶层字符串字段，保留 BOM、换行与全部空白，空输入为空字符串，可与扁平赋值组合。完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）互斥，模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝。大小上限与取消语义沿用现有管道规则，详见 [cli.md](references/cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+  - 敏感字段引用已有环境变量，避免把真实密码直接写入命令文本：
+    ```bash
+    printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
+    ```
+  - 配置先组装完整值，再按模式校验并整键替换；缺少密码等必填字段时报 `CONFIG_VALUE_INVALID` 且原值不变，不合并旧对象。`ad config list` 与 `ad config get` 始终返回安全脱敏视图且不提供明文查看参数，拒绝 `*` 通配符实键。
+  - 状态仍整键替换，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则；字段绑定只改变输入渠道，不自动加密或脱敏状态，状态读取可能显示原文，不要将其视为配置安全视图。
 
 ---
 

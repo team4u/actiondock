@@ -2,14 +2,17 @@ import { decodeStateKey, type JsonValue } from "@actiondock/sdk";
 import type { ActionSpec } from "../package/types";
 import { filterWithFallbackInfo } from "../utils/intent";
 import type { ActionDockService } from "../service/types";
-import { resolveExecutionHint } from "../errors";
+import { ActionDockError, INVALID_ARGUMENT, resolveExecutionHint } from "../errors";
 import {
-  resolveActionInput,
+  resolveInput,
+  resolveValueInput,
+  type ResolveValueInputOptions,
   formatActionDetail,
   buildActionDescribePayload,
   mapInputValidationFailure,
 } from "../input";
 import { validateActionInputValue } from "../value-validator";
+import { assertConcreteConfigKey } from "../project/config-declarations";
 import { parseDuration } from "../utils";
 import { ExitCode, type StandaloneDispatcherOptions } from "./standalone";
 
@@ -203,7 +206,7 @@ export async function handleRun(
 
   let input: JsonValue;
   try {
-    input = await resolveActionInput({
+    input = await resolveInput({
       input: inputStr,
       inputFile,
       stdinField,
@@ -332,7 +335,65 @@ function isServiceCapabilityError(err: any): boolean {
   );
 }
 
-export async function handleConfig(ctx: CommandContext, subArgs: string[]): Promise<number> {
+function parseSetInput(subArgs: string[], isState: boolean): {
+  key: string;
+  input: ResolveValueInputOptions;
+  namespace?: string;
+  ttl?: number;
+} {
+  const positional: string[] = [];
+  const input: ResolveValueInputOptions = {};
+  let namespace: string | undefined;
+  let ttl: number | undefined;
+
+  for (let i = 1; i < subArgs.length; i++) {
+    const arg = subArgs[i];
+    if (arg === "--json") continue;
+    if (arg === "--stdin") {
+      if (input.fromStdin) throw new ActionDockError(INVALID_ARGUMENT, "Duplicate --stdin option");
+      input.fromStdin = true;
+      continue;
+    }
+
+    const equals = arg.indexOf("=");
+    const option = equals < 0 ? arg : arg.slice(0, equals);
+    if (option === "--stdin-field" || (isState && ["-n", "--namespace", "--ttl"].includes(option))) {
+      const value = equals < 0 ? subArgs[++i] : arg.slice(equals + 1);
+      if (value === undefined) {
+        throw new ActionDockError(INVALID_ARGUMENT, `Option '${option}' requires a value`);
+      }
+      if (option === "--stdin-field") {
+        if (input.stdinField !== undefined) {
+          throw new ActionDockError(INVALID_ARGUMENT, "Duplicate --stdin-field option");
+        }
+        input.stdinField = value;
+      } else if (option === "--ttl") {
+        ttl = parseInt(value, 10);
+      } else {
+        namespace = value;
+      }
+    } else if (arg.startsWith("-") && !/^-\d/.test(arg)) {
+      throw new ActionDockError(INVALID_ARGUMENT, "Unknown set option");
+    } else {
+      positional.push(arg);
+      if (positional.length > 2) {
+        throw new ActionDockError(INVALID_ARGUMENT, "Only one complete positional value is allowed");
+      }
+    }
+  }
+
+  if (!positional[0]) throw new ActionDockError(INVALID_ARGUMENT, "Key is required");
+  input.value = positional[1];
+  return { key: positional[0], input, namespace, ttl };
+}
+
+export async function handleConfig(
+  ctx: CommandContext,
+  subArgs: string[],
+  flatArgs?: string[],
+  signal?: AbortSignal,
+  stdin?: NodeJS.ReadableStream
+): Promise<number> {
   const sub = subArgs[0] || "list";
 
   if (!ctx.service.management) {
@@ -383,20 +444,26 @@ export async function handleConfig(ctx: CommandContext, subArgs: string[]): Prom
   }
 
   if (sub === "set") {
-    const key = subArgs[1];
-    const rawVal = subArgs[2];
-    if (!key || rawVal === undefined) {
-      ctx.writeErr("Error: key and value required");
-      return ExitCode.INVALID_ARGUMENT;
-    }
-    let parsed: unknown = rawVal;
+    let parsed: ReturnType<typeof parseSetInput>;
+    let value: JsonValue;
     try {
-      parsed = JSON.parse(rawVal);
-    } catch {
-      parsed = rawVal;
+      parsed = parseSetInput(subArgs, false);
+      assertConcreteConfigKey(parsed.key);
+      value = await resolveValueInput({
+        ...parsed.input,
+        flatArgs,
+        signal,
+        stdin,
+        policy: { sanitizeInputErrors: true },
+      });
+      signal?.throwIfAborted();
+    } catch (err: any) {
+      return ctx.emitError(subArgs.includes("--json"), err?.code || "INVALID_ARGUMENT", err?.message || String(err), ExitCode.INVALID_ARGUMENT, {
+        details: err?.details,
+      });
     }
-    await ctx.service.management.config.set(ctx.options.packageId, key, parsed as any);
-    ctx.writeOut(`Config '${key}' updated`);
+    await ctx.service.management.config.set(ctx.options.packageId, parsed.key, value);
+    ctx.writeOut(`Config '${parsed.key}' updated`);
     return ExitCode.SUCCESS;
   }
 
@@ -423,7 +490,13 @@ function decodeStateKeyArg(key: string): { namespace: string; key: string } {
   }
 }
 
-export async function handleState(ctx: CommandContext, subArgs: string[]): Promise<number> {
+export async function handleState(
+  ctx: CommandContext,
+  subArgs: string[],
+  flatArgs?: string[],
+  signal?: AbortSignal,
+  stdin?: NodeJS.ReadableStream
+): Promise<number> {
   const sub = subArgs[0] || "list";
   let namespace: string | undefined;
   let isAll = false;
@@ -480,38 +553,33 @@ export async function handleState(ctx: CommandContext, subArgs: string[]): Promi
   }
 
   if (sub === "set") {
-    const key = subArgs[1];
-    const rawVal = subArgs[2];
-    if (!key || rawVal === undefined) {
-      ctx.writeErr("Error: key and value required");
-      return ExitCode.INVALID_ARGUMENT;
+    let parsed: ReturnType<typeof parseSetInput>;
+    let value: JsonValue;
+    try {
+      parsed = parseSetInput(subArgs, true);
+      value = await resolveValueInput({
+        ...parsed.input,
+        flatArgs,
+        signal,
+        stdin,
+        policy: { sanitizeInputErrors: true },
+      });
+      signal?.throwIfAborted();
+    } catch (err: any) {
+      return ctx.emitError(isJson, err?.code || "INVALID_ARGUMENT", err?.message || String(err), ExitCode.INVALID_ARGUMENT, {
+        details: err?.details,
+      });
     }
 
-    let ns = namespace || "";
-    let actualKey = key;
-    if (namespace === undefined) {
-      const decoded = decodeStateKeyArg(key);
+    let ns = parsed.namespace || "";
+    let actualKey = parsed.key;
+    if (parsed.namespace === undefined) {
+      const decoded = decodeStateKeyArg(parsed.key);
       ns = decoded.namespace;
       actualKey = decoded.key;
     }
 
-    let parsed: unknown = rawVal;
-    try {
-      parsed = JSON.parse(rawVal);
-    } catch {
-      parsed = rawVal;
-    }
-
-    let ttl: number | undefined;
-    for (let i = 3; i < subArgs.length; i++) {
-      if (subArgs[i] === "--ttl" && i + 1 < subArgs.length) {
-        ttl = parseInt(subArgs[++i], 10);
-      } else if (subArgs[i].startsWith("--ttl=")) {
-        ttl = parseInt(subArgs[i].slice(6), 10);
-      }
-    }
-
-    await ctx.service.management.state.set(ctx.options.packageId, "", actualKey, parsed as any, { namespace: ns, ttl });
+    await ctx.service.management.state.set(ctx.options.packageId, "", actualKey, value, { namespace: ns, ttl: parsed.ttl });
     const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
     ctx.writeOut(`State '${displayKey}' updated`);
     return ExitCode.SUCCESS;

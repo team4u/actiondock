@@ -111,6 +111,7 @@
   - 顶层 `secret: true` 隐藏整项；模式中的 `secret: true` 隐藏对应节点。未知字段和类型不符的节点保守隐藏；已经整节点隐藏时不要求 `items` 或 `additionalProperties`。
   - Action 的 `ctx.config.get` 对最终生效值执行模式校验，失败报 `CONFIG_VALUE_INVALID`，错误只包含键名、路径和原因。没有配置时仍返回 `undefined` 或调用方默认值；外层 `required` 只参与诊断。
   - 管理视图不会修改执行原值，也不提供明文读取能力。全局管理脱敏合并各包保护范围；全局写入须通过所有匹配模式。避免将凭据放进清单默认值或枚举约束，对外声明会清理这些敏感内容。
+  - `ad config set` 的完整位置值、`--stdin`、扁平赋值及 `--stdin-field` 都先组装完整值，再按模式校验并整键替换，不做部分更新或对象合并。缺少密码等必填字段时报 `CONFIG_VALUE_INVALID` 并保留旧值；字段绑定不意味着保留其他旧字段，完整输入规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
 
 - 清单字段说明：
   - `actions`：声明 Action 标识符、执行源码入口、描述以及输入输出契约。其中 `inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范，推荐在字段或根对象层级添加 `examples` 示例数组，增强智能体参数识别精度。
@@ -199,6 +200,9 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 | `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
 | `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
 | `ctx.run` | `{ id: string; rootId: string; parentId?: string }` | 当前执行任务追踪标识与调用链路快照 |
+
+- 输入解析复用：核心 `resolveInput` 与 `resolveValueInput` 共用解码能力，供 `run`、配置、状态及独立入口复用，不由各命令复制扁平规则。`set` 保留完整位置值的 JSON 或字符串解码，扁平赋值仅在 `--` 后生效；原始字段绑定保留全部文本，沿用管道大小上限与取消语义，已知模式冲突、赋值解析与路径错误先于 stdin 读取或实际写入以退出码 2 拒绝。
+- 状态边界：`ad state set` 共用配置写入的输入方式，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则，仍整键替换而非合并。`--stdin-field` 只改变输入渠道，不自动加密或脱敏状态；状态读取可能显示原文，不要将配置原值转存到状态并假定仍受配置安全视图保护。
 
 ---
 

@@ -169,8 +169,8 @@ export async function readStreamLine(stream: NodeJS.ReadableStream): Promise<str
  * 委托 readStdinBounded 统一收集：保留宽松 UTF-8 解码与 BOM，
  * 补齐默认 10MB 上限保护，流错误通过 INPUT_FILE_READ_FAILED 透传。
  */
-export async function readEntireStdin(stream: NodeJS.ReadableStream = process.stdin): Promise<string> {
-  const content = await readStdinBounded(stream, { strictUtf8: false });
+export async function readEntireStdin(stream: NodeJS.ReadableStream = process.stdin, signal?: AbortSignal): Promise<string> {
+  const content = await readStdinBounded(stream, { strictUtf8: false, signal });
   return content.replace(/[\r\n]+$/, "");
 }
 
@@ -200,7 +200,7 @@ export async function resolveConfigValueInput(options: {
   // 2. 如果显式指定了 --stdin 选项
   if (useStdin) {
     const stream = context?.stdin || process.stdin;
-    const val = await readEntireStdin(stream);
+    const val = await readEntireStdin(stream, context?.control?.signal);
     if (!val) {
       throw new ArgumentError("No data received from standard input");
     }
@@ -209,7 +209,7 @@ export async function resolveConfigValueInput(options: {
 
   // 3. 如果上下文提供了自定义 stdin 流
   if (context?.stdin) {
-    const val = await readEntireStdin(context.stdin);
+    const val = await readEntireStdin(context.stdin, context.control?.signal);
     if (!val) {
       throw new ArgumentError(
         "Value is required for config set. Omit value in an interactive terminal to enter securely, or pass via stdin."
@@ -229,7 +229,7 @@ export async function resolveConfigValueInput(options: {
   }
 
   // 5. 非交互式终端环境（例如管道输入 echo "val" | ad config set key）
-  const val = await readEntireStdin(process.stdin);
+  const val = await readEntireStdin(process.stdin, context?.control?.signal);
   if (!val) {
     throw new ArgumentError(
       "Value is required for config set. Omit value in an interactive terminal to enter securely, or pass via stdin."

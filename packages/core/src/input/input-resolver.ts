@@ -21,6 +21,7 @@ import {
 } from "./flat-materializer";
 import {
   validateJsonValue,
+  hasDangerousKeys,
   DEFAULT_MAX_JSON_DEPTH,
 } from "../value-validator";
 import { scanJsonDepth } from "./json-depth-scanner";
@@ -47,7 +48,7 @@ export interface InputResolutionPolicy {
   sanitizeInputErrors?: boolean;
   /** 是否仅允许字节流输入（默认 false） */
   byteStreamOnly?: boolean;
-  /** 原始 stdin 文本模式：保留开头 BOM，UTF-8 编码失败视为读取失败（默认 false，仅作用于 stdinField） */
+  /** 原始 stdin 文本模式：保留开头 BOM，UTF-8 编码失败视为读取失败（stdinField 默认启用） */
   stdinRawText?: boolean;
 }
 
@@ -63,19 +64,22 @@ export async function readStdin(
 }
 
 /**
- * Action 执行输入解析选项。
+ * 通用 JSON 值输入解析选项；扁平参数与字段绑定产生对象，完整 JSON 可以是任意合法值。
  */
-export interface ResolveActionInputOptions {
+export interface ResolveInputOptions {
   input?: string;
   inputFile?: string;
   flatArgs?: string[];
-  /** 将 stdin 完整原始文本绑定为指定顶层入参字段的字符串值（与 input / inputFile 互斥，可与 flatArgs 组合） */
+  /** 将 stdin 完整原始文本绑定为指定顶层字段的字符串值（与 input / inputFile 互斥，可与 flatArgs 组合） */
   stdinField?: string;
   stdin?: NodeJS.ReadableStream;
   flatOptions?: FlatParserOptions & FlatMaterializerOptions;
   policy?: InputResolutionPolicy;
   signal?: AbortSignal;
 }
+
+/** Action 输入沿用通用解码选项，Action 专属契约校验由执行边界负责。 */
+export type ResolveActionInputOptions = ResolveInputOptions;
 
 /**
  * 针对面向 Agent 场景对结构化输入错误进行隐私脱敏。
@@ -333,8 +337,30 @@ export function parseJson(
   return parsed as JsonValue;
 }
 
+function checkValueProperties(value: JsonValue): JsonValue {
+  if (hasDangerousKeys(value)) {
+    throw invalidJson("Input value contains prohibited prototype pollution properties", { reason: "FORBIDDEN_PROPERTY" });
+  }
+  return value;
+}
+
 /**
- * 统一解析 Action 执行入参。
+ * 解析一个完整值：合法 JSON 解码为对应类型，非 JSON 文本保留为字符串。
+ * 只有语法错误允许回退；大小、深度、有限数和危险属性校验失败必须透传。
+ */
+export function parseValueLiteral(text: string, policy?: InputResolutionPolicy): JsonValue {
+  try {
+    return checkValueProperties(parseJson(text, "value", policy));
+  } catch (error) {
+    if (error instanceof InputError && error.code === "INVALID_JSON" && !Array.isArray(error.details) && error.details?.reason === "SYNTAX_ERROR") {
+      return text;
+    }
+    throw policy?.sanitizeInputErrors ? sanitizeError(error, "inline-json") : error;
+  }
+}
+
+/**
+ * 统一解析 JSON 值及结构化输入，不承担 Action、配置或状态的业务校验。
  *
  * 输入模式仲裁规则（Input Mode Arbitration）：
  * - effectiveFlat: flatArgs 存在且 length > 0
@@ -351,10 +377,10 @@ export function parseJson(
  * - stdinField 的 stdin 读取为原始文本绑定：不做 JSON 解析、不剥 BOM、保留首尾空白，空 stdin 得到空字符串。
  *
  * @param options 输入解析选项
- * @returns 解析后的 JSON 对象
+ * @returns 解析后的 JSON 值
  */
-export async function resolveActionInput(
-  options: ResolveActionInputOptions
+export async function resolveInput(
+  options: ResolveInputOptions
 ): Promise<JsonValue> {
   const effectiveFlat = (options.flatArgs?.length ?? 0) > 0;
   const hasInlineJson = options.input !== undefined;
@@ -364,7 +390,7 @@ export async function resolveActionInput(
   // stdin 字段绑定与完整 JSON 来源（内联 / 文件 / stdin JSON）严格互斥
   if (hasStdinField && (hasInlineJson || hasFileJson)) {
     const err = inputConflict(
-      "Input options conflict: --stdin-field binds raw stdin text to an action input field and cannot be combined with inline JSON (-i/--input) or file input (-f/--input-file).",
+      "Input options conflict: --stdin-field binds raw stdin text to a top-level field and cannot be combined with inline JSON (-i/--input) or file input (-f/--input-file).",
       {
         reason: "MULTIPLE_INPUT_MODES",
         hasFlatArgs: effectiveFlat,
@@ -518,4 +544,58 @@ export async function resolveActionInput(
   }
 
   return {};
+}
+
+/** Action 入参复用同一解码器，避免各命令的扁平路径与 stdin 绑定语义漂移。 */
+export const resolveActionInput = resolveInput;
+
+/** 完整值写入的输入选项；业务层仍负责声明校验与整键替换。 */
+export interface ResolveValueInputOptions extends Pick<ResolveInputOptions, "flatArgs" | "stdinField" | "stdin" | "signal" | "policy" | "flatOptions"> {
+  value?: string;
+  fromStdin?: boolean;
+}
+
+export function hasValueInput(input: ResolveValueInputOptions): boolean {
+  return input.value !== undefined || input.flatArgs !== undefined || Boolean(input.fromStdin) || input.stdinField !== undefined;
+}
+
+/** 先仲裁来源再读流，配置、状态及独立运行入口使用同一完整值解码规则。 */
+export async function resolveValueInput(options: ResolveValueInputOptions): Promise<JsonValue> {
+  options.signal?.throwIfAborted();
+  const wholeModes = Number(options.value !== undefined) + Number(Boolean(options.fromStdin));
+  const structured = options.flatArgs !== undefined || options.stdinField !== undefined;
+  if (wholeModes + Number(structured) > 1) {
+    throw inputConflict("Complete value, --stdin, and structured input are mutually exclusive; --stdin-field may only be combined with flat assignments.", { reason: "MULTIPLE_INPUT_MODES" });
+  }
+  if (structured) {
+    if (options.stdinField === undefined && options.flatArgs?.length === 0) {
+      throw invalidFlatArgument("At least one flat assignment is required after '--'.", { reason: "MISSING_ASSIGNMENT" });
+    }
+    const value = checkValueProperties(await resolveInput(options));
+    options.signal?.throwIfAborted();
+    return value;
+  }
+  let text = options.value;
+  if (options.fromStdin) {
+    try {
+      text = await readStdinBounded(options.stdin || process.stdin, {
+        maxInputBytes: options.policy?.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES,
+        signal: options.signal,
+        strictUtf8: options.policy?.strictUtf8 ?? false,
+        rawText: true,
+        byteStreamOnly: options.policy?.byteStreamOnly,
+      });
+      // 完整 stdin 值保留原配置命令的末尾换行裁剪；字段绑定则原样保留文本。
+      text = text.replace(/[\r\n]+$/, "");
+    } catch (error) {
+      throw options.policy?.sanitizeInputErrors ? sanitizeError(error, "stdin") : error;
+    }
+    if (text.length === 0) throw invalidFlatArgument("No data received from standard input", { reason: "MISSING_VALUE" });
+  }
+  if (text === undefined) {
+    throw invalidFlatArgument("A complete value, flat assignments, --stdin, or --stdin-field is required.", { reason: "MISSING_VALUE" });
+  }
+  const value = parseValueLiteral(text, options.policy);
+  options.signal?.throwIfAborted();
+  return value;
 }

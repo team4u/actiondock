@@ -1,6 +1,8 @@
 import { readStdinBounded, stripBom } from "@actiondock/core/project";
 
 export {
+  resolveInput,
+  type ResolveInputOptions,
   resolveActionInput,
   type ResolveActionInputOptions,
   parseJson,

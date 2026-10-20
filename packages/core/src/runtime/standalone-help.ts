@@ -59,7 +59,13 @@ export function printHelp(
   writeOut("  <cmd> run <id> [--stdin-field <field>] [-- <assignments...>]");
   writeOut("                                             Bind raw stdin text to an input field");
   writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
+  writeOut("  <cmd> config set <key> [<value> | --stdin]");
+  writeOut("  <cmd> config set <key> [--stdin-field <field>] [-- <assignments...>]");
   writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
+  writeOut("  <cmd> state set <key> [<value> | --stdin] [-n <namespace>] [--ttl <seconds>]");
+  writeOut("  <cmd> state set <key> [--stdin-field <field>] [-n <namespace>] [--ttl <seconds>] [-- <assignments...>]");
+  writeOut("                                             set 整键替换；完整值、--stdin 与结构化输入互斥");
+  writeOut("                                             扁平赋值：field=text 或 field:=json；--stdin-field 保留原始正文");
   writeOut("\nGlobal options:");
   writeOut("  --data-dir <path>                           Custom runtime database directory");
   writeOut("  --config <KEY=val|KEY:=json>                Temporary config override");

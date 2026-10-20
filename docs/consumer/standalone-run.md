@@ -140,7 +140,11 @@ node ./entry.mjs run list-prs --json -- repo=team4u/actiondock
 
 ## 配置与持久化数据管理
 
-独立入口内置了基于 SQLite 的配置与状态存储管理：
+独立入口内置了基于 SQLite 的配置与状态存储管理，`config set` 与 `state set` 使用与 `ad` 相同的输入规则：
+
+- 完整位置值放在 `--` 前，合法 JSON 自动解码（含根数组与标量），否则作为字符串；`'a=b'` 仍是字符串。仅 `--` 后识别扁平赋值，`=` 为字符串、`:=` 为严格 JSON，点路径、连续数组、重复与结构冲突及危险键检查均复用 `run` 规则。
+- `--stdin` 读取全部 stdin，裁剪末尾 CR/LF，再按 JSON 或普通字符串解码，空输入报错。`--stdin-field <field>` 将原始文本绑定为指定顶层字符串字段，保留 BOM、换行与全部空白，不猜测 JSON，空输入为空字符串，可与扁平赋值组合。
+- 完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）互斥。模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝，不吞错或部分写入。管道读取与字段绑定沿用默认 10MiB 源字节及最终对象序列化大小上限，支持取消。
 
 ### 凭据与配置管理
 
@@ -153,12 +157,21 @@ node ./entry.mjs config list
 # 获取特定配置项的值
 node ./entry.mjs config get GITHUB_TOKEN
 
-# 设置持久化配置项
+# 写入配置的命令形态
+# node ./entry.mjs config set <key> [value] [options] [-- <assignments...>]
 node ./entry.mjs config set GITHUB_TOKEN ghp_xxxxxxxxx
+
+# 从已有环境变量绑定密码字段，其他字段使用扁平赋值
+printf '%s' "$MYSQL_PASSWORD" | node ./entry.mjs config set MYSQL_191 --stdin-field password -- host=localhost port:=3306 username=root
+
+# 从受控文件读取完整值
+node ./entry.mjs config set MYSQL_191 --stdin < connection.json
 
 # 删除配置项
 node ./entry.mjs config delete GITHUB_TOKEN
 ```
+
+配置值组装完整后按模式校验，再整键替换；缺少密码等必填字段时报 `CONFIG_VALUE_INVALID` 并保留旧值，不做局部更新或对象合并。`config list` 与 `config get` 返回安全脱敏视图，不提供明文查看参数。
 
 亦可在执行命令时直接通过操作系统环境变量传入配置：
 
@@ -166,9 +179,9 @@ node ./entry.mjs config delete GITHUB_TOKEN
 GITHUB_TOKEN=ghp_xxxxxxxxx node ./entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
 ```
 
-### 查看持久化状态数据
+### 读写持久化状态数据
 
-可通过 `state` 子命令查看 Action 写入的持久化状态：
+可通过 `state` 子命令管理 Action 的持久化状态：
 
 ```bash
 # 列出当前包下的状态键列表
@@ -176,7 +189,13 @@ node ./entry.mjs state list
 
 # 查看特定状态键的值
 node ./entry.mjs state get <key>
+
+# 写入状态的命令形态
+# node ./entry.mjs state set <key> [value] [options] [-- <assignments...>]
+node ./entry.mjs state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md
 ```
+
+状态写入仍为整键替换，不合并旧对象；`-a` Action 作用域、`-n` 命名空间、`ns:key` 复合键与 `--ttl` 规则不变。字段绑定只改变输入渠道，不自动加密或脱敏；状态读取可能显示原文，不具有配置安全视图的保护。
 
 ---
 

@@ -50,11 +50,17 @@ ad run sample.greet -c CONFIG_OBJ:='{"timeout":3000}' -- name=ActionDock
 ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
-写入复杂或敏感对象时，推荐使用管道从标准输入传入，避免密钥残留于命令历史：
+写入命令形态为 `ad config set <key> [value] [options] [-- <assignments...>]`。敏感字段可从已有环境变量读取，其他字段使用扁平赋值；完整对象也可从受控文件读取，避免把真实密码直接写入命令文本：
 
 ```bash
-printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
+printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
+ad config set MYSQL_191 --stdin < connection.json
 ```
+
+- 完整位置值在 `--` 前，合法 JSON 自动解码（支持根数组与标量），否则作为字符串；`'a=b'` 不会被猜成扁平赋值。仅 `--` 后识别扁平赋值，`=` 保留字符串，`:=` 严格解析 JSON，支持点路径与连续数组，检查规则与 `ad run` 一致。
+- `--stdin` 读取完整值，裁剪末尾 CR/LF，按 JSON 或普通字符串解码，空输入报错；`--stdin-field <field>` 将原始文本绑定顶层字符串字段，保留 BOM、换行与全部空白，不解析 JSON，空输入为空字符串，可与扁平赋值组合。
+- 完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）互斥；模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝。管道输入沿用大小上限与取消语义，详见 [CLI 参考](../reference/cli.md#配置与状态管理)。
+- 扁平赋值同样先组装完整对象再按模式校验，不会合并旧配置；缺少密码等必填字段时失败并保留原值。字段绑定只改变输入渠道，不自动加密；同语法的 `ad state set` 也不自动脱敏，状态读取可能显示原文。
 
 ### 全局跨包持久化配置
 

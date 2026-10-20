@@ -26,7 +26,7 @@ import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
-  resolveActionInput,
+  resolveInput,
   resolveLocalPackageRoot,
   resolveTimeoutMs,
   parseConfigOverrideAssignment,
@@ -139,7 +139,7 @@ export async function executeAction(
   const effectiveSignal = effectiveControl?.signal;
 
   const effectiveFlatArgs = flatArgs ?? options.flatArgs;
-  const input = await resolveActionInput({
+  const input = await resolveInput({
     input: options.input,
     inputFile: options.inputFile,
     flatArgs: effectiveFlatArgs && effectiveFlatArgs.length > 0 ? effectiveFlatArgs : undefined,

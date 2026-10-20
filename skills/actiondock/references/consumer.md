@@ -133,7 +133,14 @@ npx skills remove <skill-name>
 - **第四阶段：确定性执行调用**：
   - 规范调用语法：推荐使用 `ad run <action> [control-options] -- <assignments...>`。
   - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`-c/--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
-  - 单次调用配置覆盖：支持通过 `-c KEY=value`（纯字符串）或 `-c KEY:=json`（严格解析为 JSON 且要求所有数值为有限数，键名按字面处理，点号不生成嵌套对象，解析失败退出码 2）临时覆盖配置；生产持久化配置通过 `ad config set` 注入（支持使用 `--stdin` 注入复杂敏感对象，写前严格按模式校验，失败抛出 `CONFIG_VALUE_INVALID` 且保持原值不变）。系统始终输出安全脱敏视图且不提供明文查看参数，绝不回显敏感明文。拒绝通配符 `*` 实键。
+  - 单次调用配置覆盖：支持通过 `-c KEY=value`（纯字符串）或 `-c KEY:=json`（严格解析为 JSON 且要求所有数值为有限数，键名按字面处理，点号不生成嵌套对象，解析失败退出码 2）临时覆盖配置。
+  - 持久化配置：`ad config set <key> [value] [options] [-- <assignments...>]` 支持完整位置值（JSON 或字符串，含根数组与标量）或 `--stdin` 完整值输入，也支持仅 `--` 后的扁平赋值及 `--stdin-field <field>` 原始文本绑定。完整位置值、`--stdin`、结构化模式互斥，字段绑定只能与扁平赋值组合；模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝。安全示例：
+    ```bash
+    printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
+    ad config set MYSQL_191 --stdin < connection.json
+    ```
+    - `--stdin` 裁剪末尾 CR/LF，空输入报错；字段绑定保留 BOM、换行与全部空白，不猜测 JSON，空输入为空字符串。完整边界及大小与取消规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+    - 所有方式均先组装完整值，再按模式校验并整键替换；缺少密码等必填字段时报 `CONFIG_VALUE_INVALID`，原值不变，不合并旧对象。配置管理返回安全脱敏视图，不提供明文查看参数，拒绝通配符 `*` 实键。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
@@ -157,4 +164,4 @@ npx skills remove <skill-name>
 - **第六阶段：跨生命周期状态与运行追踪**：
   - 异步任务执行 `ad runs show <runId>` 追踪执行进度与事件流；必要时执行 `ad runs cancel <runId>` 取消。
   - 多条后台任务用 `ad runs watch [ids...]` 阻塞等待全部终态聚合退出；后台派工无 runId 时以 `--request-id` 反查等待。
-  - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。
+  - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。`ad state set <key> [value] [options] [-- <assignments...>]` 与配置写入共用上述输入规则，仍整键替换，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则；例如 `ad state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md`。字段绑定只改变输入渠道，不自动加密或脱敏状态，状态读取可能显示原文，不具有配置安全视图的保护。

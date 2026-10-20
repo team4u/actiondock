@@ -239,6 +239,15 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 ### 配置与状态管理
 
+`ad config set` 与 `ad state set` 使用相同的值输入规则，独立运行入口也保持一致：
+
+- 完整位置值：`[value]` 必须位于 `--` 前；合法 JSON 自动解码（支持根数组与标量），否则保留为普通字符串。例如 `ad state set note 'a=b'` 仍写入字符串，不猜测为扁平赋值。
+- 扁平对象：仅识别 `--` 后的赋值，`path=value` 保留字符串，`path:=json` 严格解析 JSON；点路径、从 0 开始的连续数组、重复或结构冲突及危险键检查均继承 `ad run`，根节点为对象。
+- 完整标准输入：`--stdin` 读取全部 stdin，裁剪末尾 CR/LF，再按 JSON 或普通字符串解码；空输入报参数错误。配置原有语义不变，状态也支持此方式。
+- 原始字段绑定：`--stdin-field <field>` 将 stdin 原始文本绑定到指定顶层字段，不猜测 JSON，保留 BOM、换行与全部空白，空输入绑定为空字符串。字段名不得为空、包含点路径或危险键；可单独使用或与 `--` 后扁平赋值组合。
+- 互斥与失败边界：完整位置值、`--stdin`、结构化模式（扁平赋值及字段绑定）互斥；`--stdin-field` 不与完整值或 `--stdin` 组合。输入模式冲突、赋值解析与路径错误在读取 stdin 或写入前以参数错误退出，退出码为 2，不吞错或部分写入。
+- 管道读取沿用默认 10MiB 源字节上限与取消语义；字段绑定后最终对象的序列化大小也受默认 10MiB 上限约束，补充字段与 JSON 转义放大均计入大小。字段绑定只改变输入渠道，不自动加密或脱敏状态。
+
 - 配置管理 (`ad config`)：
   ```bash
   # 列出配置项（安全视图）
@@ -246,18 +255,19 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   # 读取配置安全视图
   ad config get <key> [-g, --global] [-P, --package <id>] [--data-dir <path>] [--json]
   # 写入配置键值（全量替换，写前校验）
-  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin] [--data-dir <path>]
+  ad config set <key> [value] [-g, --global] [-P, --package <id>] [--stdin | --stdin-field <field>] [--data-dir <path>] [-- <assignments...>]
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 查看项目配置声明模式
   ad config schema [identifier] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
   - 安全脱敏与选项表现：`ad config list` 与 `ad config get` 始终返回安全脱敏数据。敏感整项在终端中展示为 `<hidden>`，未配置项展示为 `<not configured>`。系统不提供任何明文查看参数，原 `--reveal` 与 `--show-secrets` 已移除；需要原值请在 Action 内通过 `ctx.config.get` 读取。
-  - 标准输入注入敏感对象：写入包含敏感字段的对象配置时，使用 `--stdin` 避免命令行历史记录泄漏真实值：
+  - 标准输入注入：敏感字段可从已有环境变量读取，完整对象也可从受控文件读取，避免把真实密码直接写入命令文本：
     ```bash
-    printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
+    printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
+    ad config set MYSQL_191 --stdin < connection.json
     ```
-  - 写入约束与校验：所有写入执行整键全量替换并在写入前严格按模式校验，校验失败抛出 `CONFIG_VALUE_INVALID` 且原有配置保持不变。不支持掩码数据直接回写、不支持部分更新与对象合并。
+  - 写入约束与校验：先组装完整值，再严格按模式校验并整键替换；缺少密码等必填字段时也会报 `CONFIG_VALUE_INVALID`，原有配置保持不变。不支持掩码数据直接回写、部分更新与对象合并，扁平赋值也不是局部更新。
   - 拒绝通配符实键：`ad config get`、`ad config set` 与 `ad config delete` 严格拒绝包含 `*` 的实键操作。
   - 模式查看：`ad config schema` 将通配模板单独归入 `TEMPLATE` 列并统计 `matchCount`，不判定缺失。具体配置键仅来源于持久化存储及固定参数覆盖，不枚举仅在环境变量中存在的模板实例。`--json` 视图中的 `source` 与核心 `ConfigSource` 契约一致，仅取 `override`、`package`、`global`、`env`、`default` 或 `null`（未命中），临时覆盖可见为 `override`，不再使用 `project` 或 `remote` 别名。
 
@@ -268,12 +278,18 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   # 读取状态值
   ad state get <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--data-dir <path>] [--json]
   # 写入状态键值（支持存活时间秒数）
-  ad state set <key> <value> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--ttl <seconds>] [--data-dir <path>]
+  ad state set <key> [value] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--ttl <seconds>] [--stdin | --stdin-field <field>] [--data-dir <path>] [-- <assignments...>]
   # 删除状态项
   ad state delete <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--data-dir <path>]
   # 清空状态数据
   ad state clear [prefix] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--all] [--data-dir <path>]
   ```
+  - 状态写入仍为整键替换，不合并旧对象；`-a` Action 作用域、`-n` 命名空间、`ns:key` 复合键与 `--ttl` 规则不变。
+  - 原始正文与补充字段可组合写入：
+    ```bash
+    ad state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md
+    ```
+  - 状态读取可能显示原文，不具有配置安全视图的自动脱敏保障；不要因使用 stdin 就将状态视为凭据存储。
 
 ---
 
