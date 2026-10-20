@@ -1,10 +1,9 @@
 import type { ConfigItemDefinition } from "../project/types";
-import type { ConfigValueView } from "../service/types";
-import { ActionDockError, INVALID_ARGUMENT } from "../errors";
+import { CONFIG_SOURCES, type ConfigSource, type ConfigValueView } from "../service/types";
+import { ActionDockError, PROTOCOL_UNSUPPORTED } from "../errors";
 import {
   assertConcreteConfigKey,
   assertValidConfigDeclarations,
-  isConfigTemplate,
   resolveConfigDeclaration,
 } from "../project/config-declarations";
 import {
@@ -20,20 +19,63 @@ export interface FetchRemoteConfigOptions extends RemoteClientRequestOptions {
   localDeclarations?: Record<string, ConfigItemDefinition>;
   /** 提供当前目录声明时，仅在响应包标识匹配后启用。 */
   localPackageId?: string;
-  onWarning?: (message: string) => void;
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** 在核心边界归一化配置视图；旧响应无法证明安全的值保守隐藏。 */
+/** 判定远端响应中的 source 是否为合法 ConfigSource（含 null）；合法值单一事实源为 CONFIG_SOURCES 元组。 */
+function isValidConfigSource(source: unknown): source is ConfigSource | null {
+  return source === null || (typeof source === "string" && (CONFIG_SOURCES as readonly string[]).includes(source));
+}
+
+/** 在核心边界校验配置安全视图契约：来源合法、状态与值自洽，不满足即拒绝；诊断不携带配置原文。 */
+function assertValidConfigValueView(item: any): void {
+  if (!isRecord(item) || typeof item.key !== "string" || typeof item.configured !== "boolean" || typeof item.secret !== "boolean" ||
+      !isValidConfigSource(item.source) || !Array.isArray(item.redactedPaths) ||
+      item.redactedPaths.some((path: unknown) => typeof path !== "string")) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, "Remote configuration view violates the config view protocol: source must be one of override/package/global/env/default/null and metadata must be complete");
+  }
+  // source null 仅代表未命中：不得携带生效值或隐藏路径，也不得宣称已配置。
+  if (item.source === null) {
+    if (item.configured !== false || item.value !== undefined || item.redactedPaths.length > 0) {
+      throw new ActionDockError(PROTOCOL_UNSUPPORTED, `Remote configuration view for '${item.key}' declares no effective source but carries configured state, a value, or redaction paths`);
+    }
+    return;
+  }
+  // default 与未命中同样不是显式配置；显式来源必须宣称已配置。
+  if (item.source === "default") {
+    if (item.configured !== false) {
+      throw new ActionDockError(PROTOCOL_UNSUPPORTED, `Remote configuration view for '${item.key}' declares a default source but claims configured state`);
+    }
+  } else if (item.configured !== true) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, `Remote configuration view for '${item.key}' declares an explicit source but claims unconfigured state`);
+  }
+  // 声明有来源就必须有实际生效值；整项隐藏可省略 value 但必须携带根隐藏路径。
+  if (item.value === undefined && !item.redactedPaths.includes("")) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, `Remote configuration view for '${item.key}' declares an effective source but omits both the value and the root redaction path`);
+  }
+}
+
+/**
+ * 在核心边界归一化配置安全视图；仅接受 configViewVersion:1 新协议。
+ * 旧协议无法证明来源与元数据真实性，统一抛出协议不支持错误，不猜测来源。
+ */
 export function normalizeRemoteConfigResponse(
   rawResponse: any,
-  options?: Pick<FetchRemoteConfigOptions, "localDeclarations" | "localPackageId" | "onWarning"> & { packageId?: string }
+  options?: Pick<FetchRemoteConfigOptions, "localDeclarations" | "localPackageId"> & { packageId?: string }
 ): any {
   if (!rawResponse || typeof rawResponse !== "object") {
-    throw new ActionDockError(INVALID_ARGUMENT, "Invalid remote configuration response");
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, "Remote configuration response violates the config view protocol: response must be an object");
+  }
+  // 新协议门槛提前到一切声明解析之前：缺失 configViewVersion:1 视为旧服务端，
+  // 直接拒绝，避免旧协议因其他字段错误先报清单/参数错误。
+  if (rawResponse.configViewVersion !== 1) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, "Remote server did not declare configViewVersion: 1; legacy configuration responses without safe view metadata are no longer supported");
+  }
+  if (!Array.isArray(rawResponse.items)) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, "Remote configuration response is missing safe views");
   }
   const remoteDeclared: Record<string, ConfigItemDefinition> = isRecord(rawResponse.declared) ? rawResponse.declared : {};
   const matchesLocalPackage = !options?.localPackageId ||
@@ -45,67 +87,30 @@ export function normalizeRemoteConfigResponse(
     resolveConfigDeclaration(remoteDeclared, key)?.item,
     resolveConfigDeclaration(localDeclared, key)?.item,
   ].filter((item): item is ConfigItemDefinition => item !== undefined);
-  const isNewProtocol = rawResponse.configViewVersion === 1;
-  let items: ConfigValueView[];
 
-  if (isNewProtocol) {
-    if (!Array.isArray(rawResponse.items)) {
-      throw new ActionDockError(INVALID_ARGUMENT, "Remote configuration response is missing safe views");
-    }
-    items = rawResponse.items.map((item: any): ConfigValueView => {
-      if (!isRecord(item) || typeof item.configured !== "boolean" || typeof item.secret !== "boolean" ||
-          typeof item.source !== "string" || !Array.isArray(item.redactedPaths) ||
-          item.redactedPaths.some((path: unknown) => typeof path !== "string")) {
-        throw new ActionDockError(INVALID_ARGUMENT, "Invalid remote configuration view metadata");
-      }
-      assertConcreteConfigKey(item.key);
-      // 路径只是保护策略，不是原值已经被替换的证据；先实际应用服务端路径。
-      const remoteSafe = redactConfigValueAtPaths(item.value, item.redactedPaths);
-      const declaredSafe = redactConfigValueForDeclarations(remoteSafe.value, declarationsFor(item.key));
-      const safe = redactConfigValueAtPaths(declaredSafe.value, [
-        ...remoteSafe.redactedPaths, ...declaredSafe.redactedPaths,
-      ]);
-      return {
-        key: item.key,
-        configured: item.configured,
-        secret: item.secret || remoteSafe.secret || declaredSafe.secret,
-        source: item.source,
-        value: safe.value,
-        redactedPaths: safe.redactedPaths,
-      };
-    });
-  } else {
-    // 兼容历史数组视图，但绝不把未知别名中的原文透传给调用者。
-    const legacyItems: any[] = Array.isArray(rawResponse) ? rawResponse
-      : Array.isArray(rawResponse.items) ? rawResponse.items
-      : Array.isArray(rawResponse.config) ? rawResponse.config : [];
-    const legacyByKey = new Map(legacyItems.filter((item) => isRecord(item) && typeof item.key === "string").map((item) => [item.key, item]));
-    const rawValues = isRecord(rawResponse.values) ? rawResponse.values
-      : Object.fromEntries([...legacyByKey].map(([key, item]) => [key, item.value]));
-    const keys = [...new Set([
-      ...Object.keys(rawValues), ...Object.keys(remoteDeclared), ...Object.keys(localDeclared),
-    ])].filter((key) => !isConfigTemplate(key));
-    items = keys.map((key): ConfigValueView => {
-      assertConcreteConfigKey(key);
-      const value = Object.hasOwn(rawValues, key) ? rawValues[key] : undefined;
-      const matching = declarationsFor(key);
-      const legacyItem = legacyByKey.get(key);
-      let safe = redactConfigValueForDeclarations(value, matching);
-      if (matching.length === 0 || legacyItem?.secret === true) {
-        safe = { value: undefined, secret: true, redactedPaths: value !== undefined ? [""] : [] };
-      }
-      if (value !== undefined && safe.secret) {
-        const message = `Remote configuration '${key}' uses a legacy view; sensitive or undeclared data is conservatively hidden.`;
-        (options?.onWarning ?? console.warn)(message);
-      }
-      return { key, configured: value !== undefined, source: "remote", ...safe };
-    });
-  }
+  const items: ConfigValueView[] = rawResponse.items.map((item: any): ConfigValueView => {
+    assertValidConfigValueView(item);
+    assertConcreteConfigKey(item.key);
+    // 路径只是保护策略，不是原值已经被替换的证据；先实际应用服务端路径。
+    const remoteSafe = redactConfigValueAtPaths(item.value, item.redactedPaths);
+    const declaredSafe = redactConfigValueForDeclarations(remoteSafe.value, declarationsFor(item.key));
+    const safe = redactConfigValueAtPaths(declaredSafe.value, [
+      ...remoteSafe.redactedPaths, ...declaredSafe.redactedPaths,
+    ]);
+    return {
+      key: item.key,
+      configured: item.configured,
+      secret: item.secret || remoteSafe.secret || declaredSafe.secret,
+      source: item.source,
+      value: safe.value,
+      redactedPaths: safe.redactedPaths,
+    };
+  });
 
   // 只返回已知安全字段，避免 spread 原响应把原始别名重新带出边界。
   return {
     ok: rawResponse.ok ?? true,
-    configViewVersion: isNewProtocol ? 1 : 0,
+    configViewVersion: 1,
     packageId: rawResponse.packageId ?? options?.packageId,
     declared: sanitizeConfigDefinitions({ ...localDeclared, ...remoteDeclared }) ?? {},
     items,
@@ -137,7 +142,7 @@ export async function fetchRemoteConfig(
   return normalizeRemoteConfigResponse(raw, { ...options, packageId });
 }
 
-/** 单键查询可解析仅由环境变量提供的模板实例；旧服务端回退到列表协议。 */
+/** 单键查询可解析仅由环境变量提供的模板实例；服务端必须返回同键完整单项视图。 */
 export async function fetchRemoteConfigItem(
   serverUrl: string,
   key: string,
@@ -146,16 +151,16 @@ export async function fetchRemoteConfigItem(
   options?: FetchRemoteConfigOptions
 ): Promise<any> {
   assertConcreteConfigKey(key);
-  try {
-    const raw = await fetchRemoteJson(serverUrl,
-      `/api/v2/config${buildQueryString({ package: packageId, key })}`,
-      token, { ...options, errorPrefix: "Failed to fetch remote configuration item" });
-    // 旧端忽略 key 查询参数并返回列表，仍可走同一安全归一化边界。
-    return normalizeRemoteConfigResponse(raw.item ? { ...raw, items: [raw.item] } : raw, { ...options, packageId });
-  } catch (error) {
-    if (!(error instanceof ActionDockError) || error.status !== 404) throw error;
-    return fetchRemoteConfig(serverUrl, token, packageId, options);
+  const raw = await fetchRemoteJson(serverUrl,
+    `/api/v2/config${buildQueryString({ package: packageId, key })}`,
+    token, { ...options, errorPrefix: "Failed to fetch remote configuration item" });
+  // 严格单项契约：新协议必须提供与请求键一致的完整 item；
+  // 真正未命中由服务端返回同键 source null 视图，不接受列表或空 items 伪装单项。
+  if (!raw || typeof raw !== "object" || raw.configViewVersion !== 1 ||
+      !isRecord(raw.item) || raw.item.key !== key) {
+    throw new ActionDockError(PROTOCOL_UNSUPPORTED, `Remote server did not return a complete single-item config view for key '${key}'; servers that ignore the key query parameter are no longer supported`);
   }
+  return normalizeRemoteConfigResponse({ ...raw, items: [raw.item] }, { ...options, packageId });
 }
 
 /** 写入仍为整键替换；服务端在持久化之前校验。 */

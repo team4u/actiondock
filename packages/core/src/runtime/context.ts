@@ -16,6 +16,7 @@ import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../proce
 import { createDefaultProcessOwner } from "../invocation/types";
 import { resolveEnvValue } from "./env";
 import { ActionDockError, INVALID_ACTION_REF, INVALID_ARGUMENT, INVALID_STATE } from "../errors";
+import type { ConfigSource } from "../service/types";
 
 /**
  * 生产级配置解析器实现。
@@ -49,9 +50,9 @@ export class RuntimeConfig implements Config {
   get<T = unknown>(key: string): T | undefined;
   get<T = unknown>(key: string, defaultValue: T): T;
   get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    // 委托 describe 五层解析链唯一事实源：整链未命中（source 为 default 且无值）时回退调用方默认值
+    // 委托 describe 五层解析链唯一事实源：整链未命中（source 为 null 且无值）时回退调用方默认值
     const resolved = this.describe<T>(key);
-    if (resolved.source === "default" && resolved.value === undefined) {
+    if (resolved.source === null && resolved.value === undefined) {
       return defaultValue;
     }
     const resolvedDecl = resolveConfigDeclaration(this.projectConfig?.config, key);
@@ -60,9 +61,9 @@ export class RuntimeConfig implements Config {
   }
 
   has(key: string): boolean {
-    // 委托 describe 五层解析链唯一事实源：default 来源且无值即视为未配置
+    // 委托 describe 五层解析链唯一事实源：来源 null 且无值即视为未配置
     const resolved = this.describe(key);
-    return !(resolved.source === "default" && resolved.value === undefined);
+    return !(resolved.source === null && resolved.value === undefined);
   }
 
   /**
@@ -70,14 +71,19 @@ export class RuntimeConfig implements Config {
    *
    * 作为五层优先级链的唯一事实源读取视图，供 app 层 getConfig 安全视图直接委托，
    * 避免重复实现解析链导致行为漂移。
+   * source 仅表达实际生效值来源；undefined 统一视为未命中并继续向低优先级解析，
+   * null/false/0/空串均为真实值；整链未命中时 source 为 null。
    */
   describe<T = unknown>(
     key: string
-  ): { source: "overrides" | "package" | "global" | "env" | "default"; value: T | undefined } {
+  ): { source: ConfigSource | null; value: T | undefined } {
     assertConcreteConfigKey(key);
-    // 1. CLI 临时参数覆写
+    // 1. 运行时固定覆盖与单次调用覆盖（值为 undefined 视为未命中，继续解析链）
     if (this.overrides.has(key)) {
-      return { source: "overrides", value: this.overrides.get(key) as T };
+      const overrideValue = this.overrides.get(key);
+      if (overrideValue !== undefined) {
+        return { source: "override", value: overrideValue as T };
+      }
     }
 
     // 2. 包级持久化存储
@@ -108,8 +114,11 @@ export class RuntimeConfig implements Config {
       return { source: "env", value: envResolved.value as T };
     }
 
-    // 5. 项目声明的默认值
-    return { source: "default", value: itemDef?.default as T | undefined };
+    // 5. 项目声明的默认值；仅存在真实生效的 default 值才报 default，整链未命中为 null
+    if (itemDef?.default !== undefined) {
+      return { source: "default", value: itemDef.default as T | undefined };
+    }
+    return { source: null, value: undefined };
   }
 }
 

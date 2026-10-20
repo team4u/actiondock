@@ -511,9 +511,9 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   }
   ```
 - 兼容性与安全说明：
-  - 响应保留 `values` 字典以保证向下兼容（顶层敏感整项替换为 `********`，对象内部敏感字段进行局部掩码）。
-  - 新增 `configViewVersion: 1` 标识结构化安全视图协议版本。
-  - `items` 数组提供完整的 `ConfigValueView` 对象列表，精确表达配置是否显式配置（`configured`）、来源（`source`）与脱敏路径（`redactedPaths`）。
+  - 响应保留 `values` 字典作为安全投影（顶层敏感整项替换为 `********`，对象内部敏感字段进行局部掩码；整项隐藏且无生效值时为 `undefined`）。
+  - `configViewVersion: 1` 标识结构化安全视图协议版本，为必选字段；缺失时客户端拒绝响应。
+  - `items` 数组提供完整的 `ConfigValueView` 对象列表，精确表达配置是否显式配置（`configured`）、来源（`source`，仅允许 `override`、`package`、`global`、`env`、`default` 或 `null`）与脱敏路径（`redactedPaths`）。
   - `masked` 字典提供敏感键到脱敏 JSON 指针路径的直接映射。
 
 ### 单项配置安全调阅 (`GET /api/v2/config/:key`)
@@ -523,7 +523,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求方式：`GET`
 - 路径参数：`:key` 为具体配置键名（拒绝 `*` 通配符）
 - 查询参数：`package` 或 `packageId`（可选）
-- 核心客户端使用等价的 `GET /api/v2/config?key=<编码后的键名>`，避免 `env` 等键名与诊断路由冲突；旧服务端忽略 `key` 时可安全回退到列表响应。
+- 核心客户端使用等价的 `GET /api/v2/config?key=<编码后的键名>`，避免 `env` 等键名与诊断路由冲突；服务端必须返回同键完整单项视图，无匹配项返回同键 `source: null` 视图，不支持 `key` 参数的旧服务端将被客户端拒绝。
 - 响应数据结构：
   ```json
   {
@@ -540,16 +540,14 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   }
   ```
 
-### 客户端归一化与版本互操作规范
+### 客户端归一化与协议契约规范
 
-ActionDock 核心客户端对新旧服务端协议执行统一归一化处理：
+ActionDock 核心客户端对远端配置响应执行统一归一化处理：
 
-- 本地与远端脱敏并集：客户端结合本地与服务端声明，严格取保护规则并集。
-- 协议来源与配置状态判定：
-  - 新协议响应直接保留服务端的真实 `source` 与 `configured` 字段。
-  - 旧协议服务端的响应由于缺乏元数据，配置来源只能归一化标识为 `remote`，无法还原真实底层来源。
-- 保守防御策略：针对旧服务端返回的完全未声明项，客户端一律保守执行整项隐藏并输出警告；严禁仅依据 `redactedPaths` 是否非空作为识别服务端版本能力的判据。
-- 旧版客户端兼容表现：旧版 CLI 可能直接展示局部脱敏对象，安全保证由新服务端的脱敏实现提供，旧客户端不会补齐模板或字段级保护。
+- 本地与远端脱敏并集：客户端结合本地与服务端声明，严格取保护规则并集；本地声明只能加强远端保护，不能撤销服务端标记。整项隐藏可合法省略 `value` 但必须携带根隐藏路径；可选敏感字段缺失时 `value` 为正常对象且 `redactedPaths` 为空列表，缺明文不等于未配置。
+- 协议版本门槛：仅接受 `configViewVersion: 1` 的响应；缺失该字段视为不受支持的旧服务端，直接抛出 `PROTOCOL_UNSUPPORTED` 协议契约错误。
+- 来源与状态自洽校验：`source` 必须为合法 `ConfigSource` 值（`override`、`package`、`global`、`env`、`default`、`null`）；`null` 与 `default` 必须 `configured: false` 且 `null` 不得携带生效值或隐藏路径，显式来源必须 `configured: true`；声明有来源时必须有实际生效值，整项隐藏可省略 `value` 但必须携带根隐藏路径。校验失败同样抛出 `PROTOCOL_UNSUPPORTED`，客户端不猜测来源、不伪造、不执行旧协议列表回退。
+- 单项查询严格契约：`GET /api/v2/config?key=` 要求服务端返回 `configViewVersion: 1` 且 `item` 为与请求键一致的单项视图；无匹配项由服务端返回同键 `source: null` 视图，客户端拒绝列表响应或缺失 `item` 的响应，不用空列表伪装单项未命中。
 
 ### 环境变量满足度体检 (`GET /api/v2/config/env`)
 

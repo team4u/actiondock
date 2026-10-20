@@ -143,9 +143,15 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 ActionDock 为管理端点与命令行提供统一的只读安全视图结构 `ConfigValueView`，其定义包含以下字段：
 
 - `key`：配置键名。
-- `configured`：布尔值。保留非默认来源显式配置语义；仅命中 `default` 声明而无外部或持久化显式写入时，该值仍为 `false`。
+- `configured`：布尔值。表示是否来自显式来源（`override`、`package`、`global`、`env`）；真实 `default` 与未配置（`source` 为 `null`）均为 `false`。
 - `secret`：布尔值。指示当前配置项是否属于敏感配置。
-- `source`：配置生效来源，包括 `package`、`global`、`env`、`default`；CLI 将 `package` 展示为 `project`，旧远端协议无法恢复来源时使用 `remote`。
+- `source`：配置生效来源，类型为 `ConfigSource`，仅能取 `override`、`package`、`global`、`env`、`default` 或 `null`：
+  - `override`：运行时固定覆盖与单次调用覆盖（如 `ad run -c`）。
+  - `package`：包级持久化存储。
+  - `global`：全局持久化存储。
+  - `env`：操作系统环境变量命中。
+  - `default`：清单声明且真实生效的默认值（含 `null`、`false`、`0`、空串等值默认）。
+  - `null`：整链未命中或无生效来源，严禁用 `default` 伪装未配置状态；`ad config schema` 中模板项与缺失项的 `source` 同样为 `null`，模板与缺失语义分别由 `status` 的 `TEMPLATE` 与 `MISSING` 表达，模板匹配数量单列 `matchCount` 呈现。
 - `value`：脱敏后的安全值。当顶层配置为敏感项且已生效时，此字段为 `undefined`；若为部分字段敏感的对象，返回已对敏感节点打码的脱敏对象。
 - `redactedPaths`：字符串数组。记录被脱敏保护的 JSON 指针路径列表：
   - 顶层配置敏感且存在生效值时，路径为根节点：`[""]`；敏感默认值也适用，即使此时 `configured` 为 `false`。
@@ -158,6 +164,14 @@ ActionDock 为管理端点与命令行提供统一的只读安全视图结构 `C
 - 执行上下文原值保障：Action 运行时调用 `ctx.config.get` 仍获取完整未脱敏的真实配置值，若配置存在模式定义，框架按最终生效值执行校验。
 - 管理容错与诊断脱敏：管理接口查看历史上写入的旧非法值时，依然能够按模式定义安全脱敏输出，不会被执行期的模式校验所阻断。
 - 声明式缺失诊断：`required` 仅作为静态诊断标识；未声明模式的旧配置项以及本地或新协议未声明的配置键保持原有解析行为。
+
+---
+
+## 来源契约与 undefined 未命中语义
+
+- `undefined` 统一视为未命中：覆盖项、包级、全局存储与环境变量解析中任一层值为 `undefined` 时继续向低优先级解析，`null`、`false`、`0`、空串均为真实值并终止解析链。
+- 来源不谎报：`RuntimeConfig.describe` 作为五层优先级链唯一事实源，返回的 `source` 严格对应实际生效层；任一层未命中不会标注该层来源。
+- 远端视图元数据强校验：核心客户端仅接受 `configViewVersion: 1` 的新协议响应，`source` 必须为合法 `ConfigSource` 值且与 `configured` 状态自洽（`null` 与 `default` 必须 `configured: false`，显式来源必须 `configured: true`；`null` 不得携带生效值或隐藏路径；声明有来源时必须有实际生效值，整项隐藏可省略 `value` 但必须携带根隐藏路径），不满足时抛出 `PROTOCOL_UNSUPPORTED` 协议契约错误，不猜测来源、不降级旧协议、不返回空安全列表掩盖错误。单键查询要求服务端返回同键完整单项视图，无匹配项由服务端返回同键 `source: null` 视图，客户端不接受列表响应伪装单项未命中。
 
 ---
 
@@ -185,5 +199,6 @@ ActionDock 为管理端点与命令行提供统一的只读安全视图结构 `C
 ## 降级回退与版本兼容预警
 
 - 底层存储保持中立：配置底层存储继续保持不加密、不执行破坏性数据迁移，解析优先级与存储机制保持稳定。
+- 旧服务端不受支持：远端配置查询要求服务端提供 `configViewVersion: 1` 完整安全视图；旧服务端响应因缺乏真实来源元数据会被客户端直接拒绝（`PROTOCOL_UNSUPPORTED`），不再执行来源猜测或保守隐藏降级。服务端回退至不支持该协议的版本后，新客户端配置查询将被拒绝；必须保留服务端协议能力或配套调整客户端版本。
 - 版本回退安全防线：在将当前运行环境回退降级至旧版本 ActionDock 之前，管理员必须为所有已持久化保存的模板实例显式补充具体键的 `secret: true` 清单声明，否则缺乏通配模板支持的旧版本将会导致已存实例明文泄露。
 - 对外声明信息脱敏：对外公布的清单声明严禁携带敏感 `default` 默认值或暴露真实敏感凭证的枚举约束，确保在 `ad info` 与模式导出时不泄露任何凭据。

@@ -9,15 +9,17 @@ import {
   type ActionDockService,
   type ConfigValueView,
 } from "@actiondock/core";
+import type { ConfigSource } from "@actiondock/core";
 
 /**
  * 配置合并视图条目：跨作用域合并后的键值展示结构。
- * source 标签语义：project（包级持久化）> global（全局持久化）> env（环境变量）> default（声明默认值）。
+ * source 与核心 ConfigSource 契约一致：override/package/global/env/default/null，
+ * 不另起显示别名。
  */
 export interface MergedConfigEntry {
   key: string;
   value?: unknown;
-  source: "project" | "global" | "env" | "default" | string;
+  source: ConfigSource | null;
   secret: boolean;
   configured: boolean;
   redactedPaths: string[];
@@ -41,7 +43,7 @@ export async function resolveMergedConfigEntry(
   service: ActionDockService
 ): Promise<{
   value?: unknown;
-  source: MergedConfigEntry["source"];
+  source: ConfigSource | null;
   secret: boolean;
   configured: boolean;
   redactedPaths: string[];
@@ -49,8 +51,7 @@ export async function resolveMergedConfigEntry(
 }> {
   const confView = await service.management?.config.get(packageId, key);
 
-  const rawSource = confView?.source ?? "default";
-  const source = rawSource === "package" ? "project" : rawSource;
+  const source: ConfigSource | null = confView?.source ?? null;
   const isSecret = confView?.secret ?? isSecretConfigKey(key, declaredItem);
   const configured = Boolean(confView?.configured);
   const redactedPaths = confView?.redactedPaths ?? [];
@@ -105,17 +106,17 @@ export async function buildMergedConfigEntries(
     const declaredItem = resolved?.item;
 
     let view: ConfigValueView | undefined;
-    let source: MergedConfigEntry["source"];
+    let source: ConfigSource | null;
 
     // 优先信任包 scope view，不用全局 view 覆盖它自己的 env/default 结果
     if (projItem) {
       view = projItem;
-      source = projItem.source === "package" ? "project" : projItem.source;
+      source = projItem.source;
     } else if (globItem) {
       view = globItem;
-      source = globItem.source === "package" ? "project" : globItem.source;
+      source = globItem.source;
     } else {
-      source = "default";
+      source = null;
     }
 
     const secret = view?.secret ?? isSecretConfigKey(key, declaredItem);

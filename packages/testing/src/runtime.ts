@@ -158,16 +158,18 @@ export class TestConfigStore implements TestConfig {
   get<T = unknown>(key: string, defaultValue?: T): T | undefined {
     assertConcreteConfigKey(key);
     const item = resolveConfigDeclaration(this.projectConfig?.config, key)?.item;
-    const overridden = Object.hasOwn(this.overrides, key);
+    // undefined 统一视为未命中：覆盖值为 undefined 时继续向存储/默认值解析，与 RuntimeConfig 一致
+    const overridden = Object.hasOwn(this.overrides, key) && this.overrides[key] !== undefined;
     let value = overridden ? this.overrides[key] : this.storage.getConfig(key);
-    if (value === undefined && !overridden) value = item?.default;
+    if (value === undefined) value = item?.default;
     validateConfigValue(key, value, item);
     return (value === undefined && !overridden ? defaultValue : value) as T | undefined;
   }
 
   has(key: string): boolean {
     assertConcreteConfigKey(key);
-    if (Object.hasOwn(this.overrides, key)) return true;
+    // undefined 覆盖不构成已配置；null/false/0/空串等 falsy 值均为真实值
+    if (Object.hasOwn(this.overrides, key) && this.overrides[key] !== undefined) return true;
     if (this.storage.getConfig(key) !== undefined) return true;
     if (resolveConfigDeclaration(this.projectConfig?.config, key)?.item.default !== undefined) return true;
     return false;
@@ -194,7 +196,10 @@ export class TestConfigStore implements TestConfig {
     }
     const stored = this.storage.listConfig();
     Object.assign(result, stored);
-    Object.assign(result, this.overrides);
+    // undefined 覆盖不得盖掉存储/默认真实值；null/false/0/空串照常生效
+    for (const [k, v] of Object.entries(this.overrides)) {
+      if (v !== undefined) result[k] = v;
+    }
     return result;
   }
 }

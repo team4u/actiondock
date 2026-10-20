@@ -53,8 +53,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
             token: target.token,
             insecure: target.insecure,
           },
-          { ...options, key },
-          context
+          { ...options, key }
         );
 
         const matchedItem = items.find((it) => it.key === key);
@@ -70,7 +69,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
           : {
               key,
               value: undefined,
-              source: "remote",
+              source: null,
               secret: false,
               configured: false,
               redactedPaths: [],
@@ -100,7 +99,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
             const payload = {
               key,
               value: confView?.value,
-              source: confView?.source ?? "default",
+              source: confView?.source ?? null,
               secret: Boolean(confView?.secret),
               configured: Boolean(confView?.configured),
               redactedPaths: confView?.redactedPaths ?? [],

@@ -1739,7 +1739,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         key,
         configured,
         secret: redacted.secret,
-        source: configured ? "global" : "default",
+        source: configured ? "global" : null,
         value: redacted.value,
         redactedPaths: redacted.redactedPaths,
       };

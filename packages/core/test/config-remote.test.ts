@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { handleConfigRoutes } from "../src/server/routes/config";
 import { normalizeRemoteConfigResponse } from "../src/client/config";
-import { CONFIG_VALUE_INVALID, INVALID_ARGUMENT } from "../src/errors";
+import { CONFIG_VALUE_INVALID, INVALID_ARGUMENT, PROTOCOL_UNSUPPORTED } from "../src/errors";
 import type { ConfigValueView } from "../src/service/types";
 
 describe("远端配置接口与客户端安全归一化", () => {
@@ -203,7 +203,7 @@ describe("远端配置接口与客户端安全归一化", () => {
     });
   });
 
-  it("客户端归一化旧版协议对未声明键安全降级隐藏并触发告警", () => {
+  it("客户端归一化旧协议响应被拒绝，不再安全降级或猜测来源", () => {
     const legacyResponse = {
       ok: true,
       values: {
@@ -217,30 +217,99 @@ describe("远端配置接口与客户端安全归一化", () => {
       },
     };
 
-    const warnings: string[] = [];
-    const normalized = normalizeRemoteConfigResponse(legacyResponse, {
-      onWarning: (msg) => warnings.push(msg),
+    // 旧服务端响应缺少 configViewVersion: 1 与真实元数据，必须明确拒绝而不是猜测来源。
+    assert.throws(
+      () => normalizeRemoteConfigResponse(legacyResponse),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 历史数组视图同样不再接受。
+    assert.throws(
+      () => normalizeRemoteConfigResponse([{ key: "KEY", value: "raw" }]),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+  });
+
+  it("新协议视图缺失元数据、非法来源或状态不自洽时拒绝", () => {
+    // 缺失 items：响应结构不完整，同属协议契约错误
+    assert.throws(
+      () => normalizeRemoteConfigResponse({ configViewVersion: 1, values: { KEY: "raw" } }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 非法 source（旧 remote 别名与任意字符串）：必须拒绝而不是透传或猜测
+    for (const badSource of ["remote", "project", "overrides", "legacy", 1]) {
+      assert.throws(
+        () => normalizeRemoteConfigResponse({
+          configViewVersion: 1,
+          packageId: "config.remote",
+          declared: {},
+          items: [{ key: "KEY", source: badSource, configured: true, secret: false, value: "raw", redactedPaths: [] }],
+        }),
+        (err: any) => err.code === PROTOCOL_UNSUPPORTED,
+        `source ${String(badSource)} 应被拒绝`
+      );
+    }
+    // source null 但宣称已配置或携带生效值/隐藏路径：状态不自洽
+    assert.throws(
+      () => normalizeRemoteConfigResponse({
+        configViewVersion: 1,
+        packageId: "config.remote",
+        declared: {},
+        items: [{ key: "KEY", source: null, configured: true, secret: false, value: undefined, redactedPaths: [] }],
+      }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // source default 却宣称已配置：状态不自洽
+    assert.throws(
+      () => normalizeRemoteConfigResponse({
+        configViewVersion: 1,
+        packageId: "config.remote",
+        declared: {},
+        items: [{ key: "KEY", source: "default", configured: true, secret: false, value: "x", redactedPaths: [] }],
+      }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 显式来源却宣称未配置：状态不自洽
+    assert.throws(
+      () => normalizeRemoteConfigResponse({
+        configViewVersion: 1,
+        packageId: "config.remote",
+        declared: {},
+        items: [{ key: "KEY", source: "package", configured: false, secret: false, value: "x", redactedPaths: [] }],
+      }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 合法 null 视图：未命中即未配置，无值无路径
+    const nullView = normalizeRemoteConfigResponse({
+      configViewVersion: 1,
+      packageId: "config.remote",
+      declared: {},
+      items: [{ key: "KEY", source: null, configured: false, secret: false, value: undefined, redactedPaths: [] }],
     });
+    assert.strictEqual(nullView.items[0].source, null);
+    assert.strictEqual(nullView.items[0].configured, false);
+    assert.strictEqual(nullView.items[0].value, undefined);
 
-    // 捕获到未声明键的警告
-    assert.ok(warnings.some((message) => message.includes("legacy.unknown")));
-
-    // 未声明键 fail-closed 隐藏
-    const unknownItem = normalized.items.find((i: any) => i.key === "legacy.unknown");
-    assert.strictEqual(unknownItem.secret, true);
-    assert.strictEqual(unknownItem.value, undefined);
-    assert.deepStrictEqual(unknownItem.redactedPaths, [""]);
-    assert.strictEqual(unknownItem.source, "remote");
-
-    // 旧版掩码项丢弃伪值并指向根
-    const maskedItem = normalized.items.find((i: any) => i.key === "legacy.masked");
-    assert.strictEqual(maskedItem.secret, true);
-    assert.strictEqual(maskedItem.value, undefined);
-    assert.deepStrictEqual(maskedItem.redactedPaths, [""]);
-
-    // 兼容 values 同步脱敏
-    assert.strictEqual(normalized.values["legacy.unknown"], "********");
-    assert.strictEqual(normalized.values["legacy.masked"], "********");
-    assert.strictEqual(normalized.values["legacy.declared"], "safe_val");
+    // 声明有来源却无值且无根隐藏路径：不合法；default 同样适用
+    for (const missingValueSource of ["package", "default", "env"] as const) {
+      assert.throws(
+        () => normalizeRemoteConfigResponse({
+          configViewVersion: 1,
+          packageId: "config.remote",
+          declared: {},
+          items: [{ key: "KEY", source: missingValueSource, configured: missingValueSource !== "default", secret: false, value: undefined, redactedPaths: [] }],
+        }),
+        (err: any) => err.code === PROTOCOL_UNSUPPORTED,
+        `source ${missingValueSource} 缺值且无根路径应被拒绝`
+      );
+    }
+    // 整项隐藏省略 value 但携带根隐藏路径：合法
+    const hiddenView = normalizeRemoteConfigResponse({
+      configViewVersion: 1,
+      packageId: "config.remote",
+      declared: {},
+      items: [{ key: "KEY", source: "package", configured: true, secret: true, value: undefined, redactedPaths: [""] }],
+    });
+    assert.strictEqual(hiddenView.items[0].value, undefined);
+    assert.deepEqual(hiddenView.items[0].redactedPaths, [""]);
   });
 });

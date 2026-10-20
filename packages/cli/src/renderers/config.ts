@@ -1,3 +1,4 @@
+import type { ConfigSource } from "@actiondock/core";
 import type { EnvCheckItem } from "../types";
 
 /**
@@ -11,7 +12,7 @@ export function renderConfigList(
   items: Array<{
     key: string;
     value?: unknown;
-    source: string;
+    source: ConfigSource | null;
     secret: boolean;
     configured?: boolean;
     redactedPaths?: string[];
@@ -75,7 +76,7 @@ export function renderConfigSchema(
   items: Array<{
     key: string;
     status: string;
-    source: string;
+    source: ConfigSource | null;
     secret: boolean;
     description: string;
     matchCount?: number;
@@ -90,13 +91,16 @@ export function renderConfigSchema(
     return lines.join("\n");
   }
 
-  lines.push(`  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(14)} ${"SECRET".padEnd(8)} DESCRIPTION`);
-  lines.push("  " + "-".repeat(85));
+  lines.push(`  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(14)} ${"MATCHES".padEnd(10)} ${"SECRET".padEnd(8)} DESCRIPTION`);
+  lines.push("  " + "-".repeat(95));
 
   const missing: string[] = [];
   for (const item of items) {
     let statusLabel: string;
-    let sourceLabel = item.source;
+    // 来源列只呈现真实 ConfigSource；模板与缺失无生效来源，显示 -
+    const sourceLabel = item.source ?? "-";
+    // 模板匹配数量单列呈现，不冒充来源
+    const matchesLabel = item.status === "TEMPLATE" ? `${item.matchCount ?? 0}` : "-";
 
     if (item.status === "SET") {
       statusLabel = "[SET]";
@@ -104,14 +108,13 @@ export function renderConfigSchema(
       statusLabel = "[DEFAULT]";
     } else if (item.status === "TEMPLATE") {
       statusLabel = "[TEMPLATE]";
-      sourceLabel = `${item.matchCount ?? 0} matches`;
     } else {
       statusLabel = "[MISSING]";
     }
 
     const secretLabel = item.secret ? "yes" : "no";
     lines.push(
-      `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${sourceLabel.padEnd(14)} ${secretLabel.padEnd(8)} ${item.description}`
+      `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${sourceLabel.padEnd(14)} ${matchesLabel.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}`
     );
 
     if (item.status === "MISSING") {

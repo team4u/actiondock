@@ -55,8 +55,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             token: remoteTargetInfo.token,
             insecure: remoteTargetInfo.insecure,
           },
-          options,
-          context
+          options
         );
 
         const entries: MergedConfigEntry[] = items.map((it) => ({
@@ -107,7 +106,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             const entries: MergedConfigEntry[] = all.map((item) => ({
               key: item.key,
               value: item.value,
-              source: "global",
+              source: item.source,
               secret: item.secret,
               configured: item.configured,
               redactedPaths: item.redactedPaths ?? [],

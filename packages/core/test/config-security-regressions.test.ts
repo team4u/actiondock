@@ -9,7 +9,7 @@ import type { ConfigItemDefinition } from "../src/project/types";
 import { redactConfigValue, redactConfigValueAtPaths, sanitizeConfigDefinitions } from "../src/storage/mask";
 import { RuntimeConfig } from "../src/runtime/context";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { CONFIG_VALUE_INVALID } from "../src/errors";
+import { CONFIG_VALUE_INVALID, PROTOCOL_UNSUPPORTED } from "../src/errors";
 import { DefaultPackageRuntime } from "../src/package/runtime";
 import { defineAction } from "@actiondock/sdk";
 
@@ -53,35 +53,29 @@ describe("配置安全边界回归", () => {
     assert.deepEqual(hidden.redactedPaths, [""]);
   });
 
-  it("旧端普通值即使等于掩码字符串也不反推敏感，模板不展开为实值", () => {
-    const safe = normalizeRemoteConfigResponse({
-      values: { NORMAL: "********" },
-      declared: { NORMAL: { type: "string" }, "MYSQL_*": connection },
-    });
-    assert.equal(safe.configViewVersion, 0);
-    assert.equal(safe.items.length, 1);
-    assert.equal(safe.items[0].secret, false);
-    assert.equal(safe.items[0].value, "********");
-  });
-
-  it("旧响应别名与无关项目声明不能绕过边界", () => {
-    const safe = normalizeRemoteConfigResponse({
-      packageId: "other.package",
-      config: [{ key: "KEY", value: "unknown-raw-secret" }],
-      debug: { rawValue: "unknown-raw-secret" },
-    }, {
-      localPackageId: "local.package",
-      localDeclarations: { KEY: { type: "string" } },
-      onWarning: () => {},
-    });
-    assert.equal(safe.items[0].value, undefined);
-    assert.equal(JSON.stringify(safe).includes("unknown-raw-secret"), false);
-    assert.equal(safe.config, undefined);
-    assert.equal(safe.debug, undefined);
-  });
-
-  it("不完整新版元数据被拒绝，非法指针保守隐藏整个值", () => {
-    assert.throws(() => normalizeRemoteConfigResponse({ configViewVersion: 1, values: { KEY: "raw" } }));
+  it("旧协议响应被拒绝：不猜测来源、不返回空安全列表掩盖错误", () => {
+    // 旧 values 字典响应无法证明来源与元数据，必须拒绝。
+    assert.throws(
+      () => normalizeRemoteConfigResponse({
+        values: { NORMAL: "********" },
+        declared: { NORMAL: { type: "string" }, "MYSQL_*": connection },
+      }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 旧别名（config 数组）响应同样拒绝，不得透传未知别名内容。
+    assert.throws(
+      () => normalizeRemoteConfigResponse({
+        packageId: "other.package",
+        config: [{ key: "KEY", value: "unknown-raw-secret" }],
+        debug: { rawValue: "unknown-raw-secret" },
+      }, { localPackageId: "local.package" }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
+    // 新协议元数据不完整同样拒绝。
+    assert.throws(
+      () => normalizeRemoteConfigResponse({ configViewVersion: 1, values: { KEY: "raw" } }),
+      (err: any) => err.code === PROTOCOL_UNSUPPORTED
+    );
     const safe = normalizeRemoteConfigResponse(response({ password: "raw" }, ["/bad~2path"]));
     assert.equal(safe.items[0].value, undefined);
     assert.deepEqual(safe.items[0].redactedPaths, [""]);

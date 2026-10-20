@@ -905,16 +905,16 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     const decl = resolveConfigDeclaration(this.projectConfig.config, key);
     // 委托 RuntimeConfig 五层优先级链单一事实源，避免重复实现解析链
     const resolved = this.ensureRuntimeConfig().describe(key);
-    // overrides 来源对外统一呈现为包级覆盖视角
-    const source = resolved.source === "overrides" ? "package" : resolved.source;
-    const configured = resolved.source !== "default";
+    // configured 显式判定：仅真实显式来源（override/package/global/env）为 true，
+    // default 与整链未命中（source null）均为 false，不得依赖与 "default" 的不等比较
+    const configured = resolved.source !== null && resolved.source !== "default";
     const redacted = redactConfigValue(resolved.value, decl?.item);
 
     return {
       key,
       configured,
       secret: redacted.secret,
-      source,
+      source: resolved.source,
       value: redacted.value,
       redactedPaths: redacted.redactedPaths,
     };

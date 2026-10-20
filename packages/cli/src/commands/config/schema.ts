@@ -4,6 +4,7 @@ import {
   redactConfigValue,
   resolveConfigDeclaration,
 } from "@actiondock/core/project";
+import type { ConfigSource } from "@actiondock/core";
 import type { Command } from "commander";
 import { notInProjectError } from "../../errors";
 import { renderConfigSchema, renderResult } from "../../renderer";
@@ -82,7 +83,8 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
                 required: false,
                 secret: isSecret,
                 status: "TEMPLATE",
-                source: "template",
+                // 模板不是生效来源，source null；模板语义由 status TEMPLATE 表达
+                source: null as ConfigSource | null,
                 description: itemDef.description || "",
                 matchCount,
               };
@@ -91,19 +93,17 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
             const mergedEntry = mergedByKey.get(key);
             const isConfigured = Boolean(mergedEntry?.configured);
 
-            let source: "project" | "global" | "env" | "default" | "missing" = "missing";
             let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
+            let source: ConfigSource | null = null;
 
-            if (isConfigured) {
+            if (isConfigured && mergedEntry?.source && mergedEntry.source !== "default") {
               status = "SET";
-              source = (mergedEntry?.source as any) || "project";
+              source = mergedEntry.source;
             } else if (itemDef.default !== undefined) {
               status = "DEFAULT";
               source = "default";
-            } else {
-              status = "MISSING";
-              source = "missing";
             }
+            // 缺失项 source null，语义由 status MISSING 表达
 
             // 严禁泄露敏感项默认值明文，统一采用核心脱敏视图
             const sanitizedDefault =
@@ -125,11 +125,11 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
 
           // 模板项不参与 missing/required 统计
           const missingRequired = items.filter(
-            (i) => i.status !== "TEMPLATE" && (i as any).required && i.status === "MISSING"
+            (i) => i.status !== "TEMPLATE" && i.required && i.status === "MISSING"
           );
           const ok = missingRequired.length === 0;
 
-          const result: Record<string, any> = {
+          const result = {
             packageId: projConfig.id,
             projectRoot: root,
             ok,
@@ -146,7 +146,7 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
 
           renderResult(result, {
             json: options.json,
-            humanFormatter: () => renderConfigSchema(items as any, projConfig.id, root) + "\n",
+            humanFormatter: () => renderConfigSchema(items, projConfig.id, root) + "\n",
             context,
           });
 

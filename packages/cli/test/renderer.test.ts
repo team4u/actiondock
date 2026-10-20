@@ -139,8 +139,9 @@ describe("CLI - Envelope & Renderer Utilities", () => {
 
   it("renders config, state, and runs list formats", () => {
     const cfg = renderConfigList([
-      { key: "API_KEY", value: "secret", source: "local", secret: true },
+      { key: "API_KEY", value: "secret", source: "env", secret: true },
       { key: "PORT", value: 3000, source: "default", secret: false },
+      { key: "MISSING", value: undefined, source: null, secret: false, configured: false, redactedPaths: [] },
     ]);
     assert.ok((cfg).includes("API_KEY"));
     assert.ok((cfg).includes("PORT"));

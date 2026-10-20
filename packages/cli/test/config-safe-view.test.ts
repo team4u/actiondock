@@ -174,11 +174,12 @@ describe("CLI Config Safe View & Template Management", () => {
     const schemaRes = await runCliAsync(["config", "schema", "--json"], tempDir);
     const schemaData = JSON.parse(schemaRes.stdout.toString());
 
-    // 检查模板项
+    // 检查模板项：source null，模板语义由 status TEMPLATE 表达
     const tmplItem = schemaData.configs.find((c: any) => c.key === "provider.*.apiKey");
     assert.ok(tmplItem);
     assert.strictEqual(tmplItem.status, "TEMPLATE");
     assert.strictEqual(tmplItem.matchCount, 1);
+    assert.strictEqual(tmplItem.source, null);
 
     // 检查带敏感默认值的项：defaultValue 不得泄露
     const secretDefItem = schemaData.configs.find((c: any) => c.key === "SECRET_WITH_DEFAULT");
@@ -198,11 +199,17 @@ describe("CLI Config Safe View & Template Management", () => {
       .map((c: any) => c.key);
     assert.deepStrictEqual(missingRequiredKeys, ["UNSET_CONFIG"]);
 
-    // 人类格式检查 renderConfigSchema
+    // 人类格式检查 renderConfigSchema：MATCHES 列单列呈现模板数量，SOURCE 列不再冒充来源
     const schemaHuman = await runCliAsync(["config", "schema"], tempDir);
     const humanText = schemaHuman.stdout.toString();
     assert.ok(humanText.includes("[TEMPLATE]"));
-    assert.ok(humanText.includes("1 matches"));
+    assert.ok(humanText.includes("MATCHES"));
+    assert.strictEqual(humanText.includes("matches"), false);
+
+    // 缺失项 source null
+    const missingItem = schemaData.configs.find((c: any) => c.key === "UNSET_CONFIG");
+    assert.strictEqual(missingItem.status, "MISSING");
+    assert.strictEqual(missingItem.source, null);
   });
 
   it("config env 跳过模板且识别嵌套 schema secret", async () => {
@@ -263,17 +270,55 @@ describe("CLI Config Safe View & Template Management", () => {
     assert.strictEqual(formatted.exitCode, 2);
   });
 
-  it("远端真实请求按包标识应用本地声明，不误选默认包且不吞清单错误", async (t) => {
+  it("远端旧协议响应被拒绝，新协议按包标识应用本地声明且不误选默认包", async (t) => {
     const { fetchRemoteConfigSafe } = await import("../src/commands/config/remote-helper");
     let responsePackage = "test.safe-view";
+    let legacyMode = false;
     const requests: URL[] = [];
-    const warnings: string[] = [];
     const server = createServer((req, res) => {
-      requests.push(new URL(req.url!, "http://localhost"));
+      const requestUrl = new URL(req.url!, "http://localhost");
+      requests.push(requestUrl);
       res.setHeader("content-type", "application/json");
+      if (legacyMode) {
+        // 旧服务端：无 configViewVersion 与 items 元数据，必须被客户端拒绝。
+        res.end(JSON.stringify({
+          packageId: responsePackage,
+          values: { DB_CONFIG: { host: "remote-host", password: "legacy-raw-password" } },
+        }));
+        return;
+      }
+      // 单键查询模拟真实服务端契约：返回 item 结构，未命中项 source null。
+      const queryKey = requestUrl.searchParams.get("key");
+      if (queryKey !== null) {
+        res.end(JSON.stringify({
+          packageId: responsePackage,
+          configViewVersion: 1,
+          declared: {},
+          item: queryKey === "DB_CONFIG"
+            ? {
+                key: "DB_CONFIG",
+                source: "package",
+                configured: true,
+                secret: true,
+                value: { host: "remote-host", password: "********" },
+                redactedPaths: ["/password"],
+              }
+            : { key: queryKey, source: null, configured: false, secret: false, value: undefined, redactedPaths: [] },
+        }));
+        return;
+      }
       res.end(JSON.stringify({
         packageId: responsePackage,
-        values: { DB_CONFIG: { host: "remote-host", password: "legacy-raw-password" } },
+        configViewVersion: 1,
+        declared: {},
+        items: [{
+          key: "DB_CONFIG",
+          source: "package",
+          configured: true,
+          secret: true,
+          value: { host: "remote-host", password: "********" },
+          redactedPaths: ["/password"],
+        }],
       }));
     });
     await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -282,20 +327,43 @@ describe("CLI Config Safe View & Template Management", () => {
     const previous = process.cwd();
     try {
       process.chdir(tempDir);
-      const safe = await fetchRemoteConfigSafe(target, { package: tempDir }, { stderr: (message) => warnings.push(message) });
+      const safe = await fetchRemoteConfigSafe(target, { package: tempDir });
       assert.equal(requests[0].searchParams.get("package"), "test.safe-view");
-      assert.deepEqual(safe.items.find((item) => item.key === "DB_CONFIG")!.value, { host: "remote-host", password: "********" });
+      const dbItem = safe.items.find((item) => item.key === "DB_CONFIG")!;
+      assert.deepEqual(dbItem.value, { host: "remote-host", password: "********" });
+      assert.equal(dbItem.source, "package");
       assert.equal(JSON.stringify(safe).includes("legacy-raw-password"), false);
 
-      responsePackage = "unrelated.package";
-      const unrelated = await fetchRemoteConfigSafe(target, {}, { stderr: (message) => warnings.push(message) });
-      assert.equal(requests[1].searchParams.has("package"), false);
-      assert.equal(unrelated.items.find((item) => item.key === "DB_CONFIG")!.value, undefined);
-      assert.ok(warnings.length > 0);
+      // 新协议下无匹配项的单键查询返回 source null 的未命中视图，不伪造 remote/default。
+      const single = await fetchRemoteConfigSafe(target, { package: tempDir, key: "MISSING_KEY" });
+      assert.equal(single.items.length, 1);
+      assert.equal(single.items[0].source, null);
+      assert.equal(single.items[0].configured, false);
+      assert.equal(single.items[0].value, undefined);
 
+      responsePackage = "unrelated.package";
+      const unrelated = await fetchRemoteConfigSafe(target, {});
+      assert.equal(requests[2].searchParams.has("package"), false);
+      // 包标识不匹配时本地声明不应用，服务端已脱敏视图按原样保留，来源不丢失。
+      const unrelatedItem = unrelated.items.find((item) => item.key === "DB_CONFIG")!;
+      assert.deepEqual(unrelatedItem.value, { host: "remote-host", password: "********" });
+      assert.equal(unrelatedItem.source, "package");
+      assert.equal(JSON.stringify(unrelated).includes("legacy-raw-password"), false);
+
+      // 旧协议响应：明确拒绝，不猜测来源，不降级为安全列表。
+      legacyMode = true;
+      responsePackage = "test.safe-view";
+      const requestsBeforeLegacy = requests.length;
+      await assert.rejects(
+        fetchRemoteConfigSafe(target, { package: tempDir }),
+        (err: any) => err.code === "PROTOCOL_UNSUPPORTED"
+      );
+      assert.equal(requests.length, requestsBeforeLegacy + 1, "旧协议拒绝前不应发出额外回退请求");
+
+      // 清单损坏时不得降级发出不受保护的请求。
       writeFileSync(join(tempDir, "actiondock.json"), "{invalid-json");
       await assert.rejects(fetchRemoteConfigSafe(target, { package: tempDir }));
-      assert.equal(requests.length, 2, "清单损坏时不得降级发出不受保护的请求");
+      assert.equal(requests.length, requestsBeforeLegacy + 1, "清单损坏时不得降级发出不受保护的请求");
     } finally {
       process.chdir(previous);
     }

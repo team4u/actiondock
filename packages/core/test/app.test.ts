@@ -379,11 +379,11 @@ Execute build and then deploy artifact.
     assert.strictEqual(host.configured, false);
     assert.strictEqual(host.source, "default");
 
-    // 2. 覆盖项优先于默认值
+    // 2. 运行时覆盖项优先于默认值，来源为 override
     const port = await app.getConfig("PORT");
     assert.strictEqual(port.value, 9000);
     assert.strictEqual(port.configured, true);
-    assert.strictEqual(port.source, "package");
+    assert.strictEqual(port.source, "override");
 
     // 3. 通过 setConfig 写入持久化配置
     await app.setConfig("DB_NAME", "actiondock_test");

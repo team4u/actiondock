@@ -58,18 +58,30 @@ export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
 export { PROTOCOL_UNSUPPORTED, SERVICE_RESULT_UNKNOWN, SERVICE_CLOSED };
 
 /**
+ * 配置来源契约（单一事实源）。
+ * 仅表达当前生效配置值的实际来源，不混入传输方式或作用域显示别名：
+ * override 为运行时固定覆盖或单次调用覆盖，package 为包级持久化，global 为全局持久化，
+ * env 为环境变量命中，default 为清单声明且真实生效的默认值。
+ * 无任何生效值时为 null，不得用 default 伪装。
+ */
+export const CONFIG_SOURCES = ["override", "package", "global", "env", "default"] as const;
+
+/** 配置来源类型；由来源元组派生，枚举值单一事实源。 */
+export type ConfigSource = (typeof CONFIG_SOURCES)[number];
+
+/**
  * 配置项安全视图契约。
  * 屏蔽敏感配置原文，仅暴露是否已配置、是否为秘密及实际解析来源。
  */
 export interface ConfigValueView {
   /** 配置项键名 */
   key: string;
-  /** 是否来自显式配置（非 default 来源）；默认值存在时仍为 false */
+  /** 是否来自显式来源（override/package/global/env）；default 与未配置（source null）均为 false */
   configured: boolean;
   /** 声明含敏感字段或实际发生保守隐藏；不代表整个值不可见 */
   secret: boolean;
-  /** 配置值实际解析来源 */
-  source: string;
+  /** 配置值实际解析来源；无任何生效值时为 null */
+  source: ConfigSource | null;
   /** 管理侧安全值；顶层敏感时不提供原值 */
   value?: JsonValue;
   /** 标准 JSON Pointer 隐藏路径；根为 ""，未发生隐藏时为空 */

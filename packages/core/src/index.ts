@@ -28,6 +28,7 @@ export type {
   ConnectActionDockOptions,
   RemoteServiceOptions,
   ConfigValueView,
+  ConfigSource,
   ListRunsOptions,
   RunReadOptions,
   StateScopeOptions,

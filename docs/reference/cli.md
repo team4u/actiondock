@@ -259,7 +259,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     ```
   - 写入约束与校验：所有写入执行整键全量替换并在写入前严格按模式校验，校验失败抛出 `CONFIG_VALUE_INVALID` 且原有配置保持不变。不支持掩码数据直接回写、不支持部分更新与对象合并。
   - 拒绝通配符实键：`ad config get`、`ad config set` 与 `ad config delete` 严格拒绝包含 `*` 的实键操作。
-  - 模式查看：`ad config schema` 将通配模板单独归入 `TEMPLATE` 列并统计 `matchCount`，不判定缺失。具体配置键仅来源于持久化存储及固定参数覆盖，不枚举仅在环境变量中存在的模板实例。
+  - 模式查看：`ad config schema` 将通配模板单独归入 `TEMPLATE` 列并统计 `matchCount`，不判定缺失。具体配置键仅来源于持久化存储及固定参数覆盖，不枚举仅在环境变量中存在的模板实例。`--json` 视图中的 `source` 与核心 `ConfigSource` 契约一致，仅取 `override`、`package`、`global`、`env`、`default` 或 `null`（未命中），临时覆盖可见为 `override`，不再使用 `project` 或 `remote` 别名。
 
 - 状态持久化管理 (`ad state`)：
   ```bash

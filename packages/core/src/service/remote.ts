@@ -598,21 +598,8 @@ export class RemoteActionDockService implements ActionDockService {
                 insecure: self.insecure,
                 dispatcher: self.dispatcher,
               });
-              const found: ConfigValueView | undefined = response.items.find((item: ConfigValueView) => item.key === key);
-              if (found) {
-                return {
-                  ...found,
-                  redactedPaths: found.redactedPaths || [],
-                };
-              }
-              return {
-                key,
-                configured: false,
-                secret: false,
-                source: "default",
-                value: undefined,
-                redactedPaths: [],
-              };
+              // 严格单项读取已保证恰一项且键匹配，直接消费，不伪造未命中视图掩盖契约错误。
+              return response.items[0];
             } catch (err: any) {
               wrapRemoteError(err);
             }
@@ -655,11 +642,8 @@ export class RemoteActionDockService implements ActionDockService {
                 insecure: self.insecure,
                 dispatcher: self.dispatcher,
               });
-              const items: ConfigValueView[] = res?.items || (Array.isArray(res) ? res : []);
-              return items.map((it) => ({
-                ...it,
-                redactedPaths: it.redactedPaths || [],
-              }));
+              // 归一化边界已强校验完整视图，直接消费，不再叠加兜底。
+              return res.items;
             } catch (err: any) {
               wrapRemoteError(err);
             }

@@ -2,8 +2,6 @@ import { resolve } from "node:path";
 import { loadProjectConfig, type ConfigValueView } from "@actiondock/core";
 import { fetchRemoteConfig, fetchRemoteConfigItem } from "@actiondock/core/profile";
 import type { ConfigItemDefinition } from "@actiondock/core/project";
-import { writeStderr } from "../../renderer";
-import type { CliContext } from "../../types";
 import { resolveLocalPackageRoot } from "../../utils";
 
 export interface RemoteConfigSafeResult {
@@ -35,8 +33,7 @@ export function resolveRemoteConfigScope(options: { package?: string; global?: b
 /** 只向核心客户端提供作用域和本地声明，CLI 不再解析远端敏感性或重复掩码。 */
 export async function fetchRemoteConfigSafe(
   target: { serverUrl?: string; token?: string; insecure?: boolean },
-  options: { package?: string; global?: boolean; key?: string; allowInsecureHttp?: boolean },
-  context?: CliContext
+  options: { package?: string; global?: boolean; key?: string; allowInsecureHttp?: boolean }
 ): Promise<RemoteConfigSafeResult> {
   const { packageId, localDeclarations, localPackageId } = resolveRemoteConfigScope(options);
   const requestOptions = {
@@ -44,7 +41,6 @@ export async function fetchRemoteConfigSafe(
     insecure: target.insecure,
     localDeclarations,
     localPackageId,
-    onWarning: (message: string) => writeStderr(`Warning: ${message}`, context),
   };
   const response = options.key
     ? await fetchRemoteConfigItem(target.serverUrl!, options.key, target.token, packageId, requestOptions)

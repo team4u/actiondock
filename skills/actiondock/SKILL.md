@@ -113,8 +113,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 ## 配置声明与安全边界
 
 - 动态配置可使用 `MYSQL_*` 这类单星号模板；具体键优先于模板，模板不允许 `required`、`default` 或 `env`。对象中的密码可通过受限 `schema` 的字段级 `secret: true` 隐藏，详见 [developer.md](references/developer.md)。
-- 配置管理只提供安全视图，Action 的 `ctx.config.get` 仍返回完整原值；不要将原值写入日志、状态或返回结果。脱敏输出不能直接回写，否则掩码会被当成普通字符串保存。
-- 回退旧版本前，必须给已存动态配置补上具体键的顶层 `secret: true` 声明，避免旧版本不认识模板而显示原文。远端兼容与全局配置规则见 [cli.md](references/cli.md)。
+- 配置管理只提供安全视图，Action 的 `ctx.config.get` 仍返回完整原值；不要将原值写入日志、状态或返回结果。脱敏输出不能直接回写，否则掩码会被当成普通字符串保存。配置视图的 `source` 与核心 `ConfigSource` 契约一致，仅取 `override`、`package`、`global`、`env`、`default` 或 `null`，未命中为 `null` 而非 `default`；`ad config schema` 中模板项与缺失项 `source` 同样为 `null`，语义由 `status` 表达。
+- 回退旧版本前，必须给已存动态配置补上具体键的顶层 `secret: true` 声明，避免旧版本不认识模板而显示原文。远端查询要求服务端提供 `configViewVersion: 1` 完整视图，旧服务端响应被直接拒绝（`PROTOCOL_UNSUPPORTED`）；服务端回退至不支持该协议的版本后，新客户端配置查询将被拒绝，必须保留协议能力或配套调整客户端版本，远端契约与全局配置规则见 [cli.md](references/cli.md)。
 
 ## 参考文档按需调阅索引
 

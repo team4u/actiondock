@@ -274,4 +274,37 @@ export default defineAction(async (input: { name: string }, ctx) => {
       assert.strictEqual(err.message.includes(secret), false);
     }
   });
+
+  it("临时覆盖在管理视图中来源标注为 override，未配置项不伪装", async (t) => {
+    const { createPackageRuntime } = await import("@actiondock/core/package");
+    const runtime = await createPackageRuntime({
+      projectConfig: {
+        id: "test.overrides",
+        config: {
+          OVERRIDE_VIEW_KEY: { type: "string" as const },
+          PLAIN_DEFAULT_KEY: { type: "string" as const, default: "pd" },
+        },
+      },
+      configOverrides: { OVERRIDE_VIEW_KEY: "cli-value" },
+      inMemory: true,
+    });
+    t.after(() => runtime.close());
+
+    const views = await runtime.listConfig();
+    const overrideView = views.find((v) => v.key === "OVERRIDE_VIEW_KEY");
+    assert.ok(overrideView);
+    assert.strictEqual(overrideView.source, "override");
+    assert.strictEqual(overrideView.configured, true);
+    assert.strictEqual(overrideView.value, "cli-value");
+
+    // 未配置且无默认值的项 source null，不得伪装为 default/package
+    const runtime2 = await createPackageRuntime({
+      projectConfig: { id: "test.overrides", config: { OVERRIDE_VIEW_KEY: { type: "string" as const } } },
+      inMemory: true,
+    });
+    t.after(() => runtime2.close());
+    const missView = await runtime2.getConfig("OVERRIDE_VIEW_KEY");
+    assert.strictEqual(missView.source, null);
+    assert.strictEqual(missView.configured, false);
+  });
 });

@@ -179,18 +179,20 @@ describe("CLI Review Fixes", () => {
       const merged = listByKey.get(item.key) as any;
       assert.notStrictEqual(merged, undefined);
       // schema 的 source 与合并视图的 source 一致；
-      // 状态推导：非 default 来源即 SET，default 来源且确有声明默认值即 DEFAULT
+      // 状态推导：非 default 显式来源即 SET，default 来源且确有声明默认值即 DEFAULT
       assert.strictEqual(item.source, merged.source);
       if (item.source === "default") {
         assert.strictEqual(item.status, "DEFAULT");
+      } else if (item.source === "missing") {
+        assert.strictEqual(item.status, "MISSING");
       } else {
         assert.strictEqual(item.status, "SET");
       }
     }
 
-    // project 来源（包级持久化）命中：SAMPLE_GREETING 经 config set 写入包级作用域
+    // package 来源（包级持久化）命中：SAMPLE_GREETING 经 config set 写入包级作用域
     const greeting = schema.configs.find((c: any) => c.key === "SAMPLE_GREETING");
-    assert.strictEqual(greeting.source, "project");
+    assert.strictEqual(greeting.source, "package");
     assert.strictEqual(greeting.status, "SET");
   });
 
