@@ -132,7 +132,8 @@ npx skills remove <skill-name>
   - 杜绝参数猜测与伪造属性，确保传参严格符合 `inputSchema` 约束。
 - **第四阶段：确定性执行调用**：
   - 规范调用语法：推荐使用 `ad run <action> [control-options] -- <assignments...>`。
-  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`-c/--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 单次调用配置覆盖：支持通过 `-c KEY=value`（纯字符串）或 `-c KEY:=json`（严格解析为 JSON 且要求所有数值为有限数，键名按字面处理，点号不生成嵌套对象，解析失败退出码 2）临时覆盖配置；生产持久化配置通过 `ad config set` 注入（支持使用 `--stdin` 注入复杂敏感对象，写前严格按模式校验，失败抛出 `CONFIG_VALUE_INVALID` 且保持原值不变）。系统始终输出安全脱敏视图，`--reveal` 仅向标准错误输出安全提示，绝不回显敏感明文。拒绝通配符 `*` 实键。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。

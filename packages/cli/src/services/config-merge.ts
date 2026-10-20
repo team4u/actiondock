@@ -1,11 +1,11 @@
 import {
+  isConfigTemplate,
   isSecretConfigKey,
-  maskSecretValue,
+  resolveConfigDeclaration,
   type ConfigItemDefinition,
 } from "@actiondock/core/project";
 import {
   loadProjectConfig,
-  resolveEnvValue,
   type ActionDockService,
   type ConfigValueView,
 } from "@actiondock/core";
@@ -16,67 +16,74 @@ import {
  */
 export interface MergedConfigEntry {
   key: string;
-  value: unknown;
-  source: "project" | "global" | "env" | "default";
+  value?: unknown;
+  source: "project" | "global" | "env" | "default" | string;
   secret: boolean;
+  configured: boolean;
+  redactedPaths: string[];
   description?: string;
 }
 
 /**
- * 解析单个配置键的合并视图（项目包级 > 全局持久化 > 环境变量 > 声明默认值）。
+ * 解析单个配置键的合并视图。
  *
- * 与 config list 的整表合并保持同一优先级链：包级持久化命中即短路，
- * 全局持久化次之，环境变量再次，最后回退声明默认值。
+ * 核心管理 view 已是唯一值与来源事实源，杜绝二次解析 env、本地 default 兜底与重复打码。
+ * reveal 参数保留以兼容公共接口契约，但做忽略处理，严禁明文泄露。
  *
  * @param key 配置键名
- * @param packageId 包标识（用于包级作用域寻址与环境变量解析）
- * @param declaredItem 工程声明的配置项定义
+ * @param packageId 包标识（用于包级作用域寻址）
+ * @param declaredItem 工程声明的配置项定义（可选）
  * @param service 已创建的 Service 服务实例
- * @param reveal 是否揭示敏感值明文（为假且敏感键时打码）
+ * @param _reveal 是否揭示敏感值明文（已安全忽略）
  */
 export async function resolveMergedConfigEntry(
   key: string,
   packageId: string,
   declaredItem: ConfigItemDefinition | undefined,
   service: ActionDockService,
-  reveal: boolean
-): Promise<{ value: unknown; source: MergedConfigEntry["source"]; secret: boolean }> {
+  _reveal?: boolean
+): Promise<{
+  value?: unknown;
+  source: MergedConfigEntry["source"];
+  secret: boolean;
+  configured: boolean;
+  redactedPaths: string[];
+  description?: string;
+}> {
   const confView = await service.management?.config.get(packageId, key);
-  const envResolved = resolveEnvValue(key, declaredItem, packageId);
 
-  let rawValue: unknown;
-  let source: MergedConfigEntry["source"];
-  if (confView && confView.configured) {
-    rawValue = confView.value;
-    source = confView.source === "package" ? "project" : (confView.source as MergedConfigEntry["source"]);
-  } else if (envResolved !== undefined) {
-    rawValue = envResolved.value;
-    source = "env";
-  } else {
-    rawValue = declaredItem?.default;
-    source = "default";
-  }
-
+  const rawSource = confView?.source ?? "default";
+  const source = rawSource === "package" ? "project" : rawSource;
   const isSecret = confView?.secret ?? isSecretConfigKey(key, declaredItem);
-  const displayValue = !reveal && isSecret && rawValue !== undefined ? maskSecretValue(rawValue) : rawValue;
-  return { value: displayValue, source, secret: isSecret };
+  const configured = Boolean(confView?.configured);
+  const redactedPaths = confView?.redactedPaths ?? [];
+  const value = confView?.value;
+
+  return {
+    value,
+    source,
+    secret: isSecret,
+    configured,
+    redactedPaths,
+    ...(declaredItem?.description !== undefined ? { description: declaredItem.description } : {}),
+  };
 }
 
 /**
  * 构造工程范围的完整配置合并视图（config list 单一事实源）。
  *
- * 键全集 = 工程声明键 ∪ 包级持久化键 ∪ 全局持久化键，
- * 每个键按 resolveMergedConfigEntry 相同的优先级链取值，
- * 消除 config get 与 config list 两命令间的合并实现差异。
+ * 优先信任包 scope view，不用全局 view 覆盖它自己的 env/default 结果；
+ * 合并服务范围时不改变优先级、secret 与 paths。
+ * 键名包含通配符的模板声明不作为具体配置条目加入列表。
  *
  * @param root 工程根目录
  * @param service 已创建的 Service 服务实例
- * @param reveal 是否揭示敏感值明文
+ * @param _reveal 是否揭示敏感值明文（已安全忽略）
  */
 export async function buildMergedConfigEntries(
   root: string,
   service: ActionDockService,
-  reveal: boolean
+  _reveal?: boolean
 ): Promise<MergedConfigEntry[]> {
   const projConfig = loadProjectConfig(root);
   const declared = projConfig.config || {};
@@ -87,44 +94,50 @@ export async function buildMergedConfigEntries(
   const projectConfigMap = new Map(projectConfigList.map((c) => [c.key, c]));
   const globalConfigMap = new Map(globalConfigList.map((c) => [c.key, c]));
 
+  // 收集所有具体键（过滤通配模板）
   const allKeys = new Set([
-    ...Object.keys(declared),
     ...projectConfigList.map((c) => c.key),
     ...globalConfigList.map((c) => c.key),
+    ...Object.keys(declared).filter((k) => !isConfigTemplate(k)),
   ]);
 
   const entries: MergedConfigEntry[] = [];
   for (const key of allKeys) {
-    const declaredItem = declared[key];
-    const envResolved = resolveEnvValue(key, declaredItem, projConfig.id);
     const projItem = projectConfigMap.get(key);
     const globItem = globalConfigMap.get(key);
 
-    let rawValue: unknown;
+    const resolved = resolveConfigDeclaration(declared, key);
+    const declaredItem = resolved?.item;
+
+    let view: ConfigValueView | undefined;
     let source: MergedConfigEntry["source"];
-    if (projItem && projItem.configured && projItem.source === "package") {
-      rawValue = projItem.value;
-      source = "project";
-    } else if (globItem && globItem.configured) {
-      rawValue = globItem.value;
-      source = "global";
-    } else if (envResolved !== undefined) {
-      rawValue = envResolved.value;
-      source = "env";
+
+    // 优先信任包 scope view，不用全局 view 覆盖它自己的 env/default 结果
+    if (projItem) {
+      view = projItem;
+      source = projItem.source === "package" ? "project" : projItem.source;
+    } else if (globItem) {
+      view = globItem;
+      source = globItem.source === "package" ? "project" : globItem.source;
     } else {
-      rawValue = declaredItem?.default;
       source = "default";
     }
 
-    const isSecret = isSecretConfigKey(key, declaredItem);
-    const displayValue = !reveal && isSecret && rawValue !== undefined ? maskSecretValue(rawValue) : rawValue;
+    const secret = view?.secret ?? isSecretConfigKey(key, declaredItem);
+    const configured = view?.configured ?? false;
+    const redactedPaths = view?.redactedPaths ?? [];
+    const value = view?.value;
+
     entries.push({
       key,
-      value: displayValue,
+      value,
       source,
-      secret: isSecret,
+      secret,
+      configured,
+      redactedPaths,
       ...(declaredItem?.description !== undefined ? { description: declaredItem.description } : {}),
     });
   }
+
   return entries;
 }

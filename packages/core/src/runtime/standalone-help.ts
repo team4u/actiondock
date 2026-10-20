@@ -1,3 +1,6 @@
+import { parseConfigOverrideAssignment } from "../input/config-override";
+export { parseConfigOverrideAssignment } from "../input/config-override";
+
 export interface ParsedArgs {
   controlArgs: string[];
   actionArgs: string[];
@@ -23,14 +26,14 @@ export function parseStandaloneArgs(argv: string[]): ParsedArgs {
       dataDir = controlArgs[++i];
     } else if (arg.startsWith("--data-dir=")) {
       dataDir = arg.slice(11);
-    } else if (arg === "--config" && i + 1 < controlArgs.length) {
-      const pair = controlArgs[++i];
-      const [k, ...v] = pair.split("=");
-      if (k) configOverrides[k] = v.join("=");
+    } else if (arg === "--config" || arg === "-c") {
+      const pair = controlArgs[++i] ?? "";
+      const { key, value } = parseConfigOverrideAssignment(pair);
+      Object.defineProperty(configOverrides, key, { value, enumerable: true, writable: true, configurable: true });
     } else if (arg.startsWith("--config=")) {
       const pair = arg.slice(9);
-      const [k, ...v] = pair.split("=");
-      if (k) configOverrides[k] = v.join("=");
+      const { key, value } = parseConfigOverrideAssignment(pair);
+      Object.defineProperty(configOverrides, key, { value, enumerable: true, writable: true, configurable: true });
     } else {
       filteredArgs.push(arg);
     }
@@ -59,7 +62,7 @@ export function printHelp(
   writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
   writeOut("\nGlobal options:");
   writeOut("  --data-dir <path>                           Custom runtime database directory");
-  writeOut("  --config <KEY=val>                          Temporary config override");
+  writeOut("  --config <KEY=val|KEY:=json>                Temporary config override");
 }
 
 export function emitError(

@@ -1,5 +1,6 @@
 import {
   ActionDockError,
+  CONFIG_VALUE_INVALID,
   INVALID_ARGUMENT,
   INVALID_PACKAGE_ID,
   PACKAGE_NOT_FOUND,
@@ -199,6 +200,7 @@ export function formatError(err: unknown): FormattedError {
       err.code === ACTION_NOT_FOUND ||
       err.code === NOT_FOUND ||
       err.code === PATH_TRAVERSAL ||
+      err.code === CONFIG_VALUE_INVALID ||
       FLAT_ERROR_CODES.has(err.code);
     return {
       code: err.code,

@@ -40,7 +40,19 @@ export {
   isSecretConfigKey,
   maskSecretValue,
   sanitizeConfigDefinitions,
+  redactConfigValue,
+  redactConfigValueForDeclarations,
+  type RedactResult,
 } from "../storage/mask";
+export {
+  isConfigTemplate,
+  resolveConfigDeclaration,
+  validateConfigDeclarations,
+  assertValidConfigDeclarations,
+  assertConcreteConfigKey,
+  validateConfigValue,
+  type ResolvedConfigDeclaration,
+} from "./config-declarations";
 export {
   runDoctorChecks,
 } from "../doctor/doctor";
@@ -66,6 +78,7 @@ export {
 } from "../input/index";
 export { validateActionInputValue } from "../value-validator";
 export { parseJson } from "../input/input-resolver";
+export { parseConfigOverrideAssignment } from "../input/config-override";
 export {
   InputError,
   FlatInputError,

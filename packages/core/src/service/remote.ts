@@ -14,6 +14,7 @@ import type {
   PlaybookSummary,
 } from "../package/types";
 import { parseActionRef } from "../catalog/resolve-action";
+import { assertConcreteConfigKey } from "../project/config-declarations";
 import {
   ActionDockError,
   ACTION_CANCELLED,
@@ -38,6 +39,7 @@ import {
   fetchRemoteActionShow,
   fetchRemoteActions,
   fetchRemoteConfig,
+  fetchRemoteConfigItem,
   fetchRemoteInfo,
   fetchRemotePlaybookShow,
   fetchRemotePlaybooks,
@@ -589,11 +591,19 @@ export class RemoteActionDockService implements ActionDockService {
         config: {
           async get(packageId: string, key: string): Promise<ConfigValueView> {
             self.assertNotClosed();
+            assertConcreteConfigKey(key);
             try {
-              const list = await self.management!.config.list(packageId);
-              const found = list.find((c) => c.key === key);
+              const response = await fetchRemoteConfigItem(self.serverUrl, key, self.token, packageId || undefined, {
+                allowInsecureHttp: self.allowInsecureHttp,
+                insecure: self.insecure,
+                dispatcher: self.dispatcher,
+              });
+              const found: ConfigValueView | undefined = response.items.find((item: ConfigValueView) => item.key === key);
               if (found) {
-                return found;
+                return {
+                  ...found,
+                  redactedPaths: found.redactedPaths || [],
+                };
               }
               return {
                 key,
@@ -601,6 +611,7 @@ export class RemoteActionDockService implements ActionDockService {
                 secret: false,
                 source: "default",
                 value: undefined,
+                redactedPaths: [],
               };
             } catch (err: any) {
               wrapRemoteError(err);
@@ -609,6 +620,7 @@ export class RemoteActionDockService implements ActionDockService {
 
           async set(packageId: string, key: string, value: JsonValue): Promise<void> {
             self.assertNotClosed();
+            assertConcreteConfigKey(key);
             try {
               await setRemoteConfig(self.serverUrl, key, value, self.token, packageId || undefined, {
                 allowInsecureHttp: self.allowInsecureHttp,
@@ -622,6 +634,7 @@ export class RemoteActionDockService implements ActionDockService {
 
           async delete(packageId: string, key: string): Promise<boolean> {
             self.assertNotClosed();
+            assertConcreteConfigKey(key);
             try {
               const res = await deleteRemoteConfig(self.serverUrl, key, self.token, packageId || undefined, {
                 allowInsecureHttp: self.allowInsecureHttp,
@@ -642,18 +655,10 @@ export class RemoteActionDockService implements ActionDockService {
                 insecure: self.insecure,
                 dispatcher: self.dispatcher,
               });
-              if (Array.isArray(res)) return res;
-              if (Array.isArray(res?.items)) return res.items;
-              if (Array.isArray(res?.config)) return res.config;
-              const values = res?.values || {};
-              const declared = res?.declared || {};
-              const defaultSource: "global" | "package" = packageId === "global" ? "global" : "package";
-              return Object.entries(values).map(([k, v]) => ({
-                key: k,
-                configured: v !== undefined,
-                secret: Boolean(declared[k]?.secret),
-                source: defaultSource,
-                value: v as JsonValue,
+              const items: ConfigValueView[] = res?.items || (Array.isArray(res) ? res : []);
+              return items.map((it) => ({
+                ...it,
+                redactedPaths: it.redactedPaths || [],
               }));
             } catch (err: any) {
               wrapRemoteError(err);

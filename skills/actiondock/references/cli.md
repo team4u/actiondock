@@ -125,6 +125,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     - 显式正文输出：传入 `--text-field <field>` 时，仅提取结果中指定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（元数据为空时不输出）。
     - 声明式默认正文：Action 清单中声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 的同步执行自动应用该正文与元数据输出行为；显式 `--text-field` 优先于默认注解。
     - 严格校验：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出；`--text-field` 与 `--json`、`--async` 严格互斥并在执行前以退出码 2 退出。
+  - 单次调用配置覆盖：`-c, --config <assignment>` 支持临时配置覆盖：
+    - `-c KEY=value`：保留为纯字符串，不进行 JSON 猜测。
+    - `-c KEY:=json`：按严格 JSON 解析且递归要求数值为有限数（`Number.isFinite`）；不物化路径，语法或解析出错时立即以退出码 2 退出。独立运行分发入口同语义。
   - 传统输入选项：
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。
@@ -255,19 +258,30 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 运行时配置管理 (`ad config`)：
   ```bash
-  # 列出配置项
+  # 列出配置项（安全脱敏视图）
   ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal]
-  # 读取配置值
+  # 读取配置安全视图
   ad config get <key> [-g, --global] [-P, --package <id>] [--reveal]
-  # 写入配置键值
-  ad config set <key> <value> [-g, --global] [-P, --package <id>]
+  # 写入配置键值（全量替换，写前校验）
+  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin]
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>]
-  # 查看包配置模式
+  # 查看包配置模式（通配模板单列 TEMPLATE 并统计 matchCount）
   ad config schema [identifier] [-P, --package <id>]
   # 输出环境导出语句
   ad config env [identifier]
   ```
+  - 安全脱敏视图：`ad config list` 与 `ad config get` 始终返回脱敏安全数据。敏感整项展示 `<hidden>`，未配置项展示 `<not configured>`。`--reveal` 或 `--show-secrets` 仅保留兼容性并在标准错误输出安全提示，系统严禁回显明文。
+  - 标准输入传递敏感对象：写入敏感对象时，推荐配合管道与 `--stdin` 参数传入，避免命令历史暴露凭据：
+    ```bash
+    printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
+    ```
+  - 写入原子性与写前校验：全键替换写入并在写前严格校验，校验失败报 `CONFIG_VALUE_INVALID`（错误明细严禁携带实际输入值）且原值保持不变。不支持掩码回写、部分更新与对象合并。
+  - 拒绝通配符实键：`get`、`set` 与 `delete` 严格拒绝包含 `*` 的实键操作。
+  - 模板诊断支持：通配模板键（如 `MYSQL_*`）单列在模式视图中并不判缺失，环境变量满足度体检自动跳过模板。列表不枚举仅在环境变量中存在的模板实例，但可按具体键执行 `get`。
+  - 视图元数据：`--json` 包含 `configured`、`secret`、`source`、`value` 与 `redactedPaths`。默认值不算显式配置，`configured` 仍为 `false`；敏感默认值存在时仍会隐藏。路径使用标准 JSON Pointer，根为 `""`，属性转义采用 `~0` 与 `~1`。
+  - 全局与远端保护：全局视图取各包有效声明的保护并集，包范围继承全局值也不能绕过保护。新远端协议保留真实来源；旧服务端无声明的值保守隐藏并告警，来源只能标为 `remote`。本地声明只能加强远端保护，不能撤销服务端标记。
+  - 回写与回退：不要把脱敏输出直接回写，`********` 不是保留旧值的指令。回退旧版本前，必须给已存模板实例补充具体键的顶层 `secret: true` 声明。
 
 - 持久化状态管理 (`ad state`)：
   ```bash

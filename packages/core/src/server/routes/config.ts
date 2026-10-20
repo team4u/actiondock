@@ -4,6 +4,7 @@ import {
   CONFIG_ENV_ERROR,
   CONFIG_LIST_ERROR,
   CONFIG_SET_ERROR,
+  CONFIG_VALUE_INVALID,
   INVALID_ARGUMENT,
   INVALID_PACKAGE_ID,
   PACKAGE_NOT_ALLOWED,
@@ -12,6 +13,7 @@ import {
 } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../../storage";
+import { assertConcreteConfigKey, isConfigTemplate } from "../../project/config-declarations";
 import { readJsonBody } from "../body";
 import {
   getSubPath,
@@ -27,6 +29,7 @@ function isClientConfigError(err: any): boolean {
     err?.code === INVALID_PACKAGE_ID ||
     err?.code === PATH_TRAVERSAL ||
     err?.code === INVALID_ARGUMENT ||
+    err?.code === CONFIG_VALUE_INVALID ||
     err?.status === 400 ||
     err?.status === 404
   );
@@ -74,6 +77,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const declared = pkg?.config || {};
       const envChecks: any[] = [];
       for (const [k, def] of Object.entries(declared as Record<string, any>)) {
+        if (isConfigTemplate(k)) {
+          continue;
+        }
         const resolved = resolveEnvValue(k, def, targetPackageId);
         const matchedEnv = resolved?.envKey || null;
         envChecks.push({
@@ -118,17 +124,37 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const pkg = pkgs.find((p) => p.id === targetPackageId);
       const rawDeclared = pkg?.config || {};
       const declared = sanitizeConfigDefinitions(rawDeclared) || {};
+      const queryKey = url.searchParams.get("key");
+      if (queryKey !== null) {
+        assertConcreteConfigKey(queryKey);
+        const item = await service.management.config.get(targetPackageId, queryKey);
+        return jsonResponse({ ok: true, configViewVersion: 1, packageId: targetPackageId, declared, item }, 200, corsHeaders);
+      }
       const views = await service.management.config.list(targetPackageId);
-      const maskedValues: Record<string, any> = {};
+      const maskedValues: Record<string, any> = Object.create(null);
+      const maskedPaths: Record<string, string[]> = Object.create(null);
       for (const v of views) {
-        if (v.secret) {
-          maskedValues[v.key] = "********";
+        maskedPaths[v.key] = v.redactedPaths || [];
+        if (v.secret && v.value === undefined) {
+          if (v.redactedPaths && v.redactedPaths.length > 0) {
+            maskedValues[v.key] = "********";
+          } else {
+            maskedValues[v.key] = undefined;
+          }
         } else {
           maskedValues[v.key] = v.value;
         }
       }
       return jsonResponse(
-        { ok: true, packageId: targetPackageId, declared, values: maskedValues },
+        {
+          ok: true,
+          configViewVersion: 1,
+          packageId: targetPackageId,
+          declared,
+          values: maskedValues,
+          items: views,
+          masked: maskedPaths,
+        },
         200,
         corsHeaders
       );
@@ -170,6 +196,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
+      assertConcreteConfigKey(key);
       await service.management.config.set(targetPackageId, key, body.value);
       return jsonResponse({ ok: true, packageId: targetPackageId, key, message: "updated" }, 200, corsHeaders);
     } catch (err: any) {
@@ -187,19 +214,59 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
         );
       }
       const isClient = isClientConfigError(err);
+      const errCode =
+        err?.code === CONFIG_VALUE_INVALID
+          ? CONFIG_VALUE_INVALID
+          : isClient
+          ? INVALID_ARGUMENT
+          : CONFIG_SET_ERROR;
       return jsonResponse(
-        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_SET_ERROR, message: err.message } },
+        { ok: false, error: { code: errCode, message: err.message, details: err.details } },
         isClient ? 400 : 500,
         corsHeaders
       );
     }
   }
 
-  // 4. Config Delete: DELETE /config/:key
+  // 4. Config Item Route: GET /config/:key or DELETE /config/:key
   const configKeyMatch = subpath.match(/^\/config\/([^/]+)$/);
+  if (configKeyMatch && req.method === "GET") {
+    try {
+      const key = decodeURIComponent(configKeyMatch[1]);
+      assertConcreteConfigKey(key);
+      const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
+      const item = await service.management.config.get(targetPackageId, key);
+      const declared = sanitizeConfigDefinitions(pkgs.find((pkg) => pkg.id === targetPackageId)?.config) || {};
+      return jsonResponse({ ok: true, configViewVersion: 1, packageId: targetPackageId, declared, item }, 200, corsHeaders);
+    } catch (err: any) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: PACKAGE_NOT_ALLOWED,
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+      const isClient = isClientConfigError(err);
+      return jsonResponse(
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_LIST_ERROR, message: err.message } },
+        isClient ? 400 : 500,
+        corsHeaders
+      );
+    }
+  }
+
   if (configKeyMatch && req.method === "DELETE") {
     try {
       const key = decodeURIComponent(configKeyMatch[1]);
+      assertConcreteConfigKey(key);
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const pkgs = await service.discovery.listPackages();
       const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);

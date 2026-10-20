@@ -43,7 +43,7 @@
 
 ## 配置声明规范 (config)
 
-`config` 映射下的每个条目以配置键名作为唯一标识，用于规范配置的类型、默认值与环境变量映射：
+`config` 映射下的每个条目以配置键名作为唯一标识，用于规范配置的类型、默认值与环境变量映射。键名支持具体键以及包含单个 `*` 通配符的模板定义（例如 `MYSQL_*`）：
 
 ```json
 {
@@ -60,6 +60,20 @@
       "type": "number",
       "default": 5000,
       "allowInvocationOverride": true
+    },
+    "MYSQL_*": {
+      "description": "MySQL 动态数据库连接配置模板",
+      "type": "object",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "host": { "type": "string" },
+          "username": { "type": "string" },
+          "password": { "type": "string", "secret": true }
+        },
+        "required": ["host", "username", "password"],
+        "additionalProperties": false
+      }
     }
   }
 }
@@ -68,19 +82,32 @@
 配置项属性约束说明：
 
 - 配置项描述：`description`
-  类型为字符串。描述配置用途与格式要求。
+  类型为字符串。描述配置用途与格式要求。对外公开的元数据严禁携带敏感凭据或泄漏真实密码。
 - 数据类型约束：`type`
-  类型为枚举字符串，支持 `string`、`number`、`boolean`、`object`、`array`。
-- 默认值：`default`
-  任意符合类型约束的值。当环境与存储均未指定该配置时回退使用。
+  类型为枚举字符串，支持 `string`、`number`、`boolean`、`object`、`array`。若定义了内嵌 `schema`，外层 `type` 必须同 `schema.type` 保持一致（其中 `number` 兼容 `integer`）。
+- 细粒度校验模式：`schema`
+  支持针对复杂对象或数组进行细粒度校验。出于运行时确定性与安全性考虑，仅允许使用受限关键字集：
+  - 核心类型：`type`（支持 `object`、`array`、`string`、`integer`、`number`、`boolean`）。
+  - 对象与数组：`properties`、`required`、`additionalProperties`（支持布尔值或内嵌 schema）、`items`。
+  - 范围与约束：`enum`、`minLength`、`maxLength`、`minimum`、`maximum`。
+  - 扩展敏感标记：`secret`（布尔值）。
+  - 明确拒绝其他关键字：严禁使用 `$ref`、模式组合（`allOf`、`anyOf`、`oneOf`）、`default`、`format` 等未受限特性。
 - 敏感标记：`secret`
-  类型为布尔值。标记为 `true` 时，CLI 查看与日志记录中自动执行掩码脱敏，防止凭据泄露。
+  类型为布尔值。顶层配置声明 `secret: true` 时整项隐藏；若在内嵌 `schema` 字段声明 `secret: true`，脱敏引擎仅隐藏该字段节点。当遇到未知字段或数据结构不符时，系统实施保守脱敏隐藏。若根节点自身已标记敏感，不强制要求配置 `items` 或 `additionalProperties`。
+- 默认值：`default`
+  任意符合类型约束的值。当环境与存储均未指定该配置时回退使用。通配模板不允许配置默认值。具体键仍可声明敏感默认值，但不建议将凭据写入清单；对外声明会剥离含敏感信息的默认值。
 - 外部环境变量映射：`env`
-  类型为字符串或字符串数组（`string | string[]`）。支持指定单个环境变量名或按优先级排序的环境变量候选列表。
+  类型为字符串或字符串数组（`string | string[]`）。支持指定单个环境变量名或按优先级排序的环境变量候选列表。通配模板严禁配置环境变量映射。
 - 是否必填：`required`
-  类型为布尔值。标记为 `true` 时，调用前若未能解析到有效值将直接阻断执行。
+  类型为布尔值。作为静态诊断标识。通配模板严禁标记为必填。
 - 允许单次调用覆盖：`allowInvocationOverride`
   类型为布尔值。元数据声明字段，标识配置项是否设计为允许在单次调用中通过参数临时覆盖。
+
+通配模板匹配与解析规则：
+
+- 模板支持单个 `*` 通配符，匹配 1 个及以上 `[A-Za-z0-9_.-]` 字符。
+- 匹配优先级由高到低依次为：具体精确键 > 最长字面前缀 > 最长字面后缀。
+- 模板不参与环境变量的隐式枚举与缺失诊断，在模式中单独展示并统计匹配计数。
 
 ---
 

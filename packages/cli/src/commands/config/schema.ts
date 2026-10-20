@@ -1,5 +1,8 @@
 import {
+  isConfigTemplate,
   isSecretConfigKey,
+  redactConfigValue,
+  resolveConfigDeclaration,
 } from "@actiondock/core/project";
 import type { Command } from "commander";
 import { notInProjectError } from "../../errors";
@@ -11,11 +14,11 @@ import { applyTargetOptions, getEffectiveOptions, requirePackageRoot, withServic
 /**
  * 注册 config schema 子命令：检查声明配置的解析状态。
  *
- * 状态推导复用 config-merge 的跨作用域合并视图单一事实源
- * （项目包级 > 全局持久化 > 环境变量 > 声明默认值）：
- * - source 命中 project、global 或 env 时状态为 SET；
- * - source 为 default（仅声明默认值兜底）时状态为 DEFAULT；
- * - 键无任何来源（不在合并视图中，即未声明默认值也未持久化）时状态为 MISSING。
+ * 状态推导复用跨作用域合并视图：
+ * - 模板通配声明单独展示状态 TEMPLATE，并统计已存储匹配具体键数量，不参与 missing 统计；
+ * - 非模板项以 configured 显式来源判定为 SET；
+ * - 携带声明默认值时判定为 DEFAULT，且对外安全视图中敏感 defaultValue 严格脱敏；
+ * - 其余缺失项判定为 MISSING。
  *
  * @param configCmd config 命令实例
  * @param context CLI 上下文
@@ -40,42 +43,73 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
 
       const declared = projConfig.config || {};
 
-      // 远端目标显式拒绝：schema 状态推导依赖本地工程声明与环境变量解析，
-      // 远端作用域无法获得等价视图，静默落到本地会误导调用方
+      // 远端目标显式拒绝
       if (options.profile || options.server) {
         throw notInProjectError(
           "'ad config schema' only supports local projects. Remote targets are not supported for schema inspection."
         );
       }
 
-      // 跨作用域合并视图单一事实源：与 config list 共享同一条优先级链
       await withService(
         options,
         context,
         async (service) => {
-          const merged = await buildMergedConfigEntries(root, service, true);
+          const merged = await buildMergedConfigEntries(root, service, false);
           const mergedByKey = new Map(merged.map((entry) => [entry.key, entry]));
+
+          const projectConfigList = (await service.management?.config.list(projConfig.id)) ?? [];
+          const globalConfigList = (await service.management?.config.list("global")) ?? [];
+          const allStoredKeys = new Set([
+            ...projectConfigList.filter((c) => c.configured).map((c) => c.key),
+            ...globalConfigList.filter((c) => c.configured).map((c) => c.key),
+          ]);
 
           const items = Object.keys(declared).map((key) => {
             const itemDef = declared[key];
             const isSecret = isSecretConfigKey(key, itemDef);
+
+            if (isConfigTemplate(key)) {
+              let matchCount = 0;
+              for (const storedKey of allStoredKeys) {
+                const resolved = resolveConfigDeclaration(declared, storedKey);
+                if (resolved?.template === key) {
+                  matchCount++;
+                }
+              }
+
+              return {
+                key,
+                required: false,
+                secret: isSecret,
+                status: "TEMPLATE",
+                source: "template",
+                description: itemDef.description || "",
+                matchCount,
+              };
+            }
+
             const mergedEntry = mergedByKey.get(key);
+            const isConfigured = Boolean(mergedEntry?.configured);
 
             let source: "project" | "global" | "env" | "default" | "missing" = "missing";
             let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
-            let resolvedValue: unknown;
 
-            if (mergedEntry) {
-              source = mergedEntry.source;
-              resolvedValue = mergedEntry.value;
-              // 合并视图的 default 来源仅是链尾兑底标签：
-              // 真正的 DEFAULT 状态要求声明确实携带默认值，否则视为 MISSING
-              if (mergedEntry.source !== "default") {
-                status = "SET";
-              } else if (itemDef.default !== undefined) {
-                status = "DEFAULT";
-              }
+            if (isConfigured) {
+              status = "SET";
+              source = (mergedEntry?.source as any) || "project";
+            } else if (itemDef.default !== undefined) {
+              status = "DEFAULT";
+              source = "default";
+            } else {
+              status = "MISSING";
+              source = "missing";
             }
+
+            // 严禁泄露敏感项默认值明文，统一采用核心脱敏视图
+            const sanitizedDefault =
+              itemDef.default !== undefined
+                ? redactConfigValue(itemDef.default, itemDef).value
+                : undefined;
 
             return {
               key,
@@ -84,12 +118,15 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
               status,
               source,
               description: itemDef.description || "",
-              defaultValue: itemDef.default,
-              hasValue: resolvedValue !== undefined,
+              ...(sanitizedDefault !== undefined ? { defaultValue: sanitizedDefault } : {}),
+              hasValue: isConfigured || itemDef.default !== undefined,
             };
           });
 
-          const missingRequired = items.filter((i) => i.required && i.status === "MISSING");
+          // 模板项不参与 missing/required 统计
+          const missingRequired = items.filter(
+            (i) => i.status !== "TEMPLATE" && (i as any).required && i.status === "MISSING"
+          );
           const ok = missingRequired.length === 0;
 
           const result: Record<string, any> = {
@@ -109,7 +146,7 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
 
           renderResult(result, {
             json: options.json,
-            humanFormatter: () => renderConfigSchema(items, projConfig.id, root) + "\n",
+            humanFormatter: () => renderConfigSchema(items as any, projConfig.id, root) + "\n",
             context,
           });
 

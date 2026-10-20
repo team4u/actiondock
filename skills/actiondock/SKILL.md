@@ -106,9 +106,15 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
   - 严格校验：正文字段缺失、非字符串或返回数据非对象时明确报错退出；`--text-field` 与 `--json`、`--async` 互斥并在执行前以退出码 2 退出。
   - 机器信封：如需程序化消费标准 JSON 信封，传入 `--json`，此时忽略默认正文注解。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消；多条后台任务可用 `ad runs watch [ids...]` 阻塞等待全部终态后聚合退出，主控后台派工拿不到 runId 时可在派工命令携带 `--request-id`，再用同标识 `ad runs watch --request-id <id>` 反查等待。
-- 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。
+- 配置覆盖与安全持久化：调试时使用 `-c KEY=value`（字符串）或 `-c KEY:=json`（严格 JSON 解析且数值为有限数，不物化路径，解析错误退出码 2）临时覆盖；生产使用 `ad config set <KEY> <VALUE>` 持久化注入（全量替换与写前模式校验，失败报 `CONFIG_VALUE_INVALID` 且原值不变）。复杂敏感对象推荐通过 `printf '%s' '{...}' | ad config set <KEY> -P <pkg> --stdin` 管道注入以防命令历史泄露；系统严禁回显明文，`ad config list` 与 `ad config get` 始终返回安全脱敏视图，`--reveal` 仅向标准错误输出提示。拒绝 `*` 通配符实键。
 
 ---
+
+## 配置声明与安全边界
+
+- 动态配置可使用 `MYSQL_*` 这类单星号模板；具体键优先于模板，模板不允许 `required`、`default` 或 `env`。对象中的密码可通过受限 `schema` 的字段级 `secret: true` 隐藏，详见 [developer.md](references/developer.md)。
+- 配置管理只提供安全视图，Action 的 `ctx.config.get` 仍返回完整原值；不要将原值写入日志、状态或返回结果。脱敏输出不能直接回写，否则掩码会被当成普通字符串保存。
+- 回退旧版本前，必须给已存动态配置补上具体键的顶层 `secret: true` 声明，避免旧版本不认识模板而显示原文。远端兼容与全局配置规则见 [cli.md](references/cli.md)。
 
 ## 参考文档按需调阅索引
 

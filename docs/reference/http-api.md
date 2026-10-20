@@ -463,6 +463,94 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 > [!IMPORTANT]
 > **管理接口开启门禁**：所有 `/api/v2/config` 与 `/api/v2/state` 管理路由默认处于禁用状态。必须在服务端启动时显式传入 `--management` 参数，或在对应虚拟视图配置中设置 `enableManagement: true`，否则服务端统一返回 HTTP 403 Forbidden 与 `CAPABILITY_UNAVAILABLE` 错误。
 
+### 配置安全列表查询 (`GET /api/v2/config`)
+
+获取当前包或全局配置的安全脱敏视图：
+
+- 请求方式：`GET`
+- 查询参数：`package` 或 `packageId`（可选，缺省为默认包或全局）。传入 `key` 时改为单键查询，返回下面单项接口的 `item` 结构，可查询仅由环境变量提供的模板实例。
+- 响应数据结构：
+  ```json
+  {
+    "ok": true,
+    "packageId": "example-tools",
+    "configViewVersion": 1,
+    "items": [
+      {
+        "key": "GITHUB_TOKEN",
+        "configured": true,
+        "secret": true,
+        "source": "package",
+        "redactedPaths": [""]
+      },
+      {
+        "key": "MYSQL_191",
+        "configured": true,
+        "secret": true,
+        "source": "package",
+        "value": {
+          "host": "127.0.0.1",
+          "username": "root",
+          "password": "********"
+        },
+        "redactedPaths": ["/password"]
+      }
+    ],
+    "masked": {
+      "GITHUB_TOKEN": [""],
+      "MYSQL_191": ["/password"]
+    },
+    "values": {
+      "GITHUB_TOKEN": "********",
+      "MYSQL_191": {
+        "host": "127.0.0.1",
+        "username": "root",
+        "password": "********"
+      }
+    }
+  }
+  ```
+- 兼容性与安全说明：
+  - 响应保留 `values` 字典以保证向下兼容（顶层敏感整项替换为 `********`，对象内部敏感字段进行局部掩码）。
+  - 新增 `configViewVersion: 1` 标识结构化安全视图协议版本。
+  - `items` 数组提供完整的 `ConfigValueView` 对象列表，精确表达配置是否显式配置（`configured`）、来源（`source`）与脱敏路径（`redactedPaths`）。
+  - `masked` 字典提供敏感键到脱敏 JSON 指针路径的直接映射。
+
+### 单项配置安全调阅 (`GET /api/v2/config/:key`)
+
+调阅指定配置键的安全视图：
+
+- 请求方式：`GET`
+- 路径参数：`:key` 为具体配置键名（拒绝 `*` 通配符）
+- 查询参数：`package` 或 `packageId`（可选）
+- 核心客户端使用等价的 `GET /api/v2/config?key=<编码后的键名>`，避免 `env` 等键名与诊断路由冲突；旧服务端忽略 `key` 时可安全回退到列表响应。
+- 响应数据结构：
+  ```json
+  {
+    "ok": true,
+    "packageId": "example-tools",
+    "configViewVersion": 1,
+    "item": {
+      "key": "GITHUB_TOKEN",
+      "configured": true,
+      "secret": true,
+      "source": "package",
+      "redactedPaths": [""]
+    }
+  }
+  ```
+
+### 客户端归一化与版本互操作规范
+
+ActionDock 核心客户端对新旧服务端协议执行统一归一化处理：
+
+- 本地与远端脱敏并集：客户端结合本地与服务端声明，严格取保护规则并集。
+- 协议来源与配置状态判定：
+  - 新协议响应直接保留服务端的真实 `source` 与 `configured` 字段。
+  - 旧协议服务端的响应由于缺乏元数据，配置来源只能归一化标识为 `remote`，无法还原真实底层来源。
+- 保守防御策略：针对旧服务端返回的完全未声明项，客户端一律保守执行整项隐藏并输出警告；严禁仅依据 `redactedPaths` 是否非空作为识别服务端版本能力的判据。
+- 旧版客户端兼容表现：旧版 CLI 可能直接展示局部脱敏对象，安全保证由新服务端的脱敏实现提供，旧客户端不会补齐模板或字段级保护。
+
 ### 环境变量满足度体检 (`GET /api/v2/config/env`)
 
 检查当前包在宿主操作系统环境变量中所需配置的满足情况：

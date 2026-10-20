@@ -141,6 +141,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   - 幂等请求标识：`--request-id <id>` 为可选的客户端幂等键，用于标记请求身份。其作用域区分为两种模式：
     - 在统一服务实例与远程常驻服务模式（如 `ad serve` 或远程服务）下，支持相同入参请求的幂等去重重放，服务端会自动拦截重复调度并返回先前的执行结果。
     - 在独立的本地命令行进程模式下，`--request-id` 主要作为关联标识与状态反查凭据（供 `ad runs list --request-id` 过滤与 `ad runs watch --request-id` 精准对因反查）。不同独立本地命令行进程分属独立进程实例，不会跨进程自动拦截重放。
+  - 单次调用配置覆盖：`-c, --config <assignment>` 支持临时覆盖配置：
+    - `-c KEY=value`：保留为纯字符串，不进行 JSON 猜测。
+    - `-c KEY:=json`：按严格 JSON 解析，递归要求所有数值必须为有限数（`Number.isFinite`）；不物化路径，语法或解析出错时立即以退出码 2 退出。独立运行分发入口具有完全相同的语义。
   - 传统输入选项：
     - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
     - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
@@ -238,17 +241,25 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 配置管理 (`ad config`)：
   ```bash
-  # 列出配置项
+  # 列出配置项（安全视图）
   ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--data-dir <path>] [--json]
-  # 读取配置值
+  # 读取配置安全视图
   ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--data-dir <path>] [--json]
-  # 写入配置键值
-  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--data-dir <path>]
+  # 写入配置键值（全量替换，写前校验）
+  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--stdin] [--data-dir <path>]
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 查看项目配置声明模式
   ad config schema [identifier] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
+  - 安全脱敏与选项表现：`ad config list` 与 `ad config get` 始终返回安全脱敏数据。敏感整项在终端中展示为 `<hidden>`，未配置项展示为 `<not configured>`。选项 `--reveal` 或 `--show-secrets` 仅保留参数兼容，执行时向标准错误输出安全提示，系统严禁回显明文。
+  - 标准输入注入敏感对象：写入包含敏感字段的对象配置时，使用 `--stdin` 避免命令行历史记录泄漏真实值：
+    ```bash
+    printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
+    ```
+  - 写入约束与校验：所有写入执行整键全量替换并在写入前严格按模式校验，校验失败抛出 `CONFIG_VALUE_INVALID` 且原有配置保持不变。不支持掩码数据直接回写、不支持部分更新与对象合并。
+  - 拒绝通配符实键：`ad config get`、`ad config set` 与 `ad config delete` 严格拒绝包含 `*` 的实键操作。
+  - 模式查看：`ad config schema` 将通配模板单独归入 `TEMPLATE` 列并统计 `matchCount`，不判定缺失。具体配置键仅来源于持久化存储及固定参数覆盖，不枚举仅在环境变量中存在的模板实例。
 
 - 状态持久化管理 (`ad state`)：
   ```bash

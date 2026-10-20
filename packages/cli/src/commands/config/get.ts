@@ -1,19 +1,15 @@
 import {
-  fetchRemoteConfig,
-} from "@actiondock/core/profile";
-import {
-  isSecretConfigKey,
-  maskSecretValue,
-} from "@actiondock/core/project";
-import {
   loadProjectConfig,
 } from "@actiondock/core";
+import {
+  assertConcreteConfigKey,
+} from "@actiondock/core/project";
 import {
   resolvePackageRoot,
 } from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { ArgumentError, packageNotFoundError } from "../../errors";
-import { renderResult } from "../../renderer";
+import { formatSingleConfigDisplay, renderResult, writeStderr } from "../../renderer";
 import { resolveMergedConfigEntry } from "../../services/config-merge";
 import type { CliContext } from "../../types";
 import {
@@ -22,6 +18,7 @@ import {
   resolveTargetFromOptions,
   withService,
 } from "../../utils";
+import { fetchRemoteConfigSafe } from "./remote-helper";
 
 /**
  * 注册 config get 子命令：查询指定配置键的生效值。
@@ -37,7 +34,10 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       .option("-P, --package <id>", "Target package ID or path")
       .option("-g, --global", "Get from global configuration")
   )
-    .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
+    .option(
+      "--reveal, --show-secrets",
+      "Request secrets display (secrets remain redacted for security; notice printed to stderr)"
+    )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .action(async (key: string, rawOptions: any, cmd: any) => {
@@ -45,30 +45,53 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       if (!key) {
         throw new ArgumentError("Configuration key is required");
       }
+      assertConcreteConfigKey(key);
+
       const reveal = Boolean(options.reveal || options.showSecrets);
 
-      // 远端服务分支不经过 Target 门面，直接查询远端配置接口
+      // 远端服务分支
       const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
-        const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package, {
-          allowInsecureHttp: Boolean(options.allowInsecureHttp),
-          insecure: target.insecure,
-        });
-        const val = res.values?.[key];
-        const isSecret = isSecretConfigKey(key, res.declared?.[key]);
-        const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
+        const { items } = await fetchRemoteConfigSafe(
+          {
+            serverUrl: target.serverUrl,
+            token: target.token,
+            insecure: target.insecure,
+          },
+          { ...options, key },
+          context
+        );
 
-        const payload = {
-          key,
-          value: displayValue,
-          source: "remote",
-          secret: isSecret,
-        };
+        const matchedItem = items.find((it) => it.key === key);
+        const payload = matchedItem
+          ? {
+              key: matchedItem.key,
+              value: matchedItem.value,
+              source: matchedItem.source,
+              secret: matchedItem.secret,
+              configured: matchedItem.configured,
+              redactedPaths: matchedItem.redactedPaths,
+            }
+          : {
+              key,
+              value: undefined,
+              source: "remote",
+              secret: false,
+              configured: false,
+              redactedPaths: [],
+            };
+
+        if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
+          writeStderr(
+            "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+            context
+          );
+        }
 
         renderResult(payload, {
           json: options.json,
-          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
+          humanFormatter: () => formatSingleConfigDisplay(payload),
           context,
         });
         return;
@@ -77,58 +100,74 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       // 本地分支
       const root = resolvePackageRoot(options.package);
 
-      await withService(options, context, async (service) => {
-        if (options.global || !root) {
-          if (!options.global && options.package && !root) {
-            throw packageNotFoundError(options.package);
+      await withService(
+        options,
+        context,
+        async (service) => {
+          if (options.global || !root) {
+            if (!options.global && options.package && !root) {
+              throw packageNotFoundError(options.package);
+            }
+
+            const confView = await service.management?.config.get("global", key);
+            const payload = {
+              key,
+              value: confView?.value,
+              source: confView?.source ?? "default",
+              secret: Boolean(confView?.secret),
+              configured: Boolean(confView?.configured),
+              redactedPaths: confView?.redactedPaths ?? [],
+            };
+
+            if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
+              writeStderr(
+                "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+                context
+              );
+            }
+
+            renderResult(payload, {
+              json: options.json,
+              humanFormatter: () => formatSingleConfigDisplay(payload),
+              context,
+            });
+            return;
           }
 
-          const confView = await service.management?.config.get("global", key);
-          const val = confView?.value;
-          const isSecret = confView?.secret ?? isSecretConfigKey(key);
-          const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
+          const projConfig = loadProjectConfig(root);
+          const declaredItem = projConfig.config?.[key];
+
+          const merged = await resolveMergedConfigEntry(
+            key,
+            projConfig.id,
+            declaredItem,
+            service,
+            reveal
+          );
 
           const payload = {
             key,
-            value: displayValue,
-            source: "global",
-            secret: isSecret,
+            value: merged.value,
+            source: merged.source,
+            secret: merged.secret,
+            configured: merged.configured,
+            redactedPaths: merged.redactedPaths,
           };
+
+          if (reveal && (payload.secret || payload.redactedPaths.length > 0)) {
+            writeStderr(
+              "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+              context
+            );
+          }
 
           renderResult(payload, {
             json: options.json,
-            humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
+            humanFormatter: () => formatSingleConfigDisplay(payload),
             context,
           });
-          return;
-        }
-
-        const projConfig = loadProjectConfig(root);
-        const declaredItem = projConfig.config?.[key];
-
-        // 合并优先级链单一事实源：项目包级 > 全局持久化 > 环境变量 > 声明默认值
-        const { value: displayValue, source, secret: isSecret } = await resolveMergedConfigEntry(
-          key,
-          projConfig.id,
-          declaredItem,
-          service,
-          reveal
-        );
-
-        const payload = {
-          key,
-          value: displayValue,
-          source,
-          secret: isSecret,
-        };
-
-        renderResult(payload, {
-          json: options.json,
-          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
-          context,
-        });
-      },
-      // 按实际查询范围打开存储：显式包寻址结果作为本地根目录传递
-      { localRoot: root || undefined });
+        },
+        { localRoot: root || undefined }
+      );
     });
 }

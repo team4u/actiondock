@@ -10,6 +10,7 @@ import type {
   StateStore,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
+import { assertConcreteConfigKey, assertValidConfigDeclarations, resolveConfigDeclaration, validateConfigValue } from "../project/config-declarations";
 import type { RuntimeStorage } from "../storage/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { createDefaultProcessOwner } from "../invocation/types";
@@ -40,6 +41,7 @@ export class RuntimeConfig implements Config {
   ) {
     this.storage = storage;
     this.overrides = new Map(Object.entries(overrides));
+    assertValidConfigDeclarations(projectConfig?.config);
     this.projectConfig = projectConfig;
     this.globalStorage = globalStorage;
   }
@@ -52,6 +54,8 @@ export class RuntimeConfig implements Config {
     if (resolved.source === "default" && resolved.value === undefined) {
       return defaultValue;
     }
+    const resolvedDecl = resolveConfigDeclaration(this.projectConfig?.config, key);
+    validateConfigValue(key, resolved.value, resolvedDecl?.item);
     return resolved.value;
   }
 
@@ -70,6 +74,7 @@ export class RuntimeConfig implements Config {
   describe<T = unknown>(
     key: string
   ): { source: "overrides" | "package" | "global" | "env" | "default"; value: T | undefined } {
+    assertConcreteConfigKey(key);
     // 1. CLI 临时参数覆写
     if (this.overrides.has(key)) {
       return { source: "overrides", value: this.overrides.get(key) as T };
@@ -96,7 +101,8 @@ export class RuntimeConfig implements Config {
     }
 
     // 4. 环境变量
-    const itemDef = this.projectConfig?.config?.[key];
+    const resolvedDecl = resolveConfigDeclaration(this.projectConfig?.config, key);
+    const itemDef = resolvedDecl?.item;
     const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
     if (envResolved !== undefined) {
       return { source: "env", value: envResolved.value as T };

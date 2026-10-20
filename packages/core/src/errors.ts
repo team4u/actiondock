@@ -459,6 +459,9 @@ export const PROJECT_CONFIG_NOT_FOUND = "PROJECT_CONFIG_NOT_FOUND";
 /** 项目清单加载失败 */
 export const MANIFEST_LOAD_FAILED = "MANIFEST_LOAD_FAILED";
 
+/** 配置项数据值不符合声明的模式规范 */
+export const CONFIG_VALUE_INVALID = "CONFIG_VALUE_INVALID";
+
 /** 动作标识符不符合命名规范 */
 export const INVALID_ACTION_ID = "INVALID_ACTION_ID";
 
@@ -711,6 +714,7 @@ export type ErrorCode =
   | typeof EXECUTION_CONCURRENCY_LIMIT
   | typeof PROJECT_CONFIG_NOT_FOUND
   | typeof MANIFEST_LOAD_FAILED
+  | typeof CONFIG_VALUE_INVALID
   | typeof INVALID_ACTION_ID
   | typeof INVALID_PLAYBOOK_ID
   | typeof PROJECT_ROOT_NOT_FOUND;

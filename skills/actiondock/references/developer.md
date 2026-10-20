@@ -34,6 +34,20 @@
       "secret": true,
       "required": true,
       "env": "GITHUB_TOKEN"
+    },
+    "MYSQL_*": {
+      "type": "object",
+      "description": "动态 MySQL 连接配置模板",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "host": { "type": "string" },
+          "username": { "type": "string" },
+          "password": { "type": "string", "secret": true }
+        },
+        "required": ["host", "username", "password"],
+        "additionalProperties": false
+      }
     }
   },
   "actions": {
@@ -90,6 +104,13 @@
   ]
 }
 ```
+
+- 配置声明规则：
+  - 单个 `*` 匹配一个或更多 `[A-Za-z0-9_.-]` 字符；具体键优先，再按模板最长字面前缀、最长后缀选择。模板不允许 `required`、`default`、`env`，不能作为 `get`、`set`、`delete` 的实键。
+  - 配置 `schema` 仅支持 `type`（`object`、`array`、`string`、`integer`、`number`、`boolean`）、`properties`、`required`、`additionalProperties`、`items`、`enum`、`minLength`、`maxLength`、`minimum`、`maximum` 与布尔扩展 `secret`。不支持 `$ref`、组合、条件、`default`、`format` 或其他关键字；外层 `type` 与根 `schema.type` 一致，外层 `number` 可以配合 `integer`。
+  - 顶层 `secret: true` 隐藏整项；模式中的 `secret: true` 隐藏对应节点。未知字段和类型不符的节点保守隐藏；已经整节点隐藏时不要求 `items` 或 `additionalProperties`。
+  - Action 的 `ctx.config.get` 对最终生效值执行模式校验，失败报 `CONFIG_VALUE_INVALID`，错误只包含键名、路径和原因。没有配置时仍返回 `undefined` 或调用方默认值；外层 `required` 只参与诊断。
+  - 管理视图不会修改执行原值，也不提供明文读取能力。全局管理脱敏合并各包保护范围；全局写入须通过所有匹配模式。避免将凭据放进清单默认值或枚举约束，对外声明会清理这些敏感内容。
 
 - 清单字段说明：
   - `actions`：声明 Action 标识符、执行源码入口、描述以及输入输出契约。其中 `inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范，推荐在字段或根对象层级添加 `examples` 示例数组，增强智能体参数识别精度。
@@ -160,7 +181,7 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 | 模块名称 | 核心方法签名 | 职责说明 |
 | :--- | :--- | :--- |
-| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，自动遵循 6 级优先级解析 |
+| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，遵循 6 级优先级解析；在 Action 内部始终返回未脱敏的完整原值，若有模式则在最终生效值上执行校验 |
 | | `has(key: string): boolean` | 检查指定配置项是否存在 |
 | `ctx.state` | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态数据 |
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态数据，`ttl` 单位为秒 |

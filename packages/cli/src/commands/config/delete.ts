@@ -2,6 +2,9 @@ import {
   loadProjectConfig,
 } from "@actiondock/core";
 import {
+  assertConcreteConfigKey,
+} from "@actiondock/core/project";
+import {
   resolvePackageRoot,
 } from "@actiondock/core/registry";
 import type { Command } from "commander";
@@ -9,6 +12,7 @@ import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
 import { applyTargetOptions, getEffectiveOptions, withService } from "../../utils";
+import { resolveRemoteConfigScope } from "./remote-helper";
 
 /**
  * 注册 config delete 子命令：删除配置项。
@@ -31,36 +35,40 @@ export function registerConfigDeleteCommand(configCmd: Command, context?: CliCon
       if (!key) {
         throw new ArgumentError("Configuration key is required");
       }
+      assertConcreteConfigKey(key);
 
       const root = resolvePackageRoot(options.package);
 
-      await withService(options, context, async (service, resolved) => {
-        if (resolved.type === "remote") {
-          await service.management?.config.delete(options.package || "", key);
-          writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);
-          return;
-        }
-
-        if (options.global) {
-          await service.management?.config.delete("global", key);
-          writeStdout(`[OK] Global configuration '${key}' deleted`, context);
-          return;
-        }
-
-        if (!root) {
-          if (options.package) {
-            throw packageNotFoundError(options.package);
+      await withService(
+        options,
+        context,
+        async (service, resolved) => {
+          if (resolved.type === "remote") {
+            await service.management?.config.delete(resolveRemoteConfigScope(options).packageId || "", key);
+            writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);
+            return;
           }
-          await service.management?.config.delete("global", key);
-          writeStdout(`[OK] Global configuration '${key}' deleted`, context);
-          return;
-        }
 
-        const projConfig = loadProjectConfig(root);
-        await service.management?.config.delete(projConfig.id, key);
-        writeStdout(`[OK] Configuration '${key}' deleted for package '${projConfig.id}'`, context);
-      },
-      // 按实际查询范围打开存储：显式包寻址结果作为本地根目录传递
-      { localRoot: root || undefined });
+          if (options.global) {
+            await service.management?.config.delete("global", key);
+            writeStdout(`[OK] Global configuration '${key}' deleted`, context);
+            return;
+          }
+
+          if (!root) {
+            if (options.package) {
+              throw packageNotFoundError(options.package);
+            }
+            await service.management?.config.delete("global", key);
+            writeStdout(`[OK] Global configuration '${key}' deleted`, context);
+            return;
+          }
+
+          const projConfig = loadProjectConfig(root);
+          await service.management?.config.delete(projConfig.id, key);
+          writeStdout(`[OK] Configuration '${key}' deleted for package '${projConfig.id}'`, context);
+        },
+        { localRoot: root || undefined }
+      );
     });
 }

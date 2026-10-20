@@ -4,6 +4,35 @@
 export type ConfigValueType = "string" | "number" | "boolean" | "object" | "array";
 
 /**
+ * 配置值受限模式定义契约。
+ * 仅允许受支持的纯受限关键字集合，禁止动态计算或高级条件指令。
+ */
+export interface ConfigValueSchema {
+  /** 节点数据类型 */
+  type?: "object" | "array" | "string" | "integer" | "number" | "boolean";
+  /** 对象属性字段子模式映射 */
+  properties?: Record<string, ConfigValueSchema>;
+  /** 必填属性字段列表 */
+  required?: string[];
+  /** 额外属性放行策略（布尔开关或子模式） */
+  additionalProperties?: boolean | ConfigValueSchema;
+  /** 数组元素子模式 */
+  items?: ConfigValueSchema;
+  /** 枚举有效值列表 */
+  enum?: unknown[];
+  /** 字符串最小字符长度 */
+  minLength?: number;
+  /** 字符串最大字符长度 */
+  maxLength?: number;
+  /** 数值最小值约束 */
+  minimum?: number;
+  /** 数值最大值约束 */
+  maximum?: number;
+  /** 是否为敏感字段（仅可在模式节点中扩展指定） */
+  secret?: boolean;
+}
+
+/**
  * 在 actiondock.json 中声明的单项配置定义。
  */
 export interface ConfigItemDefinition {
@@ -21,6 +50,8 @@ export interface ConfigItemDefinition {
   required?: boolean;
   /** 是否允许单次调用覆盖 */
   allowInvocationOverride?: boolean;
+  /** 配置值验证与字段级脱敏所绑定的受限模式定义 */
+  schema?: ConfigValueSchema;
 }
 
 /**

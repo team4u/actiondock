@@ -2,11 +2,21 @@ import type { EnvCheckItem } from "../types";
 
 /**
  * 格式化渲染配置项列表。
- * 掩码决策收敛在命令层（传入的 value 已完成是否打码处理），
- * 此处仅负责值的字符串格式化：字符串原样输出，其余类型 JSON 序列化。
+ * 格式化规则：
+ * - 根路径脱敏或已配置但整项隐藏显示 <hidden>；
+ * - 未显式配置且无有效值显示 <not configured>；
+ * - 字符串原样输出，其余类型（包括对象与数组）严格 JSON 序列化（杜绝 [object Object]）。
  */
 export function renderConfigList(
-  items: Array<{ key: string; value: unknown; source: string; secret: boolean; description?: string }>,
+  items: Array<{
+    key: string;
+    value?: unknown;
+    source: string;
+    secret: boolean;
+    configured?: boolean;
+    redactedPaths?: string[];
+    description?: string;
+  }>,
   scopeLabel: string = "Global Scope",
   isFallback: boolean = false,
   intent?: string
@@ -20,12 +30,34 @@ export function renderConfigList(
     lines.push("  (No configuration entries found)");
   } else {
     for (const item of items) {
-      const valStr = formatConfigValue(item.value);
+      const valStr = formatSingleConfigDisplay(item);
       const secretBadge = item.secret ? ", secret" : "";
       lines.push(`  - ${item.key.padEnd(24)} = ${valStr} (${item.source}${secretBadge})`);
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * 格式化单项配置值人类友好展示文本。
+ *
+ * @param view 包含值、配置状态与脱敏路径的安全视图
+ */
+export function formatSingleConfigDisplay(view: {
+  value?: unknown;
+  configured?: boolean;
+  redactedPaths?: string[];
+}): string {
+  const isRootHidden =
+    view.redactedPaths?.includes("") || (Boolean(view.configured) && view.value === undefined);
+
+  if (isRootHidden) {
+    return "<hidden>";
+  }
+  if (!view.configured && view.value === undefined) {
+    return "<not configured>";
+  }
+  return formatConfigValue(view.value);
 }
 
 /**
@@ -37,9 +69,17 @@ export function formatConfigValue(value: unknown): string {
 
 /**
  * 格式化渲染配置依赖规范检查。
+ * 针对模板通配项展示独立 [TEMPLATE] 状态及已存储匹配键数量，且不计入缺失告警。
  */
 export function renderConfigSchema(
-  items: Array<{ key: string; status: string; source: string; secret: boolean; description: string }>,
+  items: Array<{
+    key: string;
+    status: string;
+    source: string;
+    secret: boolean;
+    description: string;
+    matchCount?: number;
+  }>,
   packageId: string,
   root: string
 ): string {
@@ -50,14 +90,30 @@ export function renderConfigSchema(
     return lines.join("\n");
   }
 
-  lines.push(`  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(10)} ${"SECRET".padEnd(8)} DESCRIPTION`);
+  lines.push(`  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(14)} ${"SECRET".padEnd(8)} DESCRIPTION`);
   lines.push("  " + "-".repeat(85));
 
   const missing: string[] = [];
   for (const item of items) {
-    const statusLabel = item.status === "SET" ? "[SET]" : item.status === "DEFAULT" ? "[DEFAULT]" : "[MISSING]";
+    let statusLabel: string;
+    let sourceLabel = item.source;
+
+    if (item.status === "SET") {
+      statusLabel = "[SET]";
+    } else if (item.status === "DEFAULT") {
+      statusLabel = "[DEFAULT]";
+    } else if (item.status === "TEMPLATE") {
+      statusLabel = "[TEMPLATE]";
+      sourceLabel = `${item.matchCount ?? 0} matches`;
+    } else {
+      statusLabel = "[MISSING]";
+    }
+
     const secretLabel = item.secret ? "yes" : "no";
-    lines.push(`  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${item.source.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}`);
+    lines.push(
+      `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${sourceLabel.padEnd(14)} ${secretLabel.padEnd(8)} ${item.description}`
+    );
+
     if (item.status === "MISSING") {
       missing.push(item.key);
     }

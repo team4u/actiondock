@@ -29,6 +29,7 @@ import {
   resolveActionInput,
   resolveLocalPackageRoot,
   resolveTimeoutMs,
+  parseConfigOverrideAssignment,
   withService,
 } from "../utils";
 
@@ -158,8 +159,8 @@ export async function executeAction(
   if (options.config) {
     const list = Array.isArray(options.config) ? options.config : [options.config];
     for (const item of list) {
-      const [k, ...v] = item.split("=");
-      if (k) configOverrides[k] = v.join("=");
+      const { key, value } = parseConfigOverrideAssignment(item);
+      Object.defineProperty(configOverrides, key, { value: value as JsonValue, enumerable: true, writable: true, configurable: true });
     }
   }
 
@@ -344,7 +345,7 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Action input as inline JSON")
     .option("-f, --input-file <path>", "Action input from JSON file, or '-' for stdin")
-    .option("-c, --config <key=value...>", "Temporary config override (repeatable)")
+    .option("-c, --config <key=value|key:=json...>", "Temporary config override (repeatable)")
     .option("--stdin-field <field>", "Bind raw stdin text to a top-level action input field");
 
   (cmd as any).unknownOption = function (this: Command, flag: string) {

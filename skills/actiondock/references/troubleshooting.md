@@ -46,6 +46,7 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `OUTPUT_FORMAT_ERROR` | 指定正文字段缺失、不是字符串，或结果不是对象，CLI 无法提取正文。 | 查验 `ad describe`、完整运行记录与输出契约；业务记录可能已经成功，不要因展示失败自动重跑有副作用的动作。 |
 | `ACTION_INPUT_INVALID` | 传入参数不匹配该 Action 声明的 inputSchema 契约。 | 执行 `ad describe <id>` 调阅参数定义与必填要求，修正传参字段与类型。 |
 | `ACTION_OUTPUT_INVALID` | Action 返回的对象不匹配 outputSchema 模式定义。 | 检查 Action 实现代码，确保返回结构包含全部必须属性且类型一致。 |
+| `CONFIG_VALUE_INVALID` | 写入配置值未能通过模式校验（类型不匹配、包含未声明字段、缺少必填属性或超出范围等）。系统严禁在错误明细中携带实际敏感输入值，写入失败保持原有配置值不变。 | 执行 `ad config schema` 确认模式约束；按整键全量替换重新写入，注意系统不支持掩码直接回写、部分更新或对象合并。 |
 
 ---
 
@@ -119,4 +120,7 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
   - 边界：调整配置后重新装配宿主；不以切换 CLI 默认 Profile 替代内部绑定，不记录凭据，不把断链视作未执行。详见 [action-bindings.md](action-bindings.md)。
 - 配置项缺失自愈：
   - 适用现象：执行 Action 报错提示未注入必填配置。
-  - 自愈流程：执行 `ad config schema [pkg]` 查看所需配置项 -> 执行 `ad config set <key> <value>` 注入持久化配置。
+  - 自愈流程：执行 `ad config schema [pkg]` 查看所需配置项与模板定义 -> 执行 `ad config set <key> <value>` 注入持久化配置（敏感对象使用标准输入管道：`printf '%s' '{...}' | ad config set <key> -P <pkg> --stdin`）。
+- 配置写入校验失败自愈 (CONFIG_VALUE_INVALID)：
+  - 适用现象：执行 `ad config set` 报错 `CONFIG_VALUE_INVALID`。
+  - 自愈流程：执行 `ad config schema [pkg]` 查验模式约束与受限字段 -> 修正输入数据，按整键全量替换重新写入（不支持掩码数据回写、部分更新或对象合并）。

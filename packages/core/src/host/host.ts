@@ -100,10 +100,16 @@ import type {
   StateScopeOptions,
 } from "../service/types";
 import { CAPABILITY_UNAVAILABLE } from "../errors";
-import { createGlobalStorage, isSecretConfigKey } from "../storage";
+import { createGlobalStorage, redactConfigValueAtPaths, redactConfigValueForDeclarations } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import type { ConfigItemDefinition } from "../project/types";
 import { filterByIntent } from "../utils/intent";
+import {
+  assertConcreteConfigKey,
+  isConfigTemplate,
+  resolveConfigDeclaration,
+  validateConfigValue,
+} from "../project/config-declarations";
 
 function isPackageRuntime(item: unknown): item is PackageRuntime {
   return (
@@ -1680,16 +1686,25 @@ export class DefaultActionDockHost implements ActionDockHost {
     return this.globalStorage;
   }
 
-  private findDeclaredConfigItem(key: string): ConfigItemDefinition | undefined {
-    let foundItem: ConfigItemDefinition | undefined;
+  private findAllDeclaredConfigItems(key: string): ConfigItemDefinition[] {
+    const items: ConfigItemDefinition[] = [];
     for (const runtime of this.listRuntimes()) {
-      const item = runtime.projectConfig?.config?.[key];
-      if (item) {
-        if (item.secret) return item;
-        foundItem = item;
+      const decl = resolveConfigDeclaration(runtime.projectConfig?.config, key);
+      if (decl?.item) {
+        items.push(decl.item);
       }
     }
-    return foundItem;
+    return items;
+  }
+
+  private protectGlobalConfigView(view: ConfigValueView): ConfigValueView {
+    if (view.source !== "global") return view;
+    const items = this.findAllDeclaredConfigItems(view.key);
+    if (items.length === 0) return view;
+    // 外部注入的运行时可能持有独立全局库；只能加强它返回的安全值，不能换读 Host 的库。
+    const merged = redactConfigValueForDeclarations(view.value, items);
+    const safe = redactConfigValueAtPaths(merged.value, [...view.redactedPaths, ...merged.redactedPaths]);
+    return { ...view, ...safe, secret: view.secret || merged.secret };
   }
 
   private resolveRuntime(packageId?: string): PackageRuntime | undefined {
@@ -1713,26 +1728,33 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
     await this.ensureInitialized();
+    assertConcreteConfigKey(key);
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
       const val = globalStorage.getConfig(key);
       const configured = val !== undefined;
-      const declaredItem = this.findDeclaredConfigItem(key);
-      const isSecret = isSecretConfigKey(key, declaredItem);
+      const items = this.findAllDeclaredConfigItems(key);
+      const redacted = redactConfigValueForDeclarations(val, items);
       return {
         key,
         configured,
-        secret: isSecret,
+        secret: redacted.secret,
         source: configured ? "global" : "default",
-        value: !isSecret && configured ? (val as JsonValue) : undefined,
+        value: redacted.value,
+        redactedPaths: redacted.redactedPaths,
       };
     }
-    return this.requireRuntime(packageId).getConfig(key);
+    return this.protectGlobalConfigView(await this.requireRuntime(packageId).getConfig(key));
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
     await this.ensureInitialized();
+    assertConcreteConfigKey(key);
     if (packageId === "global") {
+      const items = this.findAllDeclaredConfigItems(key);
+      for (const item of items) {
+        validateConfigValue(key, value, item);
+      }
       await this.getGlobalStorage().setConfig(key, value);
       return;
     }
@@ -1741,6 +1763,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
     await this.ensureInitialized();
+    assertConcreteConfigKey(key);
     if (packageId === "global") {
       return await this.getGlobalStorage().deleteConfig(key);
     }
@@ -1752,19 +1775,26 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
       const all = globalStorage.listConfig();
-      return Object.entries(all).map(([key, val]) => {
-        const declaredItem = this.findDeclaredConfigItem(key);
-        const isSecret = isSecretConfigKey(key, declaredItem);
-        return {
+      const views: ConfigValueView[] = [];
+      for (const [key, val] of Object.entries(all)) {
+        if (isConfigTemplate(key)) {
+          continue;
+        }
+        const items = this.findAllDeclaredConfigItems(key);
+        const redacted = redactConfigValueForDeclarations(val, items);
+        views.push({
           key,
           configured: true,
-          secret: isSecret,
+          secret: redacted.secret,
           source: "global",
-          value: isSecret ? undefined : (val as JsonValue),
-        };
-      });
+          value: redacted.value,
+          redactedPaths: redacted.redactedPaths,
+        });
+      }
+      return views;
     }
-    return this.requireRuntime(packageId).listConfig();
+    const views = await this.requireRuntime(packageId).listConfig();
+    return views.map((view) => this.protectGlobalConfigView(view));
   }
 
   async getState<T extends JsonValue = JsonValue>(

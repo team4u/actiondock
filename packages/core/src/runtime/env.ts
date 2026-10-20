@@ -169,7 +169,22 @@ export function resolveEnvValue(
   candidateKeys.add(key);
 
   // 按优先级顺序依次检索环境变量
-  const effectiveType = itemDef?.type || inferTypeFromDefault(itemDef?.default);
+  let effectiveType = itemDef?.type;
+  if (!effectiveType && itemDef?.schema?.type) {
+    if (itemDef.schema.type === "integer" || itemDef.schema.type === "number") {
+      effectiveType = "number";
+    } else if (
+      itemDef.schema.type === "string" ||
+      itemDef.schema.type === "boolean" ||
+      itemDef.schema.type === "object" ||
+      itemDef.schema.type === "array"
+    ) {
+      effectiveType = itemDef.schema.type;
+    }
+  }
+  if (!effectiveType) {
+    effectiveType = inferTypeFromDefault(itemDef?.default);
+  }
 
   for (const envKey of candidateKeys) {
     const rawVal = process.env[envKey];

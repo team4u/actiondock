@@ -1,12 +1,14 @@
 import { resolveEnvValue } from "@actiondock/core";
 import { fetchRemoteConfigEnv } from "@actiondock/core/profile";
 import {
+  isConfigTemplate,
   isSecretConfigKey,
 } from "@actiondock/core/project";
 import type { Command } from "commander";
 import { renderConfigEnv, renderResult } from "../../renderer";
 import type { CliContext, EnvCheckItem } from "../../types";
 import { applyTargetOptions, getEffectiveOptions, requirePackageRoot, resolveTargetFromOptions } from "../../utils";
+import { resolveRemoteConfigScope } from "./remote-helper";
 
 /**
  * 注册 config env 子命令：诊断环境变量对声明配置的满足率。
@@ -30,7 +32,8 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
-        const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, targetPkg, {
+        const scope = resolveRemoteConfigScope({ package: targetPkg });
+        const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, scope.packageId, {
           allowInsecureHttp: Boolean(options.allowInsecureHttp),
           insecure: target.insecure,
         });
@@ -58,6 +61,11 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       const envChecks: EnvCheckItem[] = [];
 
       for (const [key, itemDef] of Object.entries(declared)) {
+        // 通配模板项跳过环境诊断，不计入满足率统计
+        if (isConfigTemplate(key)) {
+          continue;
+        }
+
         const resolved = resolveEnvValue(key, itemDef, projConfig.id);
         const hasDefault = itemDef.default !== undefined;
         const satisfied = resolved !== undefined || hasDefault;

@@ -32,18 +32,28 @@ actiondock.json 清单中的默认配置声明 (default)
 
 ### 命令行单次临时覆盖
 
-适合临时调试或流水线动态注入：
+适合临时调试或流水线动态注入，支持字符串与严格 JSON 解析：
 
 ```bash
-ad run sample.greet --config GREETING_PREFIX="Bonjour" -- name=ActionDock
+# 字符串覆盖
+ad run sample.greet -c GREETING_PREFIX="Bonjour" -- name=ActionDock
+
+# 严格 JSON 对象覆盖（要求数值为有限数，不物化路径，解析错误退出码 2）
+ad run sample.greet -c CONFIG_OBJ:='{"timeout":3000}' -- name=ActionDock
 ```
 
 ### 包级本地 SQLite 配置
 
-在特定 Action Package 目录下执行，配置存入当前包对应的本地数据库中：
+在特定 Action Package 目录下执行，配置存入当前包对应的本地数据库中（写入执行全量替换与写前校验，失败报 `CONFIG_VALUE_INVALID` 且原值不变）：
 
 ```bash
 ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx
+```
+
+写入复杂或敏感对象时，推荐使用管道从标准输入传入，避免密钥残留于命令历史：
+
+```bash
+printf '%s' '{"host":"127.0.0.1","username":"root","password":"secret"}' | ad config set MYSQL_191 -P pkg --stdin
 ```
 
 ### 全局跨包持久化配置
@@ -72,24 +82,24 @@ GITHUB_TOKEN=ghp_xxxx ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
 
 ## 常用配置管理命令速查
 
-- 查看当前包配置声明与状态：
+- 查看当前包配置声明与状态（通配模板单列并统计 matchCount，不判缺失）：
   ```bash
   ad config schema
   ```
 
-- 列出当前配置项（敏感值默认掩码遮蔽）：
+- 列出当前配置项（安全脱敏视图，整项隐藏显示 `<hidden>`，未配置显示 `<not configured>`）：
   ```bash
   ad config list
   ad config list -g
   ```
 
-- 明文读取敏感配置：
+- 读取配置项安全视图（系统不提供明文回显接口，`--reveal` 仅向标准错误输出安全提示）：
   ```bash
-  ad config get GITHUB_TOKEN --reveal
-  ad config get GITHUB_TOKEN -g --reveal
+  ad config get GITHUB_TOKEN
+  ad config get GITHUB_TOKEN -g
   ```
 
-- 删除配置项：
+- 删除配置项（拒绝 `*` 通配符实键）：
   ```bash
   ad config delete GITHUB_TOKEN
   ad config delete GITHUB_TOKEN -g

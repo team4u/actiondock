@@ -29,6 +29,7 @@ import { MockProcessExecutor } from "./process";
 import { MemoryStorage } from "./storage";
 import { createTestPlatform } from "./platform";
 import { parseActionRef } from "@actiondock/core/graph";
+import { assertConcreteConfigKey, assertValidConfigDeclarations, isConfigTemplate, resolveConfigDeclaration, validateConfigValue } from "@actiondock/core/project";
 import { MockActionInvoker } from "./actions";
 
 export { ActionRuntimeError };
@@ -146,6 +147,7 @@ export class TestConfigStore implements TestConfig {
     projectConfig?: ProjectConfig,
     overrides?: Record<string, unknown>
   ) {
+    assertValidConfigDeclarations(projectConfig?.config);
     this.storage = storage;
     this.projectConfig = projectConfig;
     this.overrides = overrides ? { ...overrides } : {};
@@ -154,32 +156,31 @@ export class TestConfigStore implements TestConfig {
   get<T = unknown>(key: string): T | undefined;
   get<T = unknown>(key: string, defaultValue: T): T;
   get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    if (key in this.overrides) {
-      return this.overrides[key] as T;
-    }
-    const val = this.storage.getConfig(key);
-    if (val !== undefined) {
-      return val as T;
-    }
-    const def = this.projectConfig?.config?.[key]?.default;
-    if (def !== undefined) {
-      return def as T;
-    }
-    return defaultValue;
+    assertConcreteConfigKey(key);
+    const item = resolveConfigDeclaration(this.projectConfig?.config, key)?.item;
+    const overridden = Object.hasOwn(this.overrides, key);
+    let value = overridden ? this.overrides[key] : this.storage.getConfig(key);
+    if (value === undefined && !overridden) value = item?.default;
+    validateConfigValue(key, value, item);
+    return (value === undefined && !overridden ? defaultValue : value) as T | undefined;
   }
 
   has(key: string): boolean {
-    if (key in this.overrides) return true;
+    assertConcreteConfigKey(key);
+    if (Object.hasOwn(this.overrides, key)) return true;
     if (this.storage.getConfig(key) !== undefined) return true;
-    if (this.projectConfig?.config?.[key]?.default !== undefined) return true;
+    if (resolveConfigDeclaration(this.projectConfig?.config, key)?.item.default !== undefined) return true;
     return false;
   }
 
   set(key: string, value: unknown): void {
+    assertConcreteConfigKey(key);
+    validateConfigValue(key, value, resolveConfigDeclaration(this.projectConfig?.config, key)?.item);
     this.storage.setConfig(key, value);
   }
 
   delete(key: string): boolean {
+    assertConcreteConfigKey(key);
     const res = this.storage.deleteConfig(key);
     return typeof res === "boolean" ? res : true;
   }
@@ -188,7 +189,7 @@ export class TestConfigStore implements TestConfig {
     const result: Record<string, unknown> = {};
     if (this.projectConfig?.config) {
       for (const [k, v] of Object.entries(this.projectConfig.config)) {
-        if (v?.default !== undefined) result[k] = v.default;
+        if (!isConfigTemplate(k) && v?.default !== undefined) result[k] = v.default;
       }
     }
     const stored = this.storage.listConfig();

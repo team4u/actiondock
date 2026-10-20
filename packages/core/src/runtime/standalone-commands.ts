@@ -342,10 +342,14 @@ export async function handleConfig(ctx: CommandContext, subArgs: string[]): Prom
 
   if (sub === "list") {
     const views = await ctx.service.management.config.list(ctx.options.packageId);
-    const dict: Record<string, unknown> = {};
+    const dict: Record<string, unknown> = Object.create(null);
     for (const v of views) {
-      if (v.configured && v.value !== undefined) {
-        dict[v.key] = v.value;
+      if (v.configured) {
+        if (v.secret && v.value === undefined) {
+          dict[v.key] = "********";
+        } else if (v.value !== undefined) {
+          dict[v.key] = v.value;
+        }
       }
     }
     ctx.writeOut(JSON.stringify(dict, null, 2));
@@ -360,7 +364,13 @@ export async function handleConfig(ctx: CommandContext, subArgs: string[]): Prom
     }
     try {
       const item = await ctx.service.management.config.get(ctx.options.packageId, key);
-      ctx.writeOut(item.configured ? JSON.stringify(item.value) : "undefined");
+      if (item.redactedPaths.includes("") || (item.configured && item.value === undefined)) {
+        ctx.writeOut("<hidden>");
+      } else if (item.value === undefined) {
+        ctx.writeOut("<not configured>");
+      } else {
+        ctx.writeOut(JSON.stringify(item.value));
+      }
       return ExitCode.SUCCESS;
     } catch (err: any) {
       if (isServiceCapabilityError(err)) {

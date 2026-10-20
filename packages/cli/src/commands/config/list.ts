@@ -1,18 +1,13 @@
 import {
-  fetchRemoteConfig,
-} from "@actiondock/core/profile";
-import {
   loadProjectConfig,
 } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
-  isSecretConfigKey,
-  maskSecretValue,
 } from "@actiondock/core/project";
 import type { Command } from "commander";
 import { packageNotFoundError } from "../../errors";
-import { renderConfigList, renderResult } from "../../renderer";
-import { buildMergedConfigEntries } from "../../services/config-merge";
+import { renderConfigList, renderResult, writeStderr } from "../../renderer";
+import { buildMergedConfigEntries, type MergedConfigEntry } from "../../services/config-merge";
 import type { CliContext } from "../../types";
 import {
   applyTargetOptions,
@@ -24,28 +19,7 @@ import {
   resolveTargetFromOptions,
   withService,
 } from "../../utils";
-
-/**
- * 构造单条配置项的展示视图（含掩码决策，reveal 为假且为敏感键时打码）。
- * 掩码决策收敛于命令层，renderer 仅负责值的字符串格式化。
- */
-function toDisplayEntry(
-  key: string,
-  rawValue: unknown,
-  source: string,
-  isSecret: boolean,
-  reveal: boolean,
-  description?: string
-) {
-  const displayValue = !reveal && isSecret && rawValue !== undefined ? maskSecretValue(rawValue) : rawValue;
-  return {
-    key,
-    value: displayValue,
-    source,
-    secret: isSecret,
-    ...(description !== undefined ? { description } : {}),
-  };
-}
+import { fetchRemoteConfigSafe } from "./remote-helper";
 
 /**
  * 注册 config list 子命令：列出全局与项目配置项。
@@ -62,7 +36,10 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       .option("-g, --global", "Show only global configurations")
   )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
-    .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
+    .option(
+      "--reveal, --show-secrets",
+      "Request secrets display (secrets remain redacted for security; notice printed to stderr)"
+    )
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
@@ -73,32 +50,51 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       const { shouldFallback } = resolveFallbackStrategy(options);
       const reveal = Boolean(options.reveal || options.showSecrets);
 
-      // 远端服务分支不经过 Target 门面，直接查询远端配置接口
+      // 远端服务分支
       const remoteTargetInfo = resolveTargetFromOptions(options, context);
 
       if (remoteTargetInfo.type === "remote") {
-        const res = await fetchRemoteConfig(remoteTargetInfo.serverUrl!, remoteTargetInfo.token, options.package, {
-          allowInsecureHttp: Boolean(options.allowInsecureHttp),
-          insecure: remoteTargetInfo.insecure,
-        });
-        const entries = Object.entries(res.values || {}).map(([k, v]) =>
-          toDisplayEntry(
-            k,
-            v,
-            "remote",
-            isSecretConfigKey(k, res.declared?.[k]),
-            reveal,
-            res.declared?.[k]?.description || ""
-          )
+        const { items, declared } = await fetchRemoteConfigSafe(
+          {
+            serverUrl: remoteTargetInfo.serverUrl,
+            token: remoteTargetInfo.token,
+            insecure: remoteTargetInfo.insecure,
+          },
+          options,
+          context
         );
 
-        renderResult(entries, {
+        const entries: MergedConfigEntry[] = items.map((it) => ({
+          key: it.key,
+          value: it.value,
+          source: it.source,
+          secret: it.secret,
+          configured: it.configured,
+          redactedPaths: it.redactedPaths,
+          ...(declared?.[it.key]?.description ? { description: declared[it.key].description } : {}),
+        }));
+
+        const filterRes = filterWithFallbackInfo(
+          entries,
+          effectiveIntent,
+          [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
+          shouldFallback
+        );
+
+        if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
+          writeStderr(
+            "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+            context
+          );
+        }
+
+        renderResult(filterRes.items, {
           json: options.json,
           humanFormatter: () =>
             renderConfigList(
-              entries,
+              filterRes.items,
               remoteTargetLabel(remoteTargetInfo),
-              false,
+              filterRes.isFallback,
               effectiveIntent
             ),
           context,
@@ -106,77 +102,91 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
         return;
       }
 
-      // 本地分支（通过 Service 门面统一访问）：显式包寻址结果作为本地根目录传递（仅 local 分支求值）
+      // 本地分支
       await withService(
         options,
         context,
         async (service) => {
-        const root = resolveLocalPackageRoot(options.package) || undefined;
+          const root = resolveLocalPackageRoot(options.package) || undefined;
 
-        // 全局作用域分支：显式 --global 或无工程回退时仅列举全局配置
-        if (options.global || !root) {
-          if (!options.global && options.package) {
-            throw packageNotFoundError(options.package);
+          // 全局作用域分支
+          if (options.global || !root) {
+            if (!options.global && options.package) {
+              throw packageNotFoundError(options.package);
+            }
+
+            const all = (await service.management?.config.list("global")) ?? [];
+            const entries: MergedConfigEntry[] = all.map((item) => ({
+              key: item.key,
+              value: item.value,
+              source: "global",
+              secret: item.secret,
+              configured: item.configured,
+              redactedPaths: item.redactedPaths ?? [],
+            }));
+
+            const filterRes = filterWithFallbackInfo(
+              entries,
+              effectiveIntent,
+              [(c) => c.key, (c) => c.value],
+              shouldFallback
+            );
+
+            if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
+              writeStderr(
+                "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+                context
+              );
+            }
+
+            renderResult(filterRes.items, {
+              json: options.json,
+              humanFormatter: () =>
+                renderConfigList(
+                  filterRes.items,
+                  options.global ? "Global Scope" : "Global Scope (No project found)",
+                  filterRes.isFallback,
+                  effectiveIntent
+                ),
+              context,
+            });
+            return;
           }
 
-          const all = (await service.management?.config.list("global")) ?? [];
-          const entries = all.map((item) =>
-            toDisplayEntry(
-              item.key,
-              item.value,
-              "global",
-              item.secret || isSecretConfigKey(item.key),
-              reveal
-            )
-          );
+          const projConfig = loadProjectConfig(root);
+
+          // 跨作用域合并视图单一事实源
+          const merged = await buildMergedConfigEntries(root, service, reveal);
 
           const filterRes = filterWithFallbackInfo(
-            entries,
+            merged,
             effectiveIntent,
-            [(c) => c.key, (c) => c.value],
+            [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
             shouldFallback
           );
+
+          if (reveal && filterRes.items.some((it) => it.secret || it.redactedPaths?.length > 0)) {
+            writeStderr(
+              "Note: Secret values are redacted and cannot be displayed in plaintext for security.",
+              context
+            );
+          }
 
           renderResult(filterRes.items, {
             json: options.json,
             humanFormatter: () =>
               renderConfigList(
                 filterRes.items,
-                options.global ? "Global Scope" : "Global Scope (No project found)",
+                `${projConfig.name} (${projConfig.id})`,
                 filterRes.isFallback,
                 effectiveIntent
               ),
             context,
           });
-          return;
+        },
+        {
+          localRoot: () => resolveLocalPackageRoot(options.package) || undefined,
         }
-
-        const projConfig = loadProjectConfig(root);
-
-        // 跨作用域合并视图单一事实源：项目包级 > 全局持久化 > 环境变量 > 声明默认值
-        const merged = await buildMergedConfigEntries(root, service, reveal);
-
-        const filterRes = filterWithFallbackInfo(
-          merged,
-          effectiveIntent,
-          [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
-          shouldFallback
-        );
-
-        renderResult(filterRes.items, {
-          json: options.json,
-          humanFormatter: () =>
-            renderConfigList(
-              filterRes.items,
-              `${projConfig.name} (${projConfig.id})`,
-              filterRes.isFallback,
-              effectiveIntent
-            ),
-          context,
-        });
-      },
-      {
-        localRoot: () => resolveLocalPackageRoot(options.package) || undefined,
-      });
+      );
     });
 }

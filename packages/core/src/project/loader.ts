@@ -16,6 +16,7 @@ import {
   PROJECT_CONFIG_NOT_FOUND,
 } from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
+import { assertValidConfigDeclarations } from "./config-declarations";
 import type {
   ActionDockManifest,
   PlaybookDefinition,
@@ -97,6 +98,10 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
     }
     if (parsed.playbooksDir) {
       assertWithinProjectRoot(projectRoot, parsed.playbooksDir, "playbooksDir");
+    }
+
+    if (parsed.config !== undefined) {
+      assertValidConfigDeclarations(parsed.config);
     }
 
     return parsed as ProjectConfig;

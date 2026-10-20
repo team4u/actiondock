@@ -18,7 +18,14 @@ import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
-import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
+import { redactConfigValue, sanitizeConfigDefinitions } from "../storage/mask";
+import {
+  assertConcreteConfigKey,
+  assertValidConfigDeclarations,
+  isConfigTemplate,
+  resolveConfigDeclaration,
+  validateConfigValue,
+} from "../project/config-declarations";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
@@ -223,6 +230,9 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     }
 
     this.packageRoot = packageRoot;
+    if (projectConfig.config !== undefined) {
+      assertValidConfigDeclarations(projectConfig.config);
+    }
     this.projectConfig = projectConfig;
     // 兼容未在公开选项契约中显式声明的包实例标识与代系标识内部参数透传
     this.identity = options.identity || createPackageIdentity({
@@ -859,9 +869,25 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   async listConfig(): Promise<ConfigValueView[]> {
     this.assertOpen();
-    const declared = this.projectConfig.config || {};
-    const stored = (await this.prepareStorageAsync()).listConfig();
-    const allKeys = Array.from(new Set([...Object.keys(declared), ...Object.keys(stored)]));
+    const packageStorage = await this.prepareStorageAsync();
+    const globalStorage = await this.ensureGlobalStorage();
+
+    const declaredKeys = Object.keys(this.projectConfig.config || {}).filter(
+      (k) => !isConfigTemplate(k)
+    );
+    const packageStoredKeys = Object.keys(packageStorage.listConfig());
+    const globalStoredKeys = Object.keys(globalStorage.listConfig());
+    const overrideKeys = Object.keys(this.options.configOverrides || {});
+
+    const allKeys = Array.from(
+      new Set([
+        ...declaredKeys,
+        ...packageStoredKeys,
+        ...globalStoredKeys,
+        ...overrideKeys,
+      ])
+    ).filter((k) => !isConfigTemplate(k));
+
     const views: ConfigValueView[] = [];
     for (const key of allKeys) {
       const item = await this.getConfig(key);
@@ -874,31 +900,37 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   async getConfig(key: string): Promise<ConfigValueView> {
     this.assertOpen();
-    const itemDef = this.projectConfig.config?.[key];
-    const isSecret = isSecretConfigKey(key, itemDef);
+    assertConcreteConfigKey(key);
 
+    const decl = resolveConfigDeclaration(this.projectConfig.config, key);
     // 委托 RuntimeConfig 五层优先级链单一事实源，避免重复实现解析链
     const resolved = this.ensureRuntimeConfig().describe(key);
-    // overrides 来源对外统一星现为包级覆盖视角
+    // overrides 来源对外统一呈现为包级覆盖视角
     const source = resolved.source === "overrides" ? "package" : resolved.source;
     const configured = resolved.source !== "default";
+    const redacted = redactConfigValue(resolved.value, decl?.item);
 
     return {
       key,
       configured,
-      secret: isSecret,
+      secret: redacted.secret,
       source,
-      value: isSecret ? undefined : (resolved.value as JsonValue),
+      value: redacted.value,
+      redactedPaths: redacted.redactedPaths,
     };
   }
 
   async setConfig(key: string, value: JsonValue): Promise<void> {
     this.assertOpen();
+    assertConcreteConfigKey(key);
+    const decl = resolveConfigDeclaration(this.projectConfig.config, key);
+    validateConfigValue(key, value, decl?.item);
     await (await this.prepareStorageAsync()).setConfig(key, value);
   }
 
   async deleteConfig(key: string): Promise<boolean> {
     this.assertOpen();
+    assertConcreteConfigKey(key);
     return await (await this.prepareStorageAsync()).deleteConfig(key);
   }
 

@@ -64,14 +64,16 @@ export { PROTOCOL_UNSUPPORTED, SERVICE_RESULT_UNKNOWN, SERVICE_CLOSED };
 export interface ConfigValueView {
   /** 配置项键名 */
   key: string;
-  /** 是否已显式配置或存在有效值 */
+  /** 是否来自显式配置（非 default 来源）；默认值存在时仍为 false */
   configured: boolean;
-  /** 是否为秘密敏感配置 */
+  /** 声明含敏感字段或实际发生保守隐藏；不代表整个值不可见 */
   secret: boolean;
   /** 配置值实际解析来源 */
   source: string;
-  /** 非秘密配置的实际数据值 */
+  /** 管理侧安全值；顶层敏感时不提供原值 */
   value?: JsonValue;
+  /** 标准 JSON Pointer 隐藏路径；根为 ""，未发生隐藏时为空 */
+  redactedPaths: string[];
 }
 
 /**

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { ActionDockManifest } from "./types";
+import { assertValidConfigDeclarations, validateConfigDeclarations } from "./config-declarations";
 import { isPathOutsideBoundary, PACKAGE_ID_REGEX } from "../utils";
 import {
   ActionDockError,
@@ -65,6 +66,10 @@ export function loadManifest(projectRoot: string): ActionDockManifest | null {
     parsed.id = basename(projectRoot);
   }
 
+  if (parsed.config !== undefined) {
+    assertValidConfigDeclarations(parsed.config);
+  }
+
   return parsed as ActionDockManifest;
 }
 
@@ -99,6 +104,13 @@ export function validateManifest(
   if (m.id !== undefined) {
     if (typeof m.id !== "string" || !PACKAGE_ID_REGEX.test(m.id)) {
       errors.push(`Manifest 'id' is invalid: '${m.id}' (must match ${PACKAGE_ID_REGEX})`);
+    }
+  }
+
+  if (m.config !== undefined) {
+    const configErrors = validateConfigDeclarations(m.config);
+    for (const err of configErrors) {
+      errors.push(err);
     }
   }
 

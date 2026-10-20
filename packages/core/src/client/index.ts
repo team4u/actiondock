@@ -61,6 +61,9 @@ export {
 export {
   deleteRemoteConfig,
   fetchRemoteConfig,
+  fetchRemoteConfigItem,
   fetchRemoteConfigEnv,
   setRemoteConfig,
+  normalizeRemoteConfigResponse,
+  type FetchRemoteConfigOptions,
 } from "./config";
