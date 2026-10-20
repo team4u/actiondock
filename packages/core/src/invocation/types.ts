@@ -69,6 +69,8 @@ export interface InvocationContext {
   readonly caller?: InvocationCaller;
   /** 调用栈数组快照（用于环路检测与调用深度限制） */
   readonly callStack: readonly string[];
+  /** 已解析目标的调用栈作用域，仅用于宿主内部执行，不跨网络透传。 */
+  readonly targetScope?: string;
   /** 目标包物理与快照身份标识 */
   readonly package: PackageIdentity;
   /** 取消信号 */
@@ -123,6 +125,7 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
     parentRunId: options.parentRunId,
     caller: options.caller,
     callStack: options.callStack ? [...options.callStack] : [],
+    targetScope: options.targetScope,
     package: pkg,
     signal: options.signal ?? new AbortController().signal,
     timeoutMs: options.timeoutMs,

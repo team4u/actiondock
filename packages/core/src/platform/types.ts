@@ -1,8 +1,9 @@
-import type { ProcessAPI } from "@actiondock/sdk";
+import type { ActionInvokeOptions, ProcessAPI } from "@actiondock/sdk";
 import type { Clock } from "../storage/clock";
 import type { ModuleLoader } from "./module-loader";
 import type { RunsRetentionPolicy, RuntimeStorage } from "../storage/types";
 import type { EventSink } from "../runtime/events";
+import type { PackageRuntime } from "../package/types";
 
 
 /**
@@ -54,6 +55,53 @@ export interface StorageFactory {
 }
 
 /**
+ * 动作调用目标解析结果。
+ */
+export interface InvocationTargetResolution {
+  /** 目标 PackageRuntime 实例 */
+  readonly runtime: PackageRuntime;
+  /** 可选调用作用域，用于区分调用目标与环路死锁检测身份 */
+  readonly scope?: string;
+  /** 是否强制要求调用方显式声明 uses 依赖 */
+  readonly requiresExplicitUses?: boolean;
+}
+
+/**
+ * 动作调用发起方元数据信息。
+ */
+export interface InvocationCallerInfo {
+  /** 调用发起方包标识 */
+  readonly packageId: string;
+  /** 调用发起方 Action 动作标识 */
+  readonly actionId?: string;
+}
+
+/**
+ * 运行时平台调用目标解析器端口契约。
+ * 允许底层运行时平台在 Host 选择执行目标阶段介入目标解析，提供自定义 PackageRuntime。
+ */
+export interface InvocationTargetResolver {
+  /**
+   * 解析指定 Action 引用与调用选项对应的目标 PackageRuntime。
+   *
+   * @param action 规范化 Action 引用元数据
+   * @param options 动作调用选项（包含命名 binding 等）
+   * @param caller 发起调用的调用方元数据
+   * @returns 目标解析结果；返回的 Runtime 由 Host 接管生命周期；未命中返回 undefined 交由默认主链处理
+   */
+  resolve(
+    action: { packageId: string; actionId: string },
+    options: ActionInvokeOptions | undefined,
+    caller: InvocationCallerInfo
+  ): InvocationTargetResolution | undefined;
+
+  /**
+   * 清理端口缓存和附属资源，不重复关闭已移交 Host 的 Runtime。
+   */
+  close?(): Promise<void>;
+}
+
+/**
  * 运行时底层环境核心标准契约。
  * 提供统一的运行时契约，屏蔽宿主平台与测试沙箱环境的实现差异。
  */
@@ -72,4 +120,8 @@ export interface RuntimePlatform {
    * 可选执行事件接收器，宿主可注入，缺省由上层默认构造。
    */
   readonly eventSink?: EventSink;
+  /**
+   * 可选动作调用目标解析器端口，用于宿主环境自定义动作调用路由（例如测试具名 Mock 模拟目标）。
+   */
+  readonly invocationTargets?: InvocationTargetResolver;
 }

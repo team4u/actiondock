@@ -92,13 +92,21 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     ```
 
 - 动作级联调度 `ctx.actions`：
-  - 职责与机制：支持当前 Action 调度执行下游其他 Action，实现能力的细粒度原子化与高阶组合。底层运行时内置递归调用栈深度保护与环路死锁阻断检测。
+  - 职责与机制：支持当前 Action 调度执行下游其他 Action，实现能力的细粒度原子化与高阶组合。底层运行时内置递归调用栈深度保护与环路死锁阻断检测。同时支持命名绑定路由，实现本地与远端拓扑解耦与显式降级。
   - 常用方法：
-    - `ctx.actions.invoke<I, O>(actionId: string, input?: I): Promise<O>`：通过动作标识显式调用目标 Action 并返回类型化结果。
-    - `ctx.actions(actionId: string, input?: unknown): Promise<unknown>`：直接以函数形式执行下游 Action。
+    - `ctx.actions.invoke<I, O>(actionId: string | ActionRef, input?: I, options?: ActionInvokeOptions): Promise<O>`：通过动作标识显式调用目标 Action 并返回类型化结果，支持通过第三参数 options.binding 指定命名路由绑定。
+    - `ctx.actions(actionId: string | ActionRef, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>`：直接以函数形式执行下游 Action，同样支持在第三参数中传入 options 配置。
+  - 绑定路由规则：未指定 binding 选项时仅检索 default 绑定，若未配置 default 则保持当前宿主默认本地解析；显式指定 binding 时若对应条目缺失，系统直接抛出 NOT_FOUND 错误，严禁隐式回退。
+  - 权限声明契约：清单中的 uses 权限声明保持逻辑动作标识（如 `pricing/quote`）。更多详情与跨环境多目标降级实践参见 [动作命名绑定与路由机制](/developer/action-bindings.md)。
   - 使用示例：
     ```ts
+    // 基础调用
     const user = await ctx.actions.invoke<UserInput, UserOutput>("users.get", { id: "123" });
+
+    // 指定命名绑定（如路由至远端主服务）
+    const quote = await ctx.actions.invoke("pricing/quote", input, {
+      binding: "primary",
+    });
     ```
 
 - 结构化日志记录 `ctx.log`：

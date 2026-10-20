@@ -6,13 +6,15 @@ ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 2.x �
 
 ## 核心测试组件
 
-`@actiondock/testing` 包含三大确定性基础设施组件，分别用于掌控时间、拦截外部进程与隔离持久化存储：
+`@actiondock/testing` 包含四大确定性基础设施组件，分别用于掌控时间、模拟动作调用、拦截外部进程与隔离持久化存储：
 
-- **确定性时钟：FakeClock**
+- **确定性时钟**：FakeClock
   提供对虚拟时间和单调时间的完全控制。支持通过 `clock.monotonic()` 获取单调时间戳，通过 `clock.now()` 获取虚拟墙上时间。调用 `await clock.advance(ms)` 瞬间推进虚拟时间，并按预设时刻精确触发所有到期的定时任务，无需真实等待，彻底解决异步测试缓慢和偶发不稳定的问题。
-- **进程执行模拟：MockProcessExecutor**
+- **动作调用模拟**：MockActionInvoker
+  用于在单元测试中拦截下游动作调用与多目标命名绑定。支持通过 `register` 和 `registerOnce` 注入持续或一次性模拟响应，精确匹配命名绑定，捕获不可变输入快照与运行标识，并完整走真实内核管道进行模式校验与权限授权。
+- **进程执行模拟**：MockProcessExecutor
   遵循标准进程执行器契约，用于在单元测试中拦截外部命令行调用（如 `git`、`docker`、`curl` 或无头浏览器）。支持通过命令字符串、正则表达式或判定函数注册匹配规则，支持预设输出文本、错误文本、退出码、超时标记与取消标记，并自动记录完整的调用历史，便于进行断言检查。
-- **内存存储引擎：MemoryStorage**
+- **内存存储引擎**：MemoryStorage
   基于内存构建，提供与生产环境完全一致的配置多级解析、状态命名空间隔离、基于虚拟时钟的键值生存时间自动失效机制，以及运行记录的终态落库契约。
 
 ---
@@ -32,6 +34,7 @@ ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 2.x �
 
 `createTestRuntime` 创建的运行时实例暴露了丰富的调试与插桩接口：
 
+- **动作模拟器**：`runtime.actions`，即绑定的 `MockActionInvoker` 实例，支持注册持续或一次性模拟规则，按绑定筛选调用记录并断言输入快照。
 - **配置管理器**：`runtime.config`，支持调用 `set(key, value)` 动态注入测试配置，调用 `get(key)` 读取配置，调用 `list()` 列出当前配置。
 - **状态存储库**：`runtime.state`，支持调用 `get(key)`、`set(key, value, ttl)`、`keys()`、`scope(namespace)` 等方法断言和预置状态数据。
 - **确定性时钟**：`runtime.clock`，即绑定的 `FakeClock` 实例，可直接调用 `await runtime.clock.advance(ms)` 推进测试时间。
@@ -284,6 +287,97 @@ describe("外部命令模拟测试", () => {
   });
 });
 ```
+
+### 下游动作模拟与多目标命名绑定测试
+
+验证在下游依赖存在多目标命名绑定时，通过 `runtime.actions` 模拟主服务可用性故障并显式降级至备用服务，同时断言调用时序与输入快照。以下例子仅适用于无副作用且允许备用结果的报价查询，不能直接照搬到扣款、写入等操作：
+
+```ts
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { ActionDockError } from "@actiondock/core";
+import { defineAction } from "@actiondock/sdk";
+import { ActionRuntimeError, createTestRuntime } from "@actiondock/testing";
+
+const quoteOrderAction = defineAction({
+  uses: ["pricing/quote"],
+  run: async (input: { sku: string }, ctx) => {
+    try {
+      return await ctx.actions.invoke(
+        "pricing/quote",
+        { sku: input.sku },
+        { binding: "primary" }
+      );
+    } catch (error: any) {
+      if (
+        ctx.signal.aborted ||
+        !["SERVICE_RESULT_UNKNOWN", "NETWORK_ERROR"].includes(error?.code)
+      ) {
+        throw error;
+      }
+      return await ctx.actions.invoke(
+        "pricing/quote",
+        { sku: input.sku },
+        { binding: "fallback" }
+      );
+    }
+  },
+});
+
+describe("多目标命名绑定与降级测试", () => {
+  it("主服务异常且未取消时显式降级至备用报价", async () => {
+    const runtime = createTestRuntime({ packageId: "order-pkg" });
+
+    // 针对 primary 绑定注册处理函数并抛出指定可用性错误
+    runtime.actions.register(
+      "pricing/quote",
+      () => {
+        throw new ActionDockError(
+          "SERVICE_RESULT_UNKNOWN",
+          "Primary pricing cluster temporarily unreachable"
+        );
+      },
+      { binding: "primary" }
+    );
+
+    // 针对 fallback 绑定注册静态返回结果
+    runtime.actions.register(
+      "pricing/quote",
+      { price: 99, currency: "USD" },
+      { binding: "fallback" }
+    );
+
+    const result = await runtime.run(quoteOrderAction, { sku: "ITEM-1" });
+    assert.deepStrictEqual(result, { price: 99, currency: "USD" });
+
+    // 严格审查调用历史
+    const calls = runtime.actions.calls;
+    assert.strictEqual(calls.length, 2);
+
+    assert.strictEqual(calls[0].ref, "pricing/quote");
+    assert.strictEqual(calls[0].binding, "primary");
+    assert.deepStrictEqual(calls[0].input, { sku: "ITEM-1" });
+
+    assert.strictEqual(calls[1].ref, "pricing/quote");
+    assert.strictEqual(calls[1].binding, "fallback");
+    assert.deepStrictEqual(calls[1].input, { sku: "ITEM-1" });
+
+    // 通过 getCalls 按绑定精确检索
+    const fallbackCalls = runtime.actions.getCalls("pricing/quote", {
+      binding: "fallback",
+    });
+    assert.strictEqual(fallbackCalls.length, 1);
+  });
+});
+```
+
+- 真实上下文执行：模拟函数 `handler(input, ctx)` 接收内核分配的真实 `ActionContext`，可抛出特定的 `ActionDockError` 或标准 `Error`，执行引擎完整走真实 `ActionRunner` 流程，保留 `ActionRuntimeError` 最终错误代码。
+- 绑定精确匹配与安全红线：未传 `binding` 缺省为 `default`，显式 `default` 完全等价。其他命名绑定严格精确匹配，未命中具名绑定的调用直接抛错，绝不隐式回退到 `default` 或访问真实外部网络。
+- 契约与权限校验：测试框架不自动补充 `uses`；跨包及具名独立目标调用缺少声明时被拒绝，模拟函数不执行。默认绑定的本地同包调用保持豁免；模拟动作自身继续跨包调用时，通过 `contract.uses` 声明权限。
+- 一次性规则与接替机制：使用 `registerOnce` 注册先进先出的一次性响应队列，队列耗尽后仅由显式注册的持续规则接替；若无持续规则，再次调用将明确抛错失败，不会重复复用最后响应。
+- 状态清理与版本自增：`clearHistory()` 仅清空历史记录，`reset()` 同时清空模拟规则与历史记录；规则变更与重置会自动递增内部版本号，使同名替换生效。请在测试执行前完成调整，不在运行中修改规则；共享实例也会共享一次性队列。
+- 混合本地替身动作：测试运行时支持通过 `options.actions` 或 `runtime.registerAction` 注册本地替身动作，与具名模拟规则无缝混合执行。
+- 集成测试边界说明：单元测试的内存模拟不能证明实际的 HTTP 鉴权和取消网络协议正常工作，核心交付链路仍需通过真实回环服务进行全流程集成测试。
 
 ---
 

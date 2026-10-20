@@ -173,13 +173,18 @@ export interface StateStore {
 支持 Action 之间的安全调用，运行时自动校验依赖声明并维护调用栈深度与环路保护：
 
 ```ts
+export interface ActionInvokeOptions {
+  /** 调用方配置中的命名绑定，不指定时查找 default，未配置则保持本地调用。 */
+  binding?: string;
+}
+
 export interface ActionInvoker {
   /**
    * 直接调用指定的 Action
    * @param ref 目标 Action 引用或标识符
    * @param input 传递给目标 Action 的输入参数
    */
-  (ref: string | ActionRef, input?: unknown): Promise<unknown>;
+  (ref: string | ActionRef, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>;
 
   /**
    * 调用指定的 Action 并传入参数，返回其执行结果
@@ -188,7 +193,8 @@ export interface ActionInvoker {
    */
   invoke<I = unknown, O = unknown>(
     action: ActionRef | string,
-    input?: I
+    input?: I,
+    options?: ActionInvokeOptions
   ): Promise<O>;
 }
 
@@ -203,7 +209,8 @@ export interface ActionRef {
 #### 调用参数约束与禁止事项
 - 仅接受标识符与引用：`ctx.actions.invoke` 严格只接受动作标识符字符串（短标识符如 `"greet"` 或跨包限定标识符如 `"shared-pkg/b"`）或 `ActionRef` 引用对象。
 - 禁止传入动作定义对象：严禁将动作定义对象或裸函数传入 `ctx.actions.invoke`。传入定义对象将绕过 `actiondock.json` 清单校验、模式规范检查与子运行链路记录，执行引擎将抛出 `INVALID_ACTION_REF` 错误。
-- 依赖必须显式声明：所有通过 `ctx.actions.invoke` 发起的级联调用，必须在当前包 `actiondock.json` 的 `uses` 列表中显式声明。未声明的调用将返回 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+- 依赖权限：跨包调用以及跨执行目标的调用必须显式声明 `uses`，未声明时报 `UNDECLARED_ACTION_DEPENDENCY`。当前宿主内的同包调用保持豁免。
+- 命名绑定：第三参数仅接受可选的 `binding`，不接受 Profile、地址或凭证。指定不存在的绑定时报 `NOT_FOUND`，不会自动回退。参见[动作命名绑定与远端调用](/developer/action-bindings.md)。
 - 循环调用防护：当检测到相互调用成环时，执行引擎抛出 `ACTION_CALL_CYCLE` 错误。
 
 ---

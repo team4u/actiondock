@@ -3,6 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import {
   ActionDockError,
   ACTION_NOT_FOUND,
+  PACKAGE_NOT_FOUND,
   UNDECLARED_ACTION_DEPENDENCY,
   loadProjectConfig,
 } from "@actiondock/core";
@@ -14,6 +15,9 @@ import {
   loadManifest,
   loadPlaybooks,
   validateManifest,
+  loadActionBindings,
+  hasRemoteActionBinding,
+  validateCanonicalActionRef,
 } from "@actiondock/core/project";
 import {
   DefaultActionCatalog,
@@ -32,7 +36,7 @@ import type {
 } from "./types";
 import type { ProjectConfigWithDeclarations } from "./types";
 import { computeLockfileInfo } from "./lockfile-resolver";
-import { extractExternalDependencies, isIgnoredPath } from "./dependency-resolver";
+import { extractExternalDependencies, isIgnoredPath, isRuntimeConfigFile } from "./dependency-resolver";
 
 /**
  * 递归扫描指定目录下的文件，返回绝对路径列表。
@@ -43,6 +47,18 @@ function walkDirectory(dir: string): string[] {
   return traverseDirectory(dir).map((entry) => entry.fullPath);
 }
 
+/**
+ * 判断动作引用是否为完全限定标识符（包含包命名空间与动作名，且不含通配符与非法字符）。
+ * 统一复用 core 的 validateCanonicalActionRef 单一事实源。
+ */
+function isFullyQualifiedActionRef(ref: string): boolean {
+  try {
+    validateCanonicalActionRef(ref);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * 构造备用清单映射，仅读取文件系统条目与配置声明，杜绝 AST 源码分析与动态代码执行。
@@ -115,6 +131,8 @@ interface ClosureResult {
   externalActionRoots: Map<string, string>;
   /** 来自外部已链接包的 Action 清单条目映射 */
   externalActionEntries: Map<string, ActionManifestEntry>;
+  /** 经由远端绑定解析的完全限定 Action 引用集合 */
+  remoteActionRefs: Set<string>;
 }
 
 /** 声明文件与资产收集的中间产物 */
@@ -282,9 +300,29 @@ export class SelectionPlanner {
     initialActionIds: Set<string>
   ): ClosureResult {
     const resolvedActionIds = new Set<string>();
-    // queued 与 resolvedActionIds 联合判重，避免高入度节点在 uses 图中被重复入队导致 O(边数) 重复解析
-    const queued = new Set<string>(initialActionIds);
-    const queue = Array.from(initialActionIds);
+    const remoteActionRefs = new Set<string>();
+    const visitedEdges = new Set<string>();
+    const queuedEdges = new Set<string>();
+
+    interface ClosureQueueItem {
+      ref: string;
+      callerRoot: string;
+      callerPkgId?: string;
+    }
+    const queue: ClosureQueueItem[] = [];
+
+    const enqueueDependency = (ref: string, callerRoot: string, callerPkgId?: string) => {
+      const edgeKey = `${callerRoot}:::${ref}`;
+      if (!visitedEdges.has(edgeKey) && !queuedEdges.has(edgeKey)) {
+        queuedEdges.add(edgeKey);
+        queue.push({ ref, callerRoot, callerPkgId });
+      }
+    };
+
+    for (const id of initialActionIds) {
+      enqueueDependency(id, root, config?.id);
+    }
+
     const externalActionRoots = new Map<string, string>();
     const externalActionEntries = new Map<string, ActionManifestEntry>();
     const manifestActions = manifest.actions || {};
@@ -293,68 +331,117 @@ export class SelectionPlanner {
     const catalog = new DefaultActionCatalog(graph);
 
     while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      queued.delete(currentId);
-      if (resolvedActionIds.has(currentId)) {
-        continue;
-      }
+      const currentItem = queue.shift()!;
+      const currentId = currentItem.ref;
+      const currentCallerRoot = currentItem.callerRoot;
+      const currentCallerPkgId = currentItem.callerPkgId;
+      const currentEdgeKey = `${currentCallerRoot}:::${currentId}`;
+      queuedEdges.delete(currentEdgeKey);
+      visitedEdges.add(currentEdgeKey);
 
-      let entry = manifestActions[currentId] || config?.actions?.[currentId];
-      let entryRoot = root;
+      let entry =
+        currentCallerRoot === root
+          ? (manifestActions[currentId] || config?.actions?.[currentId])
+          : undefined;
+      let entryRoot = currentCallerRoot;
+      let targetPkgId: string | undefined = currentCallerRoot === root ? config?.id : undefined;
 
       if (!entry) {
-        const resolved = resolveAction(currentId, { graph, catalog, caller: config?.id });
-        const resolvedPkgId = resolved.package.id;
-        const resolvedActionId = resolved.ref.actionId;
+        let localResolved: any = null;
+        let resolveError: any = null;
+        try {
+          localResolved = resolveAction(currentId, {
+            graph,
+            catalog,
+            caller: currentCallerPkgId || config?.id,
+          });
+        } catch (err: any) {
+          resolveError = err;
+        }
 
-        const extNode = graph.packages.get(resolvedPkgId);
-        if (extNode && existsSync(extNode.root)) {
-          const extRoot = extNode.root;
-          let extConfig: ProjectConfigWithDeclarations;
-          try {
-            extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
-          } catch {
-            extConfig = {
-              id: resolvedPkgId,
-              name: resolvedPkgId,
-              version: "0.1.0",
-            };
-          }
-          const externalManifest = loadManifest(extRoot);
-          const externalEntry =
-            externalManifest?.actions?.[resolvedActionId] ||
-            extConfig?.actions?.[resolvedActionId];
-          if (!externalEntry) {
-            throw new ActionDockError(
-              UNDECLARED_ACTION_DEPENDENCY,
-              `UNDECLARED_ACTION_DEPENDENCY: Action '${resolvedActionId}' is not declared in package '${resolvedPkgId}' manifest`
-            );
-          }
-          entry = externalEntry;
-          entryRoot = extRoot;
+        if (localResolved) {
+          const resolvedPkgId = localResolved.package.id;
+          const resolvedActionId = localResolved.ref.actionId;
 
-          // 依赖包 actiondock.json 中声明的传递依赖闭包（入队前查重，避免重复膨胀）
-          const extPkgUses = extConfig?.uses;
-          if (Array.isArray(extPkgUses)) {
-            for (const u of extPkgUses) {
-              const trimmedUse = typeof u === "string" ? u.trim() : "";
-              if (
-                trimmedUse &&
-                !resolvedActionIds.has(trimmedUse) &&
-                !queued.has(trimmedUse)
-              ) {
-                queued.add(trimmedUse);
-                queue.push(trimmedUse);
+          const extNode = graph.packages.get(resolvedPkgId);
+          if (extNode && existsSync(extNode.root)) {
+            const extRoot = extNode.root;
+            let extConfig: ProjectConfigWithDeclarations;
+            try {
+              extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
+            } catch {
+              extConfig = {
+                id: resolvedPkgId,
+                name: resolvedPkgId,
+                version: "0.1.0",
+              };
+            }
+            const externalManifest = loadManifest(extRoot);
+            const externalEntry =
+              externalManifest?.actions?.[resolvedActionId] ||
+              extConfig?.actions?.[resolvedActionId];
+            if (!externalEntry) {
+              resolveError = new ActionDockError(
+                UNDECLARED_ACTION_DEPENDENCY,
+                `UNDECLARED_ACTION_DEPENDENCY: Action '${resolvedActionId}' is not declared in package '${resolvedPkgId}' manifest`
+              );
+            } else {
+              entry = externalEntry;
+              entryRoot = extRoot;
+              targetPkgId = resolvedPkgId;
+
+              // 依赖包 actiondock.json 中声明的传递依赖闭包（按外部包自身作用域入队，不继承根配置）
+              const extPkgUses = extConfig?.uses;
+              if (Array.isArray(extPkgUses)) {
+                for (const u of extPkgUses) {
+                  const trimmedUse = typeof u === "string" ? u.trim() : "";
+                  if (trimmedUse) {
+                    enqueueDependency(trimmedUse, extRoot, resolvedPkgId);
+                  }
+                }
               }
             }
           }
         }
+
+        if (!entry) {
+          // 仅在明确为包未找到或动作未找到时允许回退至远端绑定检查；严禁掩盖损坏清单、无效引用或版本冲突等非缺失异常
+          const isMissing =
+            !resolveError ||
+            (resolveError instanceof ActionDockError &&
+              (resolveError.code === PACKAGE_NOT_FOUND ||
+                resolveError.code === ACTION_NOT_FOUND));
+
+          if (!isMissing) {
+            throw resolveError;
+          }
+
+          // 仅对完全限定依赖（pkg/action），且发起调用的当前包根目录绑定配置中包含精确 remote 条目时，识别为远端依赖
+          if (isFullyQualifiedActionRef(currentId)) {
+            const bindings = loadActionBindings(currentCallerRoot);
+            if (hasRemoteActionBinding(bindings, currentId)) {
+              remoteActionRefs.add(currentId);
+              continue;
+            }
+          }
+
+          if (resolveError) {
+            throw resolveError;
+          }
+
+          throw new ActionDockError(
+            ACTION_NOT_FOUND,
+            `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest or linked packages`
+          );
+        }
       }
 
-      if (!entry) {
-        throw new ActionDockError(
-          ACTION_NOT_FOUND,
-          `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest or linked packages`
+      // 验证本地 entry 文件物理存在，不得跳过本地 entry 缺失
+      const resolvedPath = resolve(entryRoot, entry.entry);
+      if (!existsSync(resolvedPath)) {
+        throw new PlannerError(
+          `Action '${currentId}' entry file not found on disk: ${entry.entry}`,
+          "ENTRY_FILE_NOT_FOUND"
         );
       }
 
@@ -363,19 +450,23 @@ export class SelectionPlanner {
         externalActionEntries.set(currentId, entry);
       }
 
+      // 物化 action 按既有唯一集合去重，若已物化则跳过重复 uses 展开
+      if (resolvedActionIds.has(currentId)) {
+        continue;
+      }
       resolvedActionIds.add(currentId);
 
       if (entry.uses && Array.isArray(entry.uses)) {
         for (const depId of entry.uses) {
-          if (!resolvedActionIds.has(depId) && !queued.has(depId)) {
-            queued.add(depId);
-            queue.push(depId);
+          const trimmedDep = typeof depId === "string" ? depId.trim() : "";
+          if (trimmedDep) {
+            enqueueDependency(trimmedDep, entryRoot, targetPkgId || currentCallerPkgId);
           }
         }
       }
     }
 
-    return { resolvedActionIds, externalActionRoots, externalActionEntries };
+    return { resolvedActionIds, externalActionRoots, externalActionEntries, remoteActionRefs };
   }
 
   /**
@@ -450,6 +541,12 @@ export class SelectionPlanner {
     }
 
     for (const declaredRel of declaredFiles) {
+      if (isRuntimeConfigFile(declaredRel)) {
+        throw new PlannerError(
+          `Runtime configuration file '${declaredRel}' cannot be explicitly declared as build asset or file`,
+          "RESTRICTED_CONFIG_ASSET"
+        );
+      }
       const resolvedFile = resolve(root, declaredRel);
       assertPathWithinRoot(root, resolvedFile, "files");
       if (!existsSync(resolvedFile)) {
@@ -463,7 +560,12 @@ export class SelectionPlanner {
         const walked = walkDirectory(resolvedFile);
         for (const f of walked) {
           const rel = relative(root, f).replace(/\\/g, "/");
-          if (!isIgnoredPath(rel) && !actionPathSet.has(f) && !filePathSet.has(rel)) {
+          if (
+            !isIgnoredPath(rel) &&
+            !isRuntimeConfigFile(rel) &&
+            !actionPathSet.has(f) &&
+            !filePathSet.has(rel)
+          ) {
             filePathSet.add(rel);
             modulesAndAssets.push({
               path: rel,
@@ -474,7 +576,12 @@ export class SelectionPlanner {
         }
       } else if (stat.isFile()) {
         const rel = relative(root, resolvedFile).replace(/\\/g, "/");
-        if (!actionPathSet.has(resolvedFile) && !filePathSet.has(rel)) {
+        if (
+          !isIgnoredPath(rel) &&
+          !isRuntimeConfigFile(rel) &&
+          !actionPathSet.has(resolvedFile) &&
+          !filePathSet.has(rel)
+        ) {
           filePathSet.add(rel);
           modulesAndAssets.push({
             path: rel,
@@ -498,6 +605,12 @@ export class SelectionPlanner {
     }
 
     for (const declaredRel of declaredAssets) {
+      if (isRuntimeConfigFile(declaredRel)) {
+        throw new PlannerError(
+          `Runtime configuration file '${declaredRel}' cannot be explicitly declared as build asset or file`,
+          "RESTRICTED_CONFIG_ASSET"
+        );
+      }
       const resolvedAsset = resolve(root, declaredRel);
       assertPathWithinRoot(root, resolvedAsset, "assets");
       if (!existsSync(resolvedAsset)) {
@@ -511,7 +624,7 @@ export class SelectionPlanner {
         const walked = walkDirectory(resolvedAsset);
         for (const f of walked) {
           const rel = relative(root, f).replace(/\\/g, "/");
-          if (!assetPathSet.has(rel)) {
+          if (!isIgnoredPath(rel) && !isRuntimeConfigFile(rel) && !assetPathSet.has(rel)) {
             assetPathSet.add(rel);
             modulesAndAssets.push({
               path: rel,
@@ -522,7 +635,7 @@ export class SelectionPlanner {
         }
       } else if (stat.isFile()) {
         const rel = relative(root, resolvedAsset).replace(/\\/g, "/");
-        if (!assetPathSet.has(rel)) {
+        if (!isIgnoredPath(rel) && !isRuntimeConfigFile(rel) && !assetPathSet.has(rel)) {
           assetPathSet.add(rel);
           modulesAndAssets.push({
             path: rel,
@@ -539,7 +652,7 @@ export class SelectionPlanner {
       const assetFiles = walkDirectory(defaultAssetsDir);
       for (const file of assetFiles) {
         const rel = relative(root, file).replace(/\\/g, "/");
-        if (!assetPathSet.has(rel)) {
+        if (!isIgnoredPath(rel) && !isRuntimeConfigFile(rel) && !assetPathSet.has(rel)) {
           assetPathSet.add(rel);
           modulesAndAssets.push({
             path: rel,
@@ -616,7 +729,9 @@ export class SelectionPlanner {
     if (options?.actions && options.actions.length > 0 && (!options.playbooks || options.playbooks.length === 0)) {
       finalPlaybooks = selectedPlaybooks.filter((pb) => {
         if (!pb.actions || pb.actions.length === 0) return true;
-        return pb.actions.every((a) => closure.resolvedActionIds.has(a));
+        return pb.actions.every(
+          (a) => closure.resolvedActionIds.has(a) || closure.remoteActionRefs.has(a)
+        );
       });
     }
 
@@ -676,6 +791,7 @@ export class SelectionPlanner {
       configDefs: config.config,
       lockfile: lockfileInfo,
       externalProjectRoots: externalRoots,
+      remoteActionRefs: Array.from(closure.remoteActionRefs || []).sort(),
       metadata: {
         plannedAt: new Date().toISOString(),
         schemaVersion: 2,

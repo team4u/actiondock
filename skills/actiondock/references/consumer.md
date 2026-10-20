@@ -69,6 +69,18 @@ npx skills remove <skill-name>
 
 ---
 
+## 技能包含远端依赖时
+
+- 区分调用宿主与依赖目标：`ad run <pkg>/<action> --profile office` 将主 Action 放到远端执行；Action 内部的本地与远端依赖则由该宿主的命名绑定决定，切换 CLI 默认 Profile 不能代替依赖绑定。
+- 部署后单独配置：构建或导出的技能不会携带开发机 `.actiondock/bindings.json` 与 Profile 凭据。请在运行调用方 Action 的宿主上配置 Profile、令牌环境变量与调用方项目绑定，再重新创建宿主使其生效。
+- 不盲目安装远端源码：纯远端依赖通过 `uses` 与命名绑定使用，不需要执行 `ad add` 或 `ad link` 把其实现复制到本机。若显式绑定了本地备用实现，该实现才需要在调用方宿主可用。
+- 出错后定位正确环境：结合父运行日志及错误详情中的 `profile`、`remoteRunId`、`requestId`、`resultUnknown`，在对应远端查询运行记录；不能拿父任务的请求标识代替子调用标识。
+- 不把失败等同于未执行：远端超时或断链时，不自动重跑有副作用的操作；父任务取消后不启动备用调用。
+
+完整配置与调用示例见 [action-bindings.md](action-bindings.md)，遇到实际错误再查阅 [troubleshooting.md](troubleshooting.md)。
+
+---
+
 ## 主流智能体客户端装载路径
 
 不同客户端在启动时会自动扫描特定目录下的 Skill 并注入模型上下文：

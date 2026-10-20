@@ -21,7 +21,9 @@ const runtime = createTestRuntime(options?: TestRuntimeOptions);
 - 包标识：`packageId`
   指定当前测试沙箱运行的包标识符，缺省时使用 `projectConfig.id` 或默认包名。
 - 动作注册表：`actions`
-  动作标识符与动作实现对象或处理函数的映射字典，支持字典对象或 Map。
+  动作标识符与动作实现对象或处理函数的映射字典，支持字典对象、数组或 Map，用于登记本地真实替身动作。
+- 动作模拟器实例：`actionsMock`
+  可选注入的 `MockActionInvoker` 实例，用于在多个运行时之间共享模拟规则与调用记录。缺省时自动为当前运行时创建独立的新实例实现实例隔离。
 - 自定义虚拟时钟：`clock`
   传入自定义的 `FakeClock` 实例。缺省时自动创建独立的新时钟。
 - 模拟进程执行器：`process`
@@ -37,7 +39,7 @@ const runtime = createTestRuntime(options?: TestRuntimeOptions);
 - 日志记录器：`logger`
   可选注入的日志记录器实例（默认使用 `MemoryLogger`）。
 - 运行时平台实例：`platform`
-  可选注入的标准运行时平台实例。
+  可选注入时钟、存储等标准平台能力。动作调用目标端口由测试运行时管理，平台不得预置 `invocationTargets`；自定义目标集成测试应使用 `createActionDock`。
 
 ---
 
@@ -74,6 +76,8 @@ if (envelope.ok) {
 
 ### 插桩属性说明
 
+- 动作调用模拟器：`runtime.actions`
+  绑定的 `MockActionInvoker` 实例，用于注册下游模拟规则并断言多目标调用的时序与入参。
 - 确定性虚拟时钟：`runtime.clock`
   绑定的 `FakeClock` 实例，提供精确的时间快进与单调时间控制。
 - 进程模拟器：`runtime.process`
@@ -88,6 +92,63 @@ if (envelope.ok) {
   纯内存日志记录器，支持断言日志记录条目。
 - 生命周期事件流：`runtime.events`
   记录 Action 执行生命周期产生的事件流，支持断言事件派发时序。
+
+---
+
+## 动作调用模拟器：MockActionInvoker
+
+`MockActionInvoker` 专为单元测试环境提供下游 Action 调用的细粒度拦截、多目标命名绑定模拟、输入快照存储与历史审查能力。
+
+```ts
+import { MockActionInvoker, type MockActionCall, type MockActionOptions } from "@actiondock/testing";
+
+const invoker = new MockActionInvoker("order-pkg");
+// 可选第二参数传入 Clock，统一调用记录的时间来源。
+```
+
+### MockActionOptions 配置项
+
+- 命名绑定名称：`binding?: string`
+  指定匹配的命名绑定。缺省时视为 `"default"`，显式传入 `"default"` 完全等价；指定其他绑定时严格精确匹配，未命中具名绑定的调用直接阻断并抛出异常，绝不隐式回退到默认绑定或访问真实网络。
+- 契约约束定义：`contract?: MockActionContract`
+  包含可选的输入模式 `inputSchema`、输出模式 `outputSchema` 与跨包调用依赖声明 `uses?: string[]`。
+
+### MockActionCall 调用记录模型
+
+每次模拟调用触发时，系统自动深克隆入参并生成调用快照记录：
+
+- 规范化动作引用：`ref: string`，例如 `"pricing/quote"`。
+- 命中命名绑定：`binding: string`，缺省时记录为 `"default"`。
+- 入参深拷贝快照：`input: unknown`，保证后续变异不污染断言数据。
+- 子任务运行标识：`runId?: string`，当前调用的执行标识。
+- 根任务运行标识：`rootRunId?: string`，调用链最顶层根任务标识。
+- 调用发生时间戳：`timestamp: number`，毫秒时间戳。
+
+### 核心方法与属性
+
+- 注册持续模拟规则：`invoker.register(ref, handlerOrJsonResult, options?): this`
+  注册持久生效的模拟规则。`handlerOrJsonResult` 可为处理函数 `(input, ctx) => Promise<unknown> | unknown`，或直接返回的静态结果对象。
+- 注册一次性模拟规则：`invoker.registerOnce(ref, handlerOrJsonResult, options?): this`
+  注册先进先出的一次性响应规则。多次注册按入队顺序依次消费；队列耗尽后仅由显式注册的持续规则接替，无持续规则时再次调用明确失败抛出异常，不会重复复用最后一次响应。
+- 获取调用记录列表：`invoker.calls: readonly MockActionCall[]`
+  返回调用记录的独立快照，修改返回值不污染内部历史。
+- 条件筛选调用记录：`invoker.getCalls(ref?, options?: { binding?: string }): MockActionCall[]`
+  支持根据动作引用与绑定名称组合筛选历史记录。
+- 仅清理历史记录：`invoker.clearHistory(): void`
+  仅清空调用历史，保留所有已注册规则，不更新规则版本号。
+- 完全重置模拟器：`invoker.reset(): void`
+  清空所有调用历史与全部已注册规则，并单调递增版本号。
+- 规则版本序号：`invoker.revision: number`
+  单调递增的版本计数器，每次注册新规则、重置规则时自增，通知测试运行时内部刷新缓存并使同名替换立即生效。
+
+### 运行时契约与安全边界
+
+- 真实上下文执行：模拟函数的执行处理函数 `handler(input, ctx)` 接收内核分配的真实 `ActionContext`，可抛出特定的 `ActionDockError` 或标准 `Error`，执行引擎完整走真实 `ActionRunner` 流程，保留 `ActionRuntimeError` 最终错误代码，不伪造 `ctx`。
+- 真实内核管道保障：模拟调用完整走真实 `ActionRunner` 校验链路，包括模式约束校验、调用方依赖授权、协同取消信号传递、执行深度检查与调用环路检测。
+- 显式依赖授权约束：测试框架不会自动补齐 `uses`。跨包及具名独立目标调用缺少声明时在入口拒绝，模拟函数不会执行；当前宿主内默认绑定的同包调用保持豁免。
+- 模拟动作自身依赖声明：若模拟动作自身跨包调用其他动作，同样必须在 `contract.uses` 中声明权限。
+- 本地替身混合支持：支持通过 `options.actions` 或 `runtime.registerAction` 注册本地真实替身动作，与具名模拟动作混合执行。
+- 安全隔离与集成测试边界：所有具名模拟规则完全在内存中拦截，无需配置 Profile，无需真实网络连接，未命中的调用严禁穿透访问真实远端；单测模拟不能证明实际的 HTTP 鉴权与取消协议可用，仍需启动回环服务进行集成测试。
 
 ---
 

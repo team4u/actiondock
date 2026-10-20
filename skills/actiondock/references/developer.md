@@ -2,6 +2,17 @@
 
 本参考手册面向 ActionDock 工具开发者，涵盖清单契约定义、业务代码实现、运行时上下文 API、级联调度规则以及单元测试规范。
 
+## 内容索引
+
+- [清单契约](#清单契约定义-actiondockjson)
+- [类型生成](#自动生成-typescript-类型声明)
+- [上下文接口](#运行时上下文-api-速查)
+- [级联调用与依赖](#动作级联调用与跨包依赖声明)
+- [命名绑定与远端调用](#动作命名绑定与远端调用)
+- [受管进程](#受管进程与系统命令治理)
+- [规程编写](#playbook-任务规程编写规范)
+- [测试规范](#单元测试与沙箱验证规范)
+
 ---
 
 ## 清单契约定义 (`actiondock.json`)
@@ -162,7 +173,7 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 | | `read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>` | 基于游标读取有界原始输出日志，支持长轮询与断层跳跃 |
 | | `write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>` | 向受管进程输入流写入原始字节数据，需持有有效控制令牌 |
 | | `stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>` | 优雅终止受管进程并执行跨平台进程树清理 |
-| `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I): Promise<O>` | 级联调用其他 Action，严格仅接受字符串 ID 或 ActionRef |
+| `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I, options?: ActionInvokeOptions): Promise<O>` | 首参数为字符串或 ActionRef；第三参数可通过 `binding` 选择本地或远端执行目标 |
 | `ctx.log` | `info / warn / error / debug(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至标准错误流 |
 | `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
 | `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
@@ -174,13 +185,13 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通过物理相对路径直接导入其他 Action 源码：
 
-- 同包内部 Action 调用：
-  - 清单声明短标识符：在发起方 Action 的 `uses` 清单中填入目标 Action 的短标识符，如 `"uses": ["validate-token"]`。
-  - 源码短标识符调度：直接通过标识符调度：`await ctx.actions.invoke("validate-token", {})`。
+- 当前宿主内的同包 Action 调用：
+  - 默认豁免 `uses`；出于说明或构建裁剪需要显式声明时，使用短标识符，如 `"uses": ["validate-token"]`。
+  - 源码短标识符调度：`await ctx.actions.invoke("validate-token", {})`。同包名但跨执行目标的调用不适用此豁免。
 
-- 全局注册表包的使用与跨包引用（首选生产共享模式）：
+- 本机注册表包的使用与跨包引用：
   - 资产挂载与全局共享：在源码模式下，外部 Action 包或导出的浅模式技能分发至宿主机器后，在对应包根目录执行 `ad link .`，登记至本机全局路由表（`~/.actiondock/registry.json`）。该包即可在当前机器内被所有智能体与工程全局共享。
-  - 依赖拓扑自动并入：运行时构建依赖图时会自动扫描本机全局路由表中的有效包，将其直接作为依赖节点并入依赖图拓扑。在调用方工程中无需执行 `ad add`，亦无需在清单根级的 `dependencies` 中添加物理映射。
+  - 依赖拓扑并入：启用全局链接扫描的宿主可将有效本地注册包纳入依赖图，适用于源码联调。正式工程的本地实现依赖应使用 `ad add` 安装并锁定，不以本机注册表代替可重现的依赖声明；远端依赖另见命名绑定规则。
   - 清单权限显式声明：即使目标包在全局注册表中可见，出于安全治理与闭包防死锁要求，发起调用的 Action 仍必须在其自身的 `actiondock.json` 中声明权限。未声明即调用将被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
   - 清单 uses 字段的三种授权语法：
     - 完全限定形式（推荐）：`"<package-id>/<action-id>"`，精准授权指定动作（如 `"team4u.deploy-tools/health-check"`）。
@@ -202,8 +213,8 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
     ad run team4u.deploy-tools/health-check -- env=prod
     ```
 
-- 物理锁定依赖模式（传统闭环工程机制）：
-  - 若项目需要脱离本机全局注册表、在当前独立工程目录内锁死依赖版本与内容摘要，可在工程根目录执行 `ad add <package>` 安装依赖并写入 `actiondock.lock.json`。
+- 正式工程的本地依赖：
+  - 在工程根目录执行 `ad add <package>` 安装本地实现并锁定版本与内容摘要，写入 `actiondock.lock.json`；同样适用于远端主用、本地备用场景中需要的本地实现。
   - 权限声明与源码调度规则与上述跨包语法完全保持一致。
 
 - 复合包与多包工作区内部引用规范：
@@ -213,10 +224,29 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
   - 严禁物理穿越导入：各子包即使处于同一工作区文件树相邻目录下，也严禁使用相对路径直接 `import` 其他子包的源码，必须通过 `ctx.actions.invoke` 经由运行时分发调度，确保调用链追踪（`rootId`、`parentId`）与取消信号（`ctx.signal`）完整传递。
 
 - 级联调用红线与边界约束：
-  - 显式声明原则：未在清单 `uses` 中声明的级联调用，即使目标代码物理可见或已全局挂载，执行时也会被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 显式声明原则：跨包或跨目标调用未声明 `uses` 时，即使代码物理可见或已全局挂载，仍会被拦截为 `UNDECLARED_ACTION_DEPENDENCY`；当前宿主内的同包调用保持豁免。
   - 传递依赖隔离原则：若目标包属于间接传递依赖，直接调用将被拦截，除非被直接依赖包可见的 Playbook 显式委托。
   - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
   - 环路死锁保护：系统内置环路检测与递归配额保护，当调用链成环时抛出 `ACTION_CALL_CYCLE`，派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
+
+---
+
+## 动作命名绑定与远端调用
+
+在同一个 Action 内混合调用本地与远端依赖，或将同一完全限定动作分别调用到多个目标时，保持 `uses` 中的逻辑引用不变，在调用方项目 `.actiondock/bindings.json` 中配置命名绑定：
+
+```ts
+await ctx.actions.invoke("pricing/quote", input, { binding: "primary" });
+await ctx.actions.invoke("pricing/quote", input, { binding: "fallback" });
+```
+
+- SDK 的 `ActionInvokeOptions` 仅包含可选 `binding`，可调用形式 `ctx.actions(ref, input, options)` 同样支持；不传入 Profile、地址或凭证。
+- 不指定绑定仅查找 `default`；未配置则保持本地。指定不存在的绑定直接报 `NOT_FOUND`，不自动回退。
+- 绑定和 Profile 在执行调用方 Action 的宿主装配时生成快照；`local` 指该宿主，不固定指发起 CLI 的电脑。
+- 纯远端依赖不要求安装本地源码；需要本地备用实现时再安装或装载对应包。跨目标调用即使同包名，也必须声明 `uses`。
+- 降级由业务显式实现，不能吞掉取消、权限和契约错误；断链后结果可能未知，不能盲目重跑写操作。
+
+完整配置、编程式装配、只读降级示例、运行关联与分布式边界见 [action-bindings.md](action-bindings.md)。
 
 ---
 
@@ -257,7 +287,9 @@ Playbook 用于将分散的原子 Action 编排为针对特定业务场景的标
 
 ## 单元测试与沙箱验证规范
 
-ActionDock 提供了纯内存测试沙箱 `createTestRuntime`，测试执行无需真实网络或外部数据库：
+ActionDock 提供了纯内存测试沙箱 `createTestRuntime`，测试执行无需真实网络或外部数据库。针对下游动作依赖与多目标命名绑定，通过 `runtime.actions`（`MockActionInvoker` 实例）进行细粒度模拟、异常注入与调用断言，完整指南参见 [testing.md](testing.md)。
+
+- 内存状态与配置驱动执行：
 
 ```typescript
 import { describe, it } from "node:test";
@@ -281,7 +313,76 @@ describe("team4u.github-tools/list-issues", () => {
 });
 ```
 
-针对涉及系统命令与子进程调用的 Action，严禁唤起真实进程，必须使用 `FakeProcessDriver` 进行确定性事件模拟：
+- 下游动作多目标绑定与显式降级模拟：
+
+```typescript
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { ActionDockError } from "@actiondock/core";
+import { createTestRuntime } from "@actiondock/testing";
+import { defineAction } from "@actiondock/sdk";
+
+const orderAction = defineAction({
+  uses: ["pricing/quote"],
+  run: async (input: { sku: string }, ctx) => {
+    try {
+      return await ctx.actions.invoke(
+        "pricing/quote",
+        { sku: input.sku },
+        { binding: "primary" }
+      );
+    } catch (error: any) {
+      if (
+        ctx.signal.aborted ||
+        !["SERVICE_RESULT_UNKNOWN", "NETWORK_ERROR"].includes(error?.code)
+      ) {
+        throw error;
+      }
+      return await ctx.actions.invoke(
+        "pricing/quote",
+        { sku: input.sku },
+        { binding: "fallback" }
+      );
+    }
+  },
+});
+
+describe("多目标绑定降级模拟", () => {
+  it("主服务异常时降级至本地备用报价并验证调用历史", async () => {
+    const runtime = createTestRuntime({ packageId: "order-pkg" });
+
+    // 主服务注入指定可用性故障
+    runtime.actions.register(
+      "pricing/quote",
+      () => {
+        throw new ActionDockError(
+          "SERVICE_RESULT_UNKNOWN",
+          "Primary pricing cluster unavailable"
+        );
+      },
+      { binding: "primary" }
+    );
+
+    // 备用服务返回静态结果
+    runtime.actions.register(
+      "pricing/quote",
+      { price: 88, currency: "CNY" },
+      { binding: "fallback" }
+    );
+
+    const result = await runtime.run(orderAction, { sku: "SKU-99" });
+    assert.deepStrictEqual(result, { price: 88, currency: "CNY" });
+
+    // 断言调用历史与参数快照
+    const calls = runtime.actions.calls;
+    assert.strictEqual(calls.length, 2);
+    assert.strictEqual(calls[0].binding, "primary");
+    assert.strictEqual(calls[1].binding, "fallback");
+  });
+});
+```
+
+- 受管子进程事件驱动模拟：针对涉及系统命令与子进程调用的 Action，严禁唤起真实进程，必须使用 `FakeProcessDriver` 进行确定性事件模拟：
 
 ```typescript
 import { describe, it } from "node:test";

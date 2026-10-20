@@ -165,3 +165,50 @@ ad runs show <runId> --profile prod
 # 主动取消远程任务
 ad runs cancel <runId> --profile prod --reason "手动中止任务"
 ```
+
+---
+
+## 项目级动作命名绑定与多环境路由
+
+当项目需要跨节点调用远端能力或实现主备多环境调度时，可在调用方项目根目录下配置 `.actiondock/bindings.json`。
+
+### 配置文件格式
+
+```json
+{
+  "bindings": {
+    "pricing/quote": {
+      "primary": {
+        "type": "remote",
+        "profile": "office"
+      },
+      "fallback": {
+        "type": "local"
+      },
+      "default": {
+        "type": "local"
+      }
+    }
+  }
+}
+```
+
+### 路由判定与查找规则
+
+- 未传绑定参数：当 Action 内部调用未传入 binding 选项时，系统仅查找配置中的 default 绑定；若未配置 default，则保持当前宿主的默认本地解析。
+- 显式指定缺失绑定：若调用显式指定了 binding（如 `{ binding: "primary" }`），但绑定配置中不存在该条目，系统立即抛出 NOT_FOUND 错误，严禁隐式回退。
+- 编程式覆盖配置：在通过服务门面初始化时，可通过 `createActionDock({ actionBindings: { [callerPackageId]: ActionBindings } })` 选项在内存中直接覆盖指定调用方包的绑定文件。
+
+### 宿主装配与 Profile 生命周期
+
+- 宿主装配时快照：配置规则与 Profile 远程连接在 Host 装配初始化时统一解析并生成快照，保证运行期间的连接确定性。
+- 宿主环境语义：Profile 始终在执行该 Action 的宿主环境上进行解析；配置目标 `type: "local"` 代表执行该动作的宿主本身，绝非发起 CLI 命令的客户端计算机。
+- 远端后续依赖解析：远端 Action 内部触发的级联调用，其下游依赖完全依托远端宿主所在的环境与配置规则进行解析。
+
+### 产物交付与部署规范
+
+- 纯远端依赖无源码要求：仅路由至远端的 Action 无需本地实现，也无需加入 `actiondock.json` 的 `dependencies`；若需本地备用实现，仍可正常安装本地依赖。
+- 校验与构建识别：清单中的 uses 权限声明配合 `.actiondock/bindings.json` 中的远端命名绑定，可使 `ad validate` 与 `ad build` 准确识别跨节点外部依赖。
+- 敏感配置与产物物理隔离：执行 `ad build` 或 `ad pack` 打包时，框架严禁将开发机本地的 `.actiondock/bindings.json` 或包含密钥的 `profiles.json` 复制到交付产物中。
+- 部署端现场配置：交付产物在目标生产环境运行前，部署端必须在目标机器上重新配置现场的 Profile 节点与动作绑定。
+- 业务显式降级：同一完全限定动作配置多个命名绑定仅为业务层提供调度凭据，框架不提供静默的自动重试或隐式回退。更多端到端开发与异常降级实践参见 [动作命名绑定与路由机制](/developer/action-bindings.md)。

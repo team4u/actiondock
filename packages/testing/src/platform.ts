@@ -4,6 +4,7 @@ import {
 import type {
   EventSink,
   GlobalStorageFactoryOptions,
+  InvocationTargetResolver,
   ModuleLoader,
   ProcessManager,
   RuntimePlatform,
@@ -37,6 +38,8 @@ export interface TestPlatformOptions {
   eventSink?: EventSink;
   /** 可选注入的源码模块加载器 */
   modules?: ModuleLoader;
+  /** 可选注入的调用目标解析器端口 */
+  invocationTargets?: InvocationTargetResolver;
 }
 
 /**
@@ -50,6 +53,7 @@ export interface TestPlatform extends RuntimePlatform {
   readonly process: MockProcessExecutor;
   readonly storage: StorageFactory;
   readonly eventSink: EventSink;
+  readonly invocationTargets?: InvocationTargetResolver;
 }
 
 /**
@@ -112,5 +116,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     process,
     storage: storageFactory,
     eventSink,
+    invocationTargets: options.invocationTargets,
   };
 }

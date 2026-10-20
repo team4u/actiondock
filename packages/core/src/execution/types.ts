@@ -1,5 +1,6 @@
 import type {
   ActionDefinition,
+  ActionInvokeOptions,
   ActionRef,
   ExecutionEvent,
   ExecutionResult,
@@ -23,7 +24,7 @@ import {
 } from "../invocation/types";
 
 export { createInvocationContext, createRootInvocationContext };
-export type { PackageIdentity, RunOptions, InvocationContext };
+export type { PackageIdentity, RunOptions, InvocationContext, ActionInvokeOptions };
 
 /**
  * 局部动作解析器委托函数契约（仅限当前包内部动作）。
@@ -54,7 +55,8 @@ export interface ExecutionHandle {
 export type ActionInvoker = (
   childAction: ActionRef | string,
   childInput: unknown,
-  context: InvocationContext
+  context: InvocationContext,
+  options?: ActionInvokeOptions
 ) => Promise<unknown>;
 
 /**

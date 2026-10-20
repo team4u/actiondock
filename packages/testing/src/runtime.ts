@@ -1,5 +1,8 @@
 import {
   createActionDock,
+  ActionDockError,
+  ACTION_FAILED,
+  INVALID_ARGUMENT,
   type ActionDockService,
   type RunOptions,
   type ProjectConfig,
@@ -20,11 +23,13 @@ import type {
   Logger,
   StateStore,
 } from "@actiondock/sdk";
-import { ActionRuntimeError } from "@actiondock/sdk";
+import { ActionRuntimeError, defineAction } from "@actiondock/sdk";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
 import { MemoryStorage } from "./storage";
 import { createTestPlatform } from "./platform";
+import { parseActionRef } from "@actiondock/core/graph";
+import { MockActionInvoker } from "./actions";
 
 export { ActionRuntimeError };
 
@@ -287,6 +292,8 @@ export interface TestRuntimeOptions {
     | Map<string, ActionDefinition>;
   /** 可选注入的标准运行时平台实例 */
   platform?: RuntimePlatform;
+  /** 可选注入的 Action 调用模拟器实例（复用测试状态） */
+  actionsMock?: MockActionInvoker;
 }
 
 /**
@@ -307,6 +314,8 @@ export interface TestRuntime {
   logger: MemoryLogger;
   /** 底层存储引擎 */
   storage: MemoryStorage;
+  /** Action 调用模拟器接口 */
+  actions: MockActionInvoker;
   /** 注册 Action 动作定义 */
   registerAction(id: string, action: ActionDefinition): void;
   registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
@@ -408,6 +417,11 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     }
   }
 
+  const actionsMock = options.actionsMock ?? new MockActionInvoker(packageId, clock);
+  let actionsRevision = 0;
+  let lastActionsRevision = -1;
+  let lastMockRevision = -1;
+
   const testConfig = new TestConfigStore(
     storage,
     options.projectConfig,
@@ -416,14 +430,27 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
   const testState = new TestStateStore(storage);
 
-  const testPlatform =
-    options.platform ??
-    createTestPlatform({
-      clock,
-      process,
-      storage: safeStorage,
-      eventSink: events,
-    });
+  if (options.platform?.invocationTargets) {
+    throw new ActionDockError(INVALID_ARGUMENT,
+      "createTestRuntime owns its invocation target resolver; use createActionDock for custom target integration tests");
+  }
+  const testPlatform = options.platform ?? createTestPlatform({
+    clock,
+    process,
+    storage: safeStorage,
+    eventSink: events,
+  });
+  const getContractFallback = (fullRef: string) => {
+    const parsed = parseActionRef(fullRef);
+    const act = actionsMap.get(fullRef);
+    const declared = parsed.packageId === packageId
+      ? options.projectConfig?.actions?.[parsed.actionId] : undefined;
+    return {
+      inputSchema: act?.inputSchema ?? declared?.inputSchema,
+      outputSchema: act?.outputSchema ?? declared?.outputSchema,
+      uses: act?.uses ?? declared?.uses,
+    };
+  };
 
   const registerAction = (
     idOrAction:
@@ -431,16 +458,22 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
     maybeAction?: ActionDefinition
   ): void => {
+    const setAction = (id: string, act: ActionDefinition) => {
+      const parsed = parseActionRef(id);
+      const canonical = `${parsed.packageId ?? packageId}/${parsed.actionId}`;
+      const local = !parsed.packageId || parsed.packageId === packageId;
+      if (actionsMap.get(canonical) === act && (!local || actionsMap.get(parsed.actionId) === act)) return;
+      actionsMap.set(canonical, act);
+      if (local) actionsMap.set(parsed.actionId, act);
+      actionsRevision++;
+    };
     if (typeof idOrAction === "string") {
       if (!maybeAction) {
         throw new Error(
           `registerAction(id, action) requires action definition: id=${idOrAction}`
         );
       }
-      actionsMap.set(idOrAction, maybeAction);
-      if (!idOrAction.includes("/")) {
-        actionsMap.set(`${packageId}/${idOrAction}`, maybeAction);
-      }
+      setAction(idOrAction, maybeAction);
       return;
     }
 
@@ -448,10 +481,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     const id = actObj.id;
     const act = actObj.action ?? (typeof actObj.run === "function" ? (idOrAction as ActionDefinition) : undefined);
     if (id && act) {
-      actionsMap.set(id, act);
-      if (!id.includes("/")) {
-        actionsMap.set(`${packageId}/${id}`, act);
-      }
+      setAction(id, act);
     }
   };
 
@@ -509,7 +539,12 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
     const targetRef = actionRef.includes("/") ? actionRef : `${packageId}/${actionRef}`;
 
-    if (sharedServicePromise && lastActionsSize !== actionsMap.size) {
+    if (
+      sharedServicePromise &&
+      (lastActionsSize !== actionsMap.size ||
+        lastActionsRevision !== actionsRevision ||
+        lastMockRevision !== actionsMock.revision)
+    ) {
       const oldService = await sharedServicePromise;
       await oldService.close();
       sharedServicePromise = undefined;
@@ -517,14 +552,16 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
     if (!sharedServicePromise) {
       lastActionsSize = actionsMap.size;
+      lastActionsRevision = actionsRevision;
+      lastMockRevision = actionsMock.revision;
       const packageActionsMap = new Map<string, Record<string, ActionDefinition>>();
       packageActionsMap.set(packageId, {});
 
       for (const [k, v] of actionsMap) {
         if (k.includes("/")) {
-          const slashIdx = k.indexOf("/");
-          const pkg = k.slice(0, slashIdx);
-          const actId = k.slice(slashIdx + 1);
+          const parsed = parseActionRef(k);
+          const pkg = parsed.packageId!;
+          const actId = parsed.actionId;
           if (pkg === packageId) {
             packageActionsMap.get(packageId)![actId] = v;
           } else {
@@ -535,6 +572,58 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           }
         } else {
           packageActionsMap.get(packageId)![k] = v;
+        }
+      }
+
+      // 将 actionsMock 中已登记的元数据与默认规则替身纳入包结构，
+      // 使未绑定 default 模拟优先复用真实注册的替身 Action，且短引用走既有 resolveAction 消歧
+      for (const [canonicalRef, spec] of actionsMock.getActionSpecs()) {
+        const pkg = spec.packageId;
+        const actId = spec.actionId;
+        if (!packageActionsMap.has(pkg)) {
+          packageActionsMap.set(pkg, {});
+        }
+        const pkgMap = packageActionsMap.get(pkg)!;
+        const hasDefaultRule = actionsMock.hasRule(canonicalRef, "default");
+        const existingAct = pkgMap[actId];
+
+        if (hasDefaultRule) {
+          const existingContract = existingAct
+            ? {
+                inputSchema: (existingAct as any).inputSchema ?? (existingAct as any).contract?.inputSchema,
+                outputSchema: (existingAct as any).outputSchema ?? (existingAct as any).contract?.outputSchema,
+              }
+            : undefined;
+          const explicit = actionsMock.getContract(canonicalRef, "default");
+          const contract = {
+            inputSchema: explicit?.inputSchema ?? existingContract?.inputSchema,
+            outputSchema: explicit?.outputSchema ?? existingContract?.outputSchema,
+            uses: explicit?.uses ?? existingAct?.uses,
+          };
+          pkgMap[actId] = defineAction({
+            id: actId,
+            inputSchema: contract?.inputSchema,
+            outputSchema: contract?.outputSchema,
+            uses: contract?.uses,
+            run: async (inVal, ctx) => {
+              return actionsMock.handleInvocation(canonicalRef, "default", inVal, ctx);
+            },
+          });
+        } else if (!existingAct) {
+          // 仅注册了具名 Mock（如 primary/fallback），生成契约占位替身 Action，
+          // 使该包纳入 graph 与 catalog；若直接以 default 调用则明确失败
+          const contract = spec.contract;
+          pkgMap[actId] = defineAction({
+            id: actId,
+            inputSchema: contract?.inputSchema,
+            outputSchema: contract?.outputSchema,
+            run: async () => {
+              throw new ActionDockError(
+                ACTION_FAILED,
+                `Action '${canonicalRef}' only has named mock bindings registered, default binding is not available`
+              );
+            },
+          });
         }
       }
 
@@ -593,10 +682,16 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
         });
       }
 
+      const invocationTargets = actionsMock.createInvocationTargetResolver({
+        clock, storage: safeStorage, logger: memoryLogger,
+        eventSink: testPlatform.eventSink ?? events, getContractFallback,
+      });
       sharedServicePromise = createActionDock({
         packages: packagesList,
-        platform: testPlatform,
+        platform: { ...testPlatform, invocationTargets },
         inMemory: true,
+        // 按调用方包显式隔离磁盘配置；空外层字典不代表覆盖每个包。
+        actionBindings: Object.fromEntries(Array.from(packageActionsMap.keys(), (id) => [id, {}])),
         autoLoadCurrentProject: false,
         scanLinkedPackages: false,
       });
@@ -631,6 +726,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     events,
     logger: memoryLogger,
     storage,
+    actions: actionsMock,
     registerAction,
     getAction,
     listActions,

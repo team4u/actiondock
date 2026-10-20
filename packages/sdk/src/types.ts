@@ -577,6 +577,14 @@ export interface ProcessAPI {
 
 
 /**
+ * Action 调用选项配置。
+ */
+export interface ActionInvokeOptions {
+  /** 显式指定的路由绑定标识（若不指定则遵循默认绑定策略） */
+  binding?: string;
+}
+
+/**
  * Action 间相互调用的执行器接口。
  */
 export interface ActionInvoker {
@@ -584,17 +592,24 @@ export interface ActionInvoker {
    * 直接调用指定的 Action
    * @param ref 目标 Action 引用或标识符（严格只接受 ActionRef 或 string）
    * @param input 传递给目标 Action 的输入参数
+   * @param options 调用选项配置
    */
-  (ref: string | ActionRef, input?: unknown): Promise<unknown>;
+  (
+    ref: string | ActionRef,
+    input?: unknown,
+    options?: ActionInvokeOptions
+  ): Promise<unknown>;
 
   /**
    * 调用指定的 Action 并传入参数，返回其执行结果
    * @param action 目标 Action 引用或标识符（严格只接受 ActionRef 或 string）
    * @param input 传递给目标 Action 的输入参数
+   * @param options 调用选项配置
    */
   invoke<I = unknown, O = unknown>(
     action: ActionRef | string,
-    input?: I
+    input?: I,
+    options?: ActionInvokeOptions
   ): Promise<O>;
 }
 

@@ -6,6 +6,7 @@ description: >-
   编写、校验或执行 Playbook 任务操作规程；
   使用或排查 ad 命令行工具（包括 ad init、ad action、ad playbook、ad info、ad list、ad describe、ad run、ad validate、ad generate、ad config、ad state、ad runs、ad serve、ad mcp、ad build、ad test、ad add、ad remove、ad pack、ad doctor、ad link、ad unlink、ad export skill、ad profile）；
   配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
+  配置动作命名绑定、在 ctx.actions 调用中混合本地与远端依赖、处理同一动作多目标调用与显式降级；
   将工具构建为 Node.js 运行时交付目录、打包为 npm 压缩包或导出为 Agent Skill 资产。
   凡用户询问 ActionDock、ad 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
 ---
@@ -32,6 +33,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
 | **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>] [--json]` | 规范调用语法，支持扁平参数与 `--input` / `--input-file` 互斥输入；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
+| **混合本地与远端依赖** | `ctx.actions.invoke(ref, input, { binding })` | 由调用方 `.actiondock/bindings.json` 选择执行目标；支持同一引用多绑定，`uses` 只声明逻辑权限，不自动降级 | [action-bindings.md](references/action-bindings.md) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果；多条后台任务可用 `ad runs watch` 阻塞等待全部终态聚合退出，后台派工无 runId 时以 `--request-id` 反查等待 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
@@ -39,7 +41,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **生成 TypeScript 类型** | `ad generate types` | 基于清单 Schema 自动生成强类型声明文件 | [developer.md](references/developer.md) |
 | **安装与锁定依赖** | `ad add <package>` | 正式项目引入外部 Action 包，受原子事务保护 | [cli.md](references/cli.md) |
 | **移除外部依赖** | `ad remove <package>` | 自动检查反向引用，安全移除依赖包 | [cli.md](references/cli.md) |
-| **单元测试与验证** | `ad test [pattern]` | 内存沙箱测试，验证业务逻辑与持久化状态 | [developer.md](references/developer.md) |
+| **单元测试与动作模拟** | `ad test [pattern]` | 内存沙箱测试，使用 MockActionInvoker 模拟多目标绑定与故障降级 | [testing.md](references/testing.md) |
 | **打包 npm 分发包** | `ad pack [-P <id>] [-o <path>] [--dry-run]` | 打包为标准 npm 压缩包用于共享与发布 | [build-and-export.md](references/build-and-export.md) |
 | **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建标准 Node.js 运行时交付目录（配合 --vendor-deps 物化依赖） | [build-and-export.md](references/build-and-export.md) |
 | **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出源码型、Node 目录型或复合套件技能（配合 --vendor-deps 物化依赖） | [build-and-export.md](references/build-and-export.md) |
@@ -51,7 +53,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
 | **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use`、`ad profile update` | 管理远端 Runner 服务的连接凭证、内网证书忽略与当前切换目标 | [cli.md](references/cli.md) |
 | **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离与 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
-| **全局注册与路由挂载** | `ad link [path]`、`ad unlink [id|path]` | 注册源码包至全局路由表实现共享，亦支持本地开发联调与复合包挂载 | [cli.md](references/cli.md) |
+| **本地注册与开发挂载** | `ad link [path]`、`ad unlink [id|path]` | 将本地源码目录登记至本机注册表；不注册远端 Profile，也不代替工程正式依赖 | [cli.md](references/cli.md) |
 | **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 
 ---
@@ -72,7 +74,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
 - 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 编码顾问） -> 确定性调用（`ad run <action> [control-options] -- <assignments...>` 或配合 `--input` / `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
-- 项目工程依赖消费与全局共享：推荐通过 `ad link .` 将源码包或技能注册至本机全局路由表实现全员共享；跨包调度通过清单 `uses` 声明权限并由 `ctx.actions.invoke` 逻辑寻址调度；亦支持使用 `ad add <package>` 引入物理锁定依赖。
+- 项目依赖消费：需要本地实现的正式依赖通过 `ad add <package>` 安装并锁定；`ad link` 用于本地源码挂载与联调。纯远端依赖通过 `uses` 声明能力，并由命名绑定指向 Profile，无需安装远端源码；详见 [action-bindings.md](references/action-bindings.md)。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
 ### 作业流二：作为开发者创建与扩展 Action
@@ -80,11 +82,11 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 步骤一：工程初始化。执行 `ad init [directory] -i <package-id> -n <name>` 生成标准工程骨架。
 - 步骤二：新建模板代码。执行 `ad action create <action-id> -d "描述" -i "name:string, count?:number" -o "message:string"` 脚手架生成初始源码并在清单中注册（命令行支持基础类型简写与可选标记）。
 - 步骤三：完善清单契约。若存在字段描述、枚举、嵌套结构或复杂约束，在 `actiondock.json` 中扩展标准 JSON Schema，推荐通过 `examples` 字段补充示例以消除模型理解歧义。
-- 步骤四：明确依赖与调度范围。同包动作互调自然合法，默认豁免 `uses` 声明（在源码中直接通过短标识符调用即可）；若出于显式说明或构建裁剪目的在清单中配置 `uses`，同包内部必须严格使用短标识符（如 `export-schema-ddl`），严禁包含本包包名前缀（如 `pkg/export-schema-ddl`，否则规划器解析索引不匹配会导致报错条目未找到）；跨包依赖方可在 `uses` 中配置完全限定标识符。
+- 步骤四：明确依赖与调度范围。当前宿主内的同包调用默认豁免 `uses`，显式声明时使用短标识符；跨包或跨执行目标的调用必须声明 `uses`，跨目标即使同包名也不豁免。远端依赖使用完全限定引用，在调用方 `.actiondock/bindings.json` 中绑定执行位置，不把 Profile 写进 `uses`；同一引用可有多个命名绑定。
 - 步骤五：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
 - 步骤六：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
 - 步骤七：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在；若校验单一动作，使用短标识符。
-- 步骤八：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
+- 步骤八：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，利用 `runtime.actions` 模拟下游动作与多目标命名绑定，执行 `ad test`，详见 [testing.md](references/testing.md)。
 - 步骤九：编排业务规程。执行 `ad playbook create <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
 - 步骤十：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](references/build-and-export.md)。
 
@@ -114,6 +116,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载技能、运行遇阻执行按需自举、进行规程优先决议、查阅契约规范、执行调用及接入 MCP 时查阅。
 - [developer.md](references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
+- [testing.md](references/testing.md)：**Action 单元测试与动作模拟**。当需要模拟 `ctx.actions.invoke`、按绑定区分下游响应、注入故障或一次性序列、断言调用历史与取消行为时查阅；不要用真实 Profile 替代单元测试模拟。
+- [action-bindings.md](references/action-bindings.md)：**动作命名绑定与远端调用**。当 Action 内混合调用本地与远端依赖、同一动作需要多个执行目标、配置 `.actiondock/bindings.json`、实现显式降级或排查远端结果未知时查阅。
 - [process-execution.md](references/process-execution.md)：**受管进程与系统命令执行指南**。当调用底层操作系统命令、管理长期交互进程与 REPL、使用逐流增量解码、或使用 FakeProcessDriver 编写确定性测试时查阅。
 - [build-and-export.md](references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
 - [cli.md](references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
@@ -127,12 +131,16 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
 - 脚手架命令原则：新增 Action 工具使用 `ad action create <id>`，命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程使用 `ad playbook create <id>`。
-- 依赖共享与权限管理准则：生产与协作环境以源码模式与全局注册共享为核心，通过 `ad link` 将技能包登记至本机全局路由表（`~/.actiondock/registry.json`）供全局共享；跨包调度必须在发起方清单的 `uses` 列表中显式声明（支持完全限定名、通配符与裸包名），严禁未声明调用；独立闭环工程若需物理锁死版本亦可使用 `ad add`。
+- 依赖与权限边界：需要本地实现的正式工程依赖使用 `ad add`，`ad link` 仅处理本机源码挂载。跨包与跨目标调用均须声明 `uses`；纯远端依赖不因本地缺少源码就盲目安装，而应检查调用方命名绑定。
 - 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管。
+- 确定性动作测试红线：使用 `runtime.actions.register` 或 `registerOnce` 按引用与绑定精确模拟下游；保留真实 Runner、`uses` 授权与契约校验，不手工替换 `ctx`。未命中的具名模拟直接失败，不能访问真实远端；网络协议能力另用回环服务集成测试验证。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。
 - 严格契约原则：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`，推荐为复杂参数补充 `examples` 示例以消除智能体理解歧义与幻觉。
-- 严格调用原则：`ctx.actions.invoke` 严格仅接受动作标识符字符串或 ActionRef 引用对象，严禁传入动作定义对象或裸函数。
+- 严格调用原则：`ctx.actions.invoke` 首参数仅接受动作标识符字符串或 ActionRef 引用对象，严禁传入动作定义对象或裸函数；第三参数仅接受可选的 `binding`，不得写入 Profile、URL 或凭证。
+- 目标选择边界：CLI 的 `--profile` 选择整条命令的宿主，内部依赖由该宿主的命名绑定选择；没有 `--binding` CLI 参数。未指定绑定只查 `default`，没有则保持本地；显式绑定不存在直接报错，禁止猜测目标。
+- 降级安全边界：框架不自动重试或回退。父任务取消后停止调用；网络断链与 `SERVICE_RESULT_UNKNOWN` 不代表远端未执行，不能盲目重跑有副作用的 Action。
+- 交付隔离边界：`.actiondock/bindings.json` 与 Profile 凭据不进入构建或导出产物，目标宿主需独立配置；远端运行记录必须在对应 Profile 查询。
 - 响应式取消原则：对于网络通信与耗时循环，始终绑定并检测 `ctx.signal`。
 - 统一命名空间：多包交互时，Action 引用推荐采用完全限定标识符 `<package-id>/<action-id>`，避免同名短标识符歧义冲突。
 - 解耦引用原则：跨工作区或跨包调用 Action 时禁止使用文件系统物理相对路径导入，必须使用逻辑标识符通过 `ctx.actions.invoke` 进行动态寻址与调用。

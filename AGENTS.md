@@ -6,7 +6,7 @@
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
   - `packages/core`：`@actiondock/core`（Node-first 原生运行时与核心领域：统一服务门面 `createActionDock` 与 `connectActionDock`、标准服务端口体系 `DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`、统一错误模型 `ActionDockError`、原生平台装配 `createNodePlatform`、服务启动 `startActionDockServer`、核心工程辅助 `initProject` 及包图模型抽象 `PackageGraph`；精细化子路径导出支持：`server`、`project`、`registry`、`profile`、`graph`、`package`）。
   - `packages/builder`：`@actiondock/builder`（依赖规划与分发构建：`SelectionPlanner`、`SkillExporter`、Skill 模板生成与导出、目录型构建与 npm 打包）。
-  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`createTestRuntime`、`FakeClock`、`FakeProcessDriver`、`MockProcessExecutor`、`MemoryStorage`）。
+  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`createTestRuntime`、`FakeClock`、`FakeProcessDriver`、`MockProcessExecutor`、`MockActionInvoker`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO 与 HTTP 传输、Tool 映射、取消链路）。
   - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。
@@ -21,6 +21,7 @@
   - **单一事实源**：拒绝重复实现与逻辑拷贝，关键模型与通用能力保持唯一事实来源。
   - **非阻塞异步**：执行链路保持非阻塞异步，确保系统高吞吐与灵敏响应。
   - **防御与透明**：严禁静默吞没异常，坚持边界安全校验与全链路错误透传。
+- **技能文档优先同步**：涉及公开接口、CLI 命令、配置、依赖调用或错误语义的变更，必须同步更新 `skills/actiondock/SKILL.md` 与相关 `references/`，不能只更新 `docs/`。技能目录是 Agent 使用指南的优先交付入口，安装后应能独立说明用法与安全边界。
 - **文档与输出风格规范**：
   - **禁止使用数字序号**：排版一律采用无序列表符号（`- `），不得使用数字列表（如 `1.`、`2.`、`3.`）。
   - **严禁使用表情符号**：严禁在文档或输出中添加任何表情符号与图标。

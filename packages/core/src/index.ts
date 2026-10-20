@@ -46,6 +46,7 @@ export type { ResolvedEnv } from "./runtime/env";
 
 // 3. 执行配置与结果模型（转引 SDK 规范类型与核心执行契约）
 export type {
+  ActionInvokeOptions,
   ActionRef,
   ResolvedActionRef,
   ExecutionResult,
@@ -58,6 +59,8 @@ export type {
   ExecutionTicket,
   CancelResult,
 } from "./execution/types";
+
+export type { ActionBindings, ActionBindingTarget } from "./invocation/bindings";
 
 // 4. 动作与包描述模型
 export type {

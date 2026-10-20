@@ -1,3 +1,13 @@
+export {
+  loadActionBindings,
+  validateActionBindings,
+  resolveActionBinding,
+  hasRemoteActionBinding,
+  validateCanonicalActionRef,
+  validateBindingName,
+  type ActionBindings,
+  type ActionBindingTarget,
+} from "../invocation/bindings";
 export * from "./digest";
 export * from "./init";
 export * from "./loader";

@@ -1,6 +1,7 @@
 import type {
   ActionContext,
   ActionInvoker,
+  ActionInvokeOptions,
   ActionRef,
   Config,
   Logger,
@@ -13,7 +14,7 @@ import type { RuntimeStorage } from "../storage/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { createDefaultProcessOwner } from "../invocation/types";
 import { resolveEnvValue } from "./env";
-import { ActionDockError, INVALID_ACTION_REF, INVALID_STATE } from "../errors";
+import { ActionDockError, INVALID_ACTION_REF, INVALID_ARGUMENT, INVALID_STATE } from "../errors";
 
 /**
  * 生产级配置解析器实现。
@@ -227,8 +228,56 @@ export interface ContextOptions {
   onActionInvoke?: (
     action: ActionRef | string,
     input: unknown,
-    parentRunId?: string
+    parentRunId?: string,
+    options?: ActionInvokeOptions
   ) => Promise<unknown>;
+}
+
+/**
+ * 校验并规范化 ActionInvokeOptions 调用选项。
+ *
+ * 针对第三参数运行时检查：
+ * - 必须为普通对象或 undefined（2 参数兼容）
+ * - 严禁未知字段（如 profile、server、token 等）
+ * - binding 若存在必须为非空且非全空白字符串
+ */
+function validateActionInvokeOptions(options?: unknown): ActionInvokeOptions | undefined {
+  if (options === undefined) {
+    return undefined;
+  }
+  if (
+    typeof options !== "object" ||
+    options === null ||
+    Array.isArray(options) ||
+    (Object.getPrototypeOf(options) !== Object.prototype && Object.getPrototypeOf(options) !== null)
+  ) {
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
+      "INVALID_ARGUMENT: ActionInvokeOptions must be a plain object"
+    );
+  }
+
+  const allowedKeys = new Set(["binding"]);
+  for (const key of Reflect.ownKeys(options)) {
+    if (typeof key !== "string" || !allowedKeys.has(key)) {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        `INVALID_ARGUMENT: Unknown option '${String(key)}' in ActionInvokeOptions. Only 'binding' is allowed.`
+      );
+    }
+  }
+
+  const rawBinding = (options as ActionInvokeOptions).binding;
+  if (rawBinding !== undefined) {
+    if (typeof rawBinding !== "string" || rawBinding.trim() === "") {
+      throw new ActionDockError(
+        INVALID_ARGUMENT,
+        "INVALID_ARGUMENT: 'binding' option must be a non-empty string"
+      );
+    }
+  }
+
+  return options as ActionInvokeOptions;
 }
 
 /**
@@ -252,7 +301,8 @@ export function createActionContext(options: ContextOptions): ActionContext {
 
   const invoke = async <I, O>(
     action: ActionRef | string,
-    input?: I
+    input?: I,
+    rawOptions?: ActionInvokeOptions
   ): Promise<O> => {
     if (
       typeof action !== "string" &&
@@ -263,17 +313,23 @@ export function createActionContext(options: ContextOptions): ActionContext {
         "INVALID_ACTION_REF: ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited"
       );
     }
+    const validatedOptions = validateActionInvokeOptions(rawOptions);
     if (options.onActionInvoke) {
       return (await options.onActionInvoke(
         action,
         input,
-        currentRunId
+        currentRunId,
+        validatedOptions
       )) as O;
     }
     throw new ActionDockError(INVALID_STATE, "ActionInvoker not configured with an invocation delegate");
   };
 
-  const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);
+  const invokerFn = (
+    ref: string | ActionRef,
+    input?: unknown,
+    invokeOpts?: ActionInvokeOptions
+  ) => invoke(ref, input, invokeOpts);
   const invoker: ActionInvoker = Object.assign(invokerFn, { invoke });
 
   const defaultOwner: ProcessOwner = createDefaultProcessOwner();

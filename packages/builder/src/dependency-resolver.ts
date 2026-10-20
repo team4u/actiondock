@@ -18,6 +18,12 @@ export const TEST_FILE_SUFFIXES = [
   ".d.ts",
 ];
 
+/** 运行环境配置不得进入分发产物；普通业务 bindings.json 不受影响。 */
+export function isRuntimeConfigFile(relPath: string): boolean {
+  const segments = relPath.replace(/\\/g, "/").split("/");
+  return segments.includes(".actiondock") || segments.at(-1) === "profiles.json";
+}
+
 /**
  * 忽略的文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
  */
@@ -28,7 +34,7 @@ export function isIgnoredPath(relPath: string): boolean {
     normalized.includes("/node_modules/") ||
     normalized.startsWith(".git/") ||
     normalized.startsWith("dist/") ||
-    normalized.startsWith(".actiondock/") ||
+    isRuntimeConfigFile(normalized) ||
     TEST_FILE_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
   );
 }

@@ -8,6 +8,12 @@ import {
 import type { PackageGraph } from "../catalog/graph";
 import { isUsesDeclared } from "../catalog/graph";
 
+/** 动作调用栈键的单一事实源，执行目标作用域不占用额外深度。 */
+export function createActionCallKey(actionId: string, packageId?: string, targetScope?: string): string {
+  const logicalKey = packageId ? `${packageId}/${actionId}` : actionId;
+  return targetScope ? `${targetScope}::${logicalKey}` : logicalKey;
+}
+
 /**
  * 调用治理策略初始化选项。
  */
@@ -43,6 +49,8 @@ export interface CallerActionInfo {
 export interface TargetActionInfo {
   packageId: string;
   actionId: string;
+  /** 跨执行目标时，即使同名包也必须显式声明依赖。 */
+  requiresExplicitUses?: boolean;
 }
 
 /**
@@ -157,7 +165,7 @@ export class InvocationPolicy {
     graph?: PackageGraph
   ): PolicyError | undefined {
     // 同包调用完全自由开放，不作限制
-    if (!caller.packageId || !target.packageId || caller.packageId === target.packageId) {
+    if (!target.requiresExplicitUses && (!caller.packageId || !target.packageId || caller.packageId === target.packageId)) {
       return undefined;
     }
 
@@ -172,9 +180,12 @@ export class InvocationPolicy {
       callerNode?.manifest?.actions?.[caller.actionId]?.uses ||
       [];
 
-    const isAllowed = graph
-      ? graph.canCascadeCall(caller.packageId, caller.actionId, target.packageId, target.actionId)
-      : usesList.some((u) => isUsesDeclared(u, target.packageId, target.actionId));
+    const isAllowed = target.requiresExplicitUses
+      ? usesList.some((u) => isUsesDeclared(u, target.packageId, target.actionId) ||
+          (caller.packageId === target.packageId && u === target.actionId))
+      : graph && caller.declaredUses === undefined
+        ? graph.canCascadeCall(caller.packageId, caller.actionId, target.packageId, target.actionId)
+        : usesList.some((u) => isUsesDeclared(u, target.packageId, target.actionId));
 
     if (!isAllowed) {
       const hint = `Hint: Add '${targetRef}' to the 'uses' array of action '${caller.actionId}' in actiondock.json, then run 'ad validate'.`;
@@ -239,14 +250,13 @@ export class InvocationPolicy {
     callStack: readonly string[],
     targetActionId: string,
     targetPackageId?: string,
-    currentPackageId?: string
+    currentPackageId?: string,
+    targetScope?: string
   ): CycleCheckResult {
-    const isExternal = Boolean(
-      targetPackageId && currentPackageId && targetPackageId !== currentPackageId
+    const isExternal = Boolean(targetScope ||
+      (targetPackageId && currentPackageId && targetPackageId !== currentPackageId)
     );
-    const callKey = targetPackageId
-      ? `${targetPackageId}/${targetActionId}`
-      : targetActionId;
+    const callKey = createActionCallKey(targetActionId, targetPackageId, targetScope);
 
     let hasCycle = false;
     if (isExternal) {

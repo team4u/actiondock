@@ -33,6 +33,7 @@ import type {
   StateScopeOptions,
 } from "../service/types";
 import type { StateEntry } from "../storage/types";
+import type { ActionBindings } from "../invocation/bindings";
 
 /**
  * 宿主事件服务端口（既作为独立方法调用，又满足 EventsPort 规范）。
@@ -48,6 +49,8 @@ export interface HostEventsPort extends EventsPort {
  * ActionDock 宿主容器初始化配置选项。
  */
 export interface ActionDockHostOptions {
+  /** 按调用方包覆盖运行时命名绑定；未覆盖的包读取其 .actiondock/bindings.json。 */
+  actionBindings?: Readonly<Record<string, ActionBindings>>;
   /** 显式预注册的包列表（PackageRuntime 实例、PackageRuntimeOptions 配置或包目录物理路径）。Host 统一管理其生命周期，关闭时统一释放。 */
   packages?: Array<PackageRuntime | PackageRuntimeOptions | string>;
   /** 当前工程根目录绝对物理路径 */

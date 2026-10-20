@@ -22,6 +22,7 @@ export type {
   ActionContext,
   ActionContract,
   ActionDefinition,
+  ActionInvokeOptions,
   ActionInvoker,
   ActionRef,
   Bytes,

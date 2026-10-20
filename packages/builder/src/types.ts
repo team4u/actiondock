@@ -142,6 +142,8 @@ export interface BuildPlan {
   configDefs?: Record<string, unknown>;
   /** 依赖闭包包含的外部已链接包项目根目录列表（去重） */
   externalProjectRoots?: string[];
+  /** 经由远端绑定配置解析的外部依赖 Action 引用列表（只读展示，不加入本地源码构建闭包） */
+  remoteActionRefs?: string[];
   /** 检测到的锁文件信息 */
   lockfile?: LockfileInfo;
   /** 规划元数据 */

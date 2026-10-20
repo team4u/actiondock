@@ -52,7 +52,7 @@ Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Acti
 ```
 
 - 宿主容器层（Host）：通过 `ActionDockHost` 或 `ActionDockService` 服务端口接收外部调用请求与入参数据。
-- 动作解析层（Resolution）：纯领域函数 `resolveAction` 基于单一事实源完成动作寻址与跨包引用消歧，统一采用斜杠语法（`<package-id>/<action-id>`）。
+- 动作解析层（Resolution）：纯领域函数 `resolveAction` 基于单一事实源完成动作寻址与跨包引用消歧，统一采用斜杠语法（`<package-id>/<action-id>`）。在此基础上，宿主结合调用方包的动作命名绑定配置解析物理执行目标（本地执行或通过 Profile 远端调度）。
 - 包级装配层（PackageRuntime）：基于包图节点构建隔离的包级执行上下文与依赖环境。
 - 执行协调层（ExecutionService）：`DefaultExecutionService` 统筹并发配额、追踪根调用与协同取消信号。
 - 执行状态机层（ActionRunner）：驱动单一终态状态机，执行入参出参模式校验、循环依赖拦截与状态持久化。
@@ -91,6 +91,28 @@ sequenceDiagram
 
 ---
 
+## 动作命名绑定与多目标路由主链
+
+ActionDock 支持将 Action 调用解耦为逻辑标识与物理拓扑映射，核心路由机制深度内聚于宿主执行流中：
+
+- 宿主装配与快照：在宿主初始化装配阶段，各包的命名绑定配置（来自项目目录下的 `.actiondock/bindings.json`，或由 `createActionDock` 启动选项传入）与 Profile 远端连接完成解析与快照冻结，运行期间保持静态确定性。
+- 环境解析语义：Profile 连接始终在运行当前 Action 的宿主环境上进行解析；配置目标 `type: "local"` 对应当前执行宿主本身，绝非发起 CLI 调用的客户端电脑。
+- 绑定查找与消歧：
+  - 调用未传 binding 选项：系统仅检索 default 绑定，若未配置 default 则保持当前宿主默认本地解析。
+  - 调用显式传入 binding 选项：若对应命名绑定不存在，系统直接抛出 NOT_FOUND 错误，严禁隐式回退至 default 或本地目标。
+- 跨节点远程执行：
+  - 权限声明强约束：跨节点目标即使包名相同，也必须在清单中显式声明 uses 依赖权限，远端宿主独立进行鉴权验证。
+  - 契约模式一致性：当本地存在同名 Action 参照时，远端契约的输入与输出模式必须与本地模式完全一致，否则阻断执行；若无本地同名参照，则按远端实际公布的契约模式执行。
+  - 远端下游依赖解析：远端 Action 内部触发的级联调用，其后续依赖完全由远端宿主环境与配置解析。
+- 分布式边界透明度说明：
+  - 协作式取消边界：取消为协作请求，若调用期间网络断链或超时，远端执行状态可能未知（抛出 SERVICE_RESULT_UNKNOWN 错误）。
+  - 链路追踪范围：每次远端子调用生成独立的 requestId 并记录远端运行标识，不复用父任务请求标识，也不保证跨服务全局去重。
+  - 治理边界限制：框架不承诺跨远端服务完整内联调用栈追踪、全局跨服务并发配额治理及分布式事务保证。
+
+更多详情参见 [动作命名绑定与路由机制](/developer/action-bindings.md)。
+
+---
+
 ## 统一服务门面与标准服务端口
 
 ActionDock 2.x 彻底解耦上层适配与底层实现，通过标准服务端口体系与统一服务门面消除底层实体穿透：
@@ -99,7 +121,7 @@ ActionDock 2.x 彻底解耦上层适配与底层实现，通过标准服务端�
 
 通过顶层工厂函数提供无缝屏蔽本地与远程拓扑差异的服务门面：
 
-- 本地服务门面 `createActionDock`：创建本地 `ActionDockService` 服务实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
+- 本地服务门面 `createActionDock`：创建本地 `ActionDockService` 服务实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。支持通过 `actionBindings` 选项（格式为 `Record<string, ActionBindings>`）在内存中覆盖调用方包文件中的动作命名绑定，实现动态多环境拓扑装配。
 - 远端服务门面 `connectActionDock`：创建远端 `ActionDockService` 服务实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
 
 ### 五大标准服务端口

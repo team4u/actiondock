@@ -7,6 +7,7 @@
 
 - **开发者指南**
   - [Action 核心模型与开发指南](/developer/first-action.md)
+  - [动作命名绑定与远端调用](/developer/action-bindings.md)
   - [Playbook 规程编写指南](/developer/playbooks.md)
   - [单元测试与沙箱验证](/developer/testing.md)
   - [状态持久化与 SQLite 存储](/developer/storage.md)

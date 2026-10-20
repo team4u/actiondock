@@ -29,6 +29,9 @@ export type {
   StorageFactory,
   StorageFactoryOptions,
   GlobalStorageFactoryOptions,
+  InvocationTargetResolution,
+  InvocationCallerInfo,
+  InvocationTargetResolver,
 } from "../platform/types";
 export {
   type Clock,

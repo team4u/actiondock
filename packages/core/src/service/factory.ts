@@ -19,6 +19,7 @@ export async function createActionDock(
     const inMemory = options.inMemory ?? options.runtimeOptions.inMemory;
     const host = await createActionDockHost({
       packages: [options.runtimeOptions],
+      actionBindings: options.actionBindings ?? options.hostOptions?.actionBindings,
       autoLoadCurrentProject: false,
       scanLinkedPackages: false,
       inMemory,

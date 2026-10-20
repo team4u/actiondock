@@ -327,6 +327,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   所有支持远端调用的命令（`run`、`runs`、`state`、`config`、`doctor`、`info`、`list`、`describe`、`playbook`）均已统一支持目标连接参数：
   `-p, --profile <name>`、`-s, --server <url>`、`-t, --token <token>`、`-k, --insecure`、`--allow-insecure-http`。
 
+- 命令目标与内部依赖绑定的区别：
+  - `--profile` 与 `ad profile use` 选择主 Action 所在的执行宿主，不会把所有 `ctx.actions` 子调用强制改到同一目标。
+  - 子调用通过 `ctx.actions.invoke(ref, input, { binding: "primary" })` 选择调用方 `.actiondock/bindings.json` 中的命名绑定；该文件及其引用的 Profile 在执行主 Action 的宿主上解析。
+  - 当前没有 `ad run --binding`、`ad link --profile` 或通过 `ad config set` 管理绑定的命令，不要把 SDK 的 `binding` 当成 CLI 参数或业务入参。
+  - 已取得远端运行标识时使用 `ad runs show <remoteRunId> --profile <name>`；只有子调用请求标识时使用 `ad runs list --request-id <requestId> --profile <name>` 反查。
+  - 完整规则与显式降级示例见 [action-bindings.md](action-bindings.md)。
+
 ---
 
 ### 本地路由挂载与调试 (`ad link`, `ad unlink`)

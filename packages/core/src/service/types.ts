@@ -23,6 +23,7 @@ import type {
 import type { ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
+import type { ActionBindings } from "../invocation/bindings";
 import {
   PROTOCOL_UNSUPPORTED,
   SERVICE_RESULT_UNKNOWN,
@@ -320,6 +321,8 @@ export interface ActionDockService {
  * 创建 ActionDock 本地服务选项。
  */
 export interface CreateActionDockOptions {
+  /** 按调用方包覆盖运行时命名绑定，不改变动作引用与 uses 声明。 */
+  actionBindings?: Readonly<Record<string, ActionBindings>>;
   /** 模式类型（可选） */
   type?: "local";
   /** 单包 PackageRuntime 初始化配置 */

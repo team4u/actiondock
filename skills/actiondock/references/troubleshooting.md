@@ -53,11 +53,15 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 
 | 错误代码 | 产生原因 | 标准排查与自愈步骤 |
 | :--- | :--- | :--- |
-| `ACTION_NOT_FOUND` | 指定的动作标识不存在。 | 执行 `ad list` 确认当前项目或注册表中动作标识的拼写。 |
-| `PACKAGE_NOT_FOUND` | 指定的包标识符无法在当前工作区或注册表中定位。 | 确认包标识符拼写；若为外部依赖包执行 `ad add <package>` 安装；若为本地未发布源码包执行 `ad link` 挂载。 |
+| `ACTION_NOT_FOUND` | 所选执行目标中找不到指定动作。 | 本地调用通过 `ad list` 查验；命名远端调用在对应 Profile 执行 `ad describe <pkg>/<action> --profile <name>`，不要在错误的宿主查找。 |
+| `PACKAGE_NOT_FOUND` | 本地解析缺少实现，或所选远端未装载对应包。 | 先核对实际绑定。需要本地实现时用 `ad add` 安装，开发源码用 `ad link` 挂载；纯远端依赖检查调用方绑定和远端服务，不盲目安装远端源码。 |
+| `NOT_FOUND` | 显式指定的命名绑定不存在，错误详情含 `action`、`binding`。 | 核对调用方 `.actiondock/bindings.json` 的完全限定引用与绑定名，或编程式覆盖配置；修正后重新装配宿主，禁止改成其他目标绕过错误。 |
+| `INVALID_ARGUMENT` | 绑定配置或第三参数非法，或远端同名动作的输入输出模式与本地参照不一致。 | 第三参数仅保留 `binding`；远端目标只配置 `type`、`profile`，不放地址或令牌。若是契约不一致，核实两端模式，不绕过校验降级。 |
+| `SERVICE_RESULT_UNKNOWN` | 远端请求可能已被接受，但握手、等待或清理阶段未能确认结果。 | 保留 `profile`、`requestId`、`remoteRunId`、`resultUnknown`，在对应远端查原运行；无记录不代表未执行，禁止无幂等保障地重跑写操作。 |
+| `ACTION_CANCELLED` | 父任务取消或执行被中止。 | 停止发起新调用，不进入降级分支；`cancelOutcome: requested` 仅表示已请求，结合 `resultUnknown` 核实远端是否终止。 |
 | `PACKAGE_NOT_ALLOWED` | 目标包未列入服务端启动白名单。 | 确认服务端启动参数 `-P, --package` 是否包含该包标识，或调整调用的包名。 |
 | `ACTION_FORBIDDEN` | 目标动作未列入服务端允许白名单。 | 确认服务端启动参数 `-A, --action` 是否包含该动作标识（短名或全限定名），或调整调用的动作名。 |
-| `UNDECLARED_ACTION_DEPENDENCY` | 级联调用了未在清单 uses 列表中声明的目标 Action。 | 在调用方 `actiondock.json` 的对应 Action 下补全 `uses: ["<target-action>"]` 声明。 |
+| `UNDECLARED_ACTION_DEPENDENCY` | 跨包或跨执行目标调用未声明 `uses`，同包名跨目标也不豁免。 | 在调用方 `actiondock.json` 的对应 Action 下声明逻辑引用；不要在 `uses` 中填写 Profile 或绑定名，也不要通过换端绕过授权。 |
 | `INVALID_ACTION_REF` | 跨包调用标识存在歧义，或向 invoke 传入了 Action 定义对象。 | 跨包调用使用完全限定标识符 `<pkg>/<action>`；确保 `invoke` 仅传入字符串标识符或 ActionRef 对象。 |
 | `ACTION_CALL_CYCLE` | 级联调用发生循环调用或超深递归。 | 检查 Action 间的相互调用链路，消除闭环逻辑。 |
 | `ACTION_SUBRUN_LIMIT` | 单个根任务派生的活跃子任务数超出配额限制。 | 优化业务编排逻辑，避免高并发派生大量子任务。 |
@@ -86,7 +90,7 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `TARGET_PROTOCOL_UNSUPPORTED` | 客户端与远程 Runner 服务的协议版本不匹配。 | 升级本地 CLI 或远程 ActionDock 服务版本保持一致。 |
 | `TARGET_CAPABILITY_UNAVAILABLE` | 请求了目标宿主未启用的能力（如单次执行中请求异步任务）。 | 检查目标服务支持的能力清单，使用匹配的调用模式。 |
 | `UNSUPPORTED_BUILD_MODE` | 传入了已废弃的编译选项（如 `--target`、`--bytecode`、`--standalone`）。 | 移除废弃参数，使用标准的 Node.js 目录构建或 `--mode node` 模式。 |
-| `UNAUTHORIZED` | 访问受保护的 HTTP 或 MCP 服务时未提供有效令牌。 | 检查调用参数或请求头中的 `--token` 配置。 |
+| `UNAUTHORIZED` | 访问受保护的 HTTP 或 MCP 服务时未提供有效令牌。 | CLI 直连检查目标参数；内部命名远端调用检查执行宿主上绑定所指 Profile 及其令牌环境变量，不向 `ctx.actions.invoke` 传递 token，不通过降级绕过授权。 |
 | `INSECURE_TRANSPORT` | 携带认证令牌向非本地回环的明文 HTTP 服务发起请求时被安全策略阻断。 | 推荐在服务端以 `--https` 启用安全传输；或在客户端通过 `-k, --insecure` 或 `--allow-insecure-http` 显式豁免。 |
 | `TARGET_CLOSED` | 尝试在已显式调用过 close() 关闭的远程目标门面实例上调用操作方法。 | 检查目标门面的生命周期管理，确保在所有异步调用完成前不要提前调用关闭。 |
 
@@ -109,6 +113,10 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 - 本地软链与注册表失效自愈：
   - 适用现象：找不到本地源码包，或修改了本地项目路径导致命令报错。
   - 自愈流程：执行 `ad info --tree` 查看挂载状态 -> 执行 `ad unlink --prune` 批量清理无效软链 -> 在包目录下重新执行 `ad link` 注册。
+- 命名绑定与远端状态排查：
+  - 适用现象：同名动作执行位置不符、绑定不存在，或远端结果无法确认。
+  - 排查流程：从错误详情及父运行事件确定调用方、引用、绑定与 Profile -> 检查执行宿主上的绑定快照配置 -> 使用远端 `runId` 或本次子调用的 `requestId` 在对应 Profile 查记录。
+  - 边界：调整配置后重新装配宿主；不以切换 CLI 默认 Profile 替代内部绑定，不记录凭据，不把断链视作未执行。详见 [action-bindings.md](action-bindings.md)。
 - 配置项缺失自愈：
   - 适用现象：执行 Action 报错提示未注入必填配置。
   - 自愈流程：执行 `ad config schema [pkg]` 查看所需配置项 -> 执行 `ad config set <key> <value>` 注入持久化配置。

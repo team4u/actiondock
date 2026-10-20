@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
+import { createActionCallKey } from "../invocation/policy";
 import type {
   ActionDefinition,
+  ActionInvokeOptions,
   ActionRef,
   ExecutionEvent,
   ExecutionResult,
@@ -432,7 +434,7 @@ export class DefaultExecutionService implements ExecutionService {
 
       // 调用栈快照跟踪
       const callStack = context.callStack ? [...context.callStack] : [];
-      const callKey = targetPackageId ? `${targetPackageId}/${targetActionId}` : targetActionId;
+      const callKey = createActionCallKey(targetActionId, targetPackageId, context.targetScope);
       const lastStackItem = callStack[callStack.length - 1];
       const isAlreadyAtTop =
         lastStackItem === callKey ||
@@ -485,7 +487,7 @@ export class DefaultExecutionService implements ExecutionService {
         owner: effectiveOwner,
         progress: bridge.progressReporter,
         logger: bridge.executionLogger,
-        onActionInvoke: (childAction, childInput, parentRunId) =>
+        onActionInvoke: (childAction, childInput, parentRunId, options) =>
           this.invokeChildAction({
             controller,
             rootRunId,
@@ -498,6 +500,8 @@ export class DefaultExecutionService implements ExecutionService {
             context,
             effectiveProcess,
             effectiveOwner,
+            logger: bridge.executionLogger,
+            options,
           }),
       });
 
@@ -743,6 +747,8 @@ export class DefaultExecutionService implements ExecutionService {
     context: InvocationContext;
     effectiveProcess: ProcessAPI | undefined;
     effectiveOwner: ProcessOwner;
+    logger?: Logger;
+    options?: ActionInvokeOptions;
   }): Promise<unknown> {
     const {
       controller,
@@ -756,6 +762,8 @@ export class DefaultExecutionService implements ExecutionService {
       context,
       effectiveProcess,
       effectiveOwner,
+      logger,
+      options,
     } = args;
 
     const invoker = this.actionInvoker;
@@ -788,13 +796,13 @@ export class DefaultExecutionService implements ExecutionService {
       tenantId: effectiveOwner.tenantId,
       principalId: effectiveOwner.principalId,
       hostSessionId: context.hostSessionId || this.hostSessionId,
-      logger: context.logger,
+      logger: logger ?? context.logger,
       progress: context.progress,
       process: effectiveProcess,
       owner: effectiveOwner,
       origin: context.origin,
     };
-    return await invoker(childAction, childInput, invocationContext);
+    return await invoker(childAction, childInput, invocationContext, options);
   }
 
   private async checkIdempotencyGate(

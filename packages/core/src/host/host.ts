@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import type {
+  ActionInvokeOptions,
   ActionRef,
   ExecutionEvent,
   ExecutionResult,
@@ -38,6 +39,7 @@ import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import { snapshotRunOrigin } from "../runtime/run-origin";
 import {
   ActionDockError,
+  ACTION_CANCELLED,
   ACTION_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_SUBRUN_LIMIT,
@@ -52,6 +54,14 @@ import {
   type ErrorCode,
 } from "../errors";
 import { InvocationPolicy } from "../invocation/policy";
+import {
+  loadActionBindings,
+  resolveActionBinding,
+  validateActionBindings,
+  type ActionBindings,
+} from "../invocation/bindings";
+import { RemoteInvocationExecutor } from "../invocation/remote";
+import { resolveTarget } from "../profile/manager";
 import { createAbortError } from "../ipc/service";
 import { DataDirLock } from "../storage/data-dir-lock";
 import {
@@ -78,6 +88,7 @@ import {
 } from "./routing";
 import type { ActionDockHost, ActionDockHostOptions, HostEventsPort } from "./types";
 import type {
+  RemoteServiceOptions,
   ConfigPort,
   ConfigValueView,
   DiscoveryPort,
@@ -149,6 +160,8 @@ export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
   private runtimes = new Map<string, PackageRuntime>();
+  private extraRuntimes = new Set<PackageRuntime>();
+  private extraRuntimeScopes = new Map<PackageRuntime, string>();
   public readonly policy: InvocationPolicy;
   private hostPublicPackageIds = new Set<string>();
   private maxCallDepth: number;
@@ -165,6 +178,9 @@ export class DefaultActionDockHost implements ActionDockHost {
   private globalStorage?: RuntimeStorage;
   private initPromise?: Promise<void>;
   private isInitialized = false;
+  private readonly actionBindings = new Map<string, ActionBindings>();
+  private readonly remoteTargets = new Map<string, RemoteServiceOptions>();
+  private readonly remoteInvoker: RemoteInvocationExecutor;
 
   public readonly discovery: DiscoveryPort;
   public readonly execution: ExecutionPort;
@@ -196,6 +212,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     this.hostSessionId = randomUUID();
     this.options = options;
+    this.remoteInvoker = new RemoteInvocationExecutor({ logger: options.logger });
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.policy = new InvocationPolicy({
@@ -526,6 +543,23 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.getGlobalStorage();
   }
 
+  /** 返回的 Runtime 由 Host 统一接管，端口只清理自身缓存和附属资源。 */
+  private async closeInvocationTargets(): Promise<unknown[]> {
+    const extras = Array.from(this.extraRuntimes).filter(
+      (runtime) => this.runtimes.get(runtime.packageId) !== runtime
+    );
+    this.extraRuntimes.clear();
+    this.extraRuntimeScopes.clear();
+    const results = await Promise.allSettled(extras.map((runtime) => runtime.close()));
+    const errors = results.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+    try {
+      await this.options.platform?.invocationTargets?.close?.();
+    } catch (error) {
+      errors.push(error);
+    }
+    return errors;
+  }
+
   /**
    * 异步安全回滚初始化失败时所占用的资源。
    */
@@ -542,7 +576,11 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
       })
     );
+    const invocationCloseErrors = await this.closeInvocationTargets();
     this.runtimes.clear();
+    this.actionBindings.clear();
+    this.remoteTargets.clear();
+    await this.remoteInvoker.close();
 
     try {
       this.globalStorage?.close();
@@ -558,6 +596,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.dataDirLock = undefined;
     this.isClosed = true;
+    if (invocationCloseErrors.length) throw new AggregateError(invocationCloseErrors, "Invocation target cleanup failed");
   }
 
   /**
@@ -752,25 +791,85 @@ export class DefaultActionDockHost implements ActionDockHost {
     return async (
       childAction: ActionRef | string,
       childInput: unknown,
-      context: InvocationContext
+      context: InvocationContext,
+      options?: ActionInvokeOptions
     ): Promise<unknown> => {
-      const resolved = resolveAction(childAction, {
+      if (this.isClosed) throw new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closed");
+      if (context.signal.aborted) throw new ActionDockError(ACTION_CANCELLED, "Caller invocation is cancelled");
+      const parsed = parseActionRef(childAction);
+      // 裸引用仍由既有解析器消歧；远端专属依赖须使用完全限定引用。
+      const localResolved = parsed.packageId ? undefined : resolveAction(childAction, {
         caller: callerRuntime.packageId,
         graph: this.graph,
         catalog: this.catalog,
       });
+      const targetPackageId = parsed.packageId ?? localResolved!.package.id;
+      const targetActionId = parsed.actionId;
+      const canonicalRef = `${targetPackageId}/${targetActionId}`;
+      const canonicalActionRef = { packageId: targetPackageId, actionId: targetActionId };
+      const callerBindings = this.actionBindings.get(callerRuntime.packageId) ?? {};
+      const isNamedTarget = Boolean(options?.binding && options.binding !== "default");
 
-      const targetPackageId = resolved.package.id;
-      const targetActionId = resolved.ref.actionId;
-      const isSamePackage = targetPackageId === callerRuntime.packageId;
-      const targetRuntime = isSamePackage ? callerRuntime : this.getRuntime(targetPackageId);
+      // 目标装配是同步解析，不在此引入另一条执行或网络调用链。
+      const targetOverride = this.options.platform?.invocationTargets?.resolve(
+        canonicalActionRef,
+        options,
+        {
+          packageId: callerRuntime.packageId,
+          actionId: context.caller?.actionId,
+        }
+      );
 
-      if (!targetRuntime) {
-        throw new ActionDockError(PACKAGE_NOT_FOUND, packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
+      let targetRuntime: PackageRuntime | undefined;
+      let targetScope: string | undefined;
+      let isRemote = false;
+      let remoteProfile: string | undefined;
+
+      if (targetOverride) {
+        if (targetOverride.runtime.packageId !== targetPackageId) {
+          throw new ActionDockError(
+            INVALID_ACTION_REF,
+            `Invocation target packageId mismatch: expected '${targetPackageId}', got '${targetOverride.runtime.packageId}'`
+          );
+        }
+        targetRuntime = targetOverride.runtime;
+        this.extraRuntimes.add(targetRuntime);
+        this.bindRuntime(targetRuntime);
+        targetScope = targetOverride.scope ?? (isNamedTarget ? `binding:${options?.binding}` : undefined);
+        if (targetScope) this.extraRuntimeScopes.set(targetRuntime, targetScope);
+      } else {
+        // 没有绑定的旧调用不引入额外的清单命名约束，保持编程式 Runtime 兼容。
+        const binding = options?.binding !== undefined || Object.hasOwn(callerBindings, canonicalRef)
+          ? resolveActionBinding(callerBindings, canonicalRef, options?.binding)
+          : undefined;
+        if (binding?.type === "remote") {
+          isRemote = true;
+          remoteProfile = binding.profile;
+          targetScope = `profile:${binding.profile}`;
+        } else {
+          isRemote = false;
+          if (!localResolved) {
+            resolveAction(childAction, { caller: callerRuntime.packageId, graph: this.graph, catalog: this.catalog });
+          }
+          const isLogicalSamePackage = targetPackageId === callerRuntime.packageId;
+          targetRuntime = isLogicalSamePackage ? callerRuntime : this.getRuntime(targetPackageId);
+          if (targetRuntime) targetScope = this.extraRuntimeScopes.get(targetRuntime);
+          if (!targetRuntime) {
+            throw new ActionDockError(PACKAGE_NOT_FOUND, packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
+          }
+        }
       }
 
+      const isLogicalSamePackage = targetPackageId === callerRuntime.packageId;
+      const isPhysicalSameRuntime = Boolean(targetRuntime && targetRuntime === callerRuntime);
+      const requiresExplicitUses = Boolean(
+        isRemote ||
+        targetOverride?.requiresExplicitUses ||
+        (isNamedTarget && targetOverride !== undefined)
+      );
+
       // 跨包 uses 依赖声明校验（统一委托 InvocationPolicy 单一事实源）
-      if (!isSamePackage) {
+      if (!isLogicalSamePackage || requiresExplicitUses) {
         let declaredUses = context.caller?.declaredUses;
         if (!declaredUses) {
           try {
@@ -786,7 +885,11 @@ export class DefaultActionDockHost implements ActionDockHost {
             actionId: context.caller?.actionId || "",
             declaredUses,
           },
-          { packageId: targetPackageId, actionId: targetActionId },
+          {
+            packageId: targetPackageId,
+            actionId: targetActionId,
+            requiresExplicitUses,
+          },
           this.graph
         );
         if (authErr) {
@@ -811,7 +914,8 @@ export class DefaultActionDockHost implements ActionDockHost {
         context.callStack,
         targetActionId,
         targetPackageId,
-        callerRuntime.packageId
+        callerRuntime.packageId,
+        targetScope
       );
       if (cycle.error) {
         throw new ActionDockError(cycle.error.code, cycle.error.message, cycle.error.details);
@@ -833,16 +937,27 @@ export class DefaultActionDockHost implements ActionDockHost {
 
       try {
         const nextCallStack = [...context.callStack, cycle.callKey];
+        if (isRemote) {
+          const candidate = this.catalog.find({ packageId: targetPackageId, actionId: targetActionId })[0];
+          return await this.remoteInvoker.invoke(
+            this.remoteTargets.get(remoteProfile!)!,
+            { packageId: targetPackageId, actionId: targetActionId },
+            childInput,
+            { ...context, callStack: nextCallStack },
+            { binding: options?.binding ?? "default", profile: remoteProfile! },
+            candidate?.contract
+          );
+        }
         const targetOwner = context.owner
           ? {
               tenantId: context.owner.tenantId,
               principalId: context.owner.principalId,
-              packageInstanceId: isSamePackage
+              packageInstanceId: isPhysicalSameRuntime
                 ? (context.owner.packageInstanceId || callerRuntime.identity.instanceId)
-                : targetRuntime.identity.instanceId,
-              generationId: isSamePackage
+                : targetRuntime!.identity.instanceId,
+              generationId: isPhysicalSameRuntime
                 ? (context.owner.generationId || callerRuntime.identity.generation)
-                : targetRuntime.identity.generation,
+                : targetRuntime!.identity.generation,
             }
           : undefined;
 
@@ -852,7 +967,8 @@ export class DefaultActionDockHost implements ActionDockHost {
           parentRunId: context.parentRunId,
           caller: context.caller,
           callStack: nextCallStack,
-          package: targetRuntime.identity,
+          targetScope,
+          package: targetRuntime!.identity,
           signal: context.signal,
           timeoutMs: context.timeoutMs,
           config: context.config,
@@ -868,7 +984,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           origin: context.origin,
         };
 
-        const ticket = await targetRuntime.startInvocation(
+        const ticket = await targetRuntime!.startInvocation(
           targetActionId,
           childInput as JsonValue,
           subInvocationContext
@@ -940,6 +1056,26 @@ export class DefaultActionDockHost implements ActionDockHost {
         `Package ID conflict: package '${runtime.packageId}' is already registered in host`
       );
     }
+    const explicitBindings = this.options.actionBindings;
+    const bindings = explicitBindings && Object.hasOwn(explicitBindings, runtime.packageId)
+      ? validateActionBindings(explicitBindings[runtime.packageId])
+      : runtime.packageRoot ? loadActionBindings(runtime.packageRoot) : validateActionBindings({});
+    for (const group of Object.values(bindings)) {
+      for (const target of Object.values(group)) {
+        if (target.type !== "remote" || this.remoteTargets.has(target.profile)) continue;
+        const resolved = resolveTarget({ profile: target.profile }, this.options.customHome);
+        if (resolved.type !== "remote" || !resolved.serverUrl) {
+          throw new ActionDockError(INVALID_ACTION_REF, `Binding profile '${target.profile}' must identify a remote service`);
+        }
+        this.remoteTargets.set(target.profile, Object.freeze({
+          serverUrl: resolved.serverUrl,
+          token: resolved.token,
+          insecure: resolved.insecure,
+          allowInsecureHttp: resolved.allowInsecureHttp,
+        }));
+      }
+    }
+    this.actionBindings.set(runtime.packageId, bindings);
     this.runtimes.set(runtime.packageId, runtime);
     if (isPublic) {
       this.hostPublicPackageIds.add(runtime.packageId);
@@ -1711,7 +1847,6 @@ export class DefaultActionDockHost implements ActionDockHost {
   async close(options?: { timeoutMs?: number; graceMs?: number }): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
-
     const allRuntimes = Array.from(this.runtimes.values());
     await Promise.all(
       allRuntimes.map(async (runtime) => {
@@ -1722,7 +1857,11 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
       })
     );
+    const invocationCloseErrors = await this.closeInvocationTargets();
     this.runtimes.clear();
+    this.actionBindings.clear();
+    this.remoteTargets.clear();
+    await this.remoteInvoker.close();
 
     try {
       this.globalStorage?.close();
@@ -1737,6 +1876,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       // 忽略目录排他锁释放异常
     }
     this.dataDirLock = undefined;
+    if (invocationCloseErrors.length) throw new AggregateError(invocationCloseErrors, "Invocation target cleanup failed");
   }
 }
 
