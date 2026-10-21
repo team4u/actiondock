@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { linkPackage } from "@actiondock/core/registry";
+import { normalizeServerViews } from "@actiondock/core/server";
 import {
   extractNamespacedViews,
   loadViewsFromFile,
@@ -92,6 +93,42 @@ describe("单端口多视图（Virtual Views）单元逻辑验证", () => {
     assert.deepStrictEqual(mergeServerViews(undefined, overrideDict), overrideDict);
     assert.deepStrictEqual(mergeServerViews(baseDict, undefined), baseDict);
     assert.strictEqual(mergeServerViews(undefined, undefined), undefined);
+  });
+
+  for (const baseIsArray of [false, true]) {
+    for (const overrideIsArray of [false, true]) {
+      it(`mergeServerViews: 规范名称合并保持两份授权，数组形态 ${baseIsArray}/${overrideIsArray}`, () => {
+        const original = {
+          name: " agent ",
+          token: "old",
+          packageAllowlist: ["pkg.a"],
+          actionAllowlist: ["pkg.b/read"],
+          enableManagement: false,
+        };
+        const base = baseIsArray ? [original] : { alias: original };
+        const override = overrideIsArray ? [{ name: "agent", token: "new" }] : { agent: { token: "new" } };
+        const merged = mergeServerViews(base, override);
+        assert.deepEqual(Object.keys(merged!), ["agent"]);
+        const { views } = normalizeServerViews({ views: merged });
+        assert.equal(views.size, 2);
+        const policy = views.get("agent")!.policy;
+        assert.equal(policy.token, "new");
+        assert.deepEqual(policy.packageAllowlist, ["pkg.a"]);
+        assert.deepEqual(policy.actionAllowlist, ["pkg.b/read"]);
+        assert.equal(policy.enableManagement, false);
+      });
+    }
+  }
+
+  it("mergeServerViews: 显式白名单整项替换，未提供的另一维度保留", () => {
+    const base = { agent: { token: "old", packageAllowlist: ["pkg.a", "pkg.extra"], actionAllowlist: ["pkg.b/read"] } };
+    const override = { agent: { token: "new", packageAllowlist: ["pkg.c"] } };
+    const merged = mergeServerViews(base, override) as Record<string, any>;
+    assert.deepEqual(merged.agent.packageAllowlist, ["pkg.c"]);
+    assert.deepEqual(merged.agent.actionAllowlist, ["pkg.b/read"]);
+    const cleared = mergeServerViews(merged, { agent: { packageAllowlist: [], actionAllowlist: [] } }) as Record<string, any>;
+    assert.deepEqual(cleared.agent.packageAllowlist, []);
+    assert.deepEqual(cleared.agent.actionAllowlist, []);
   });
 
   it("extractNamespacedViews: 提取命名空间视图并过滤 default 默认视图", () => {
@@ -298,11 +335,11 @@ export default defineAction({
             views: {
               admin: {
                 token: ADMIN_TOKEN,
+                packageAllowlist: ["*"],
                 enableManagement: true,
               },
               "math-only": {
                 token: MATH_TOKEN,
-                packageAllowlist: ["pkg.math"],
                 actionAllowlist: ["pkg.math/calc"],
                 enableManagement: false,
               },

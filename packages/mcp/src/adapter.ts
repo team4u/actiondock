@@ -3,6 +3,10 @@ import type { ActionDockHost } from "@actiondock/core/server";
 import type { PackageRuntime } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
+import {
+  assertServerPolicyValid,
+  isPackageAllowedByPolicy,
+} from "@actiondock/core/server";
 import { toMcpSchema } from "./schemas";
 import type { ActionDockMcpOptions } from "./types";
 import { resolveExecutionTimeout } from "./execution-mode";
@@ -101,29 +105,31 @@ export type ActionDockMcpServer = McpServer & {
 
 /**
  * 创建并配置基于 ActionDockService 的 McpServer 适配层实例。
+ * 在任何资源创建或包装载之前，先以 core 统一校验入口校验两份白名单声明：
+ * 数组结构、非法包标识、动作短名与通配符均 fail closed，违规抛 INVALID_ARGUMENT。
  */
 export async function createActionDockMcpServer(
   options: ActionDockMcpOptions = {}
 ): Promise<ActionDockMcpServer> {
+  // 授权声明前置校验（单一事实源：core assertServerPolicyValid），
+  // 覆盖 service/host/runtime/projectRoot/actions 等全部注入路径
+  assertServerPolicyValid(options, "mcp options");
+
   const { service } = await resolveService(options);
 
-  const allowedPackageIds =
-    options.packageAllowlist && options.packageAllowlist.length > 0
-      ? options.packageAllowlist
-      : options.packageIds && options.packageIds.length > 0
-      ? options.packageIds
-      : options.packageId
-      ? [options.packageId]
-      : undefined;
-
+  // 统一授权策略单一事实源：以 core EffectiveServerPolicy 表达两份白名单并集，
+  // 复用 core 策略函数判定，适配层不复制授权逻辑
+  const policy = {
+    packageAllowlist: options.packageAllowlist,
+    actionAllowlist: options.actionAllowlist,
+  };
   let serverName = "actiondock";
   let serverVersion = ACTIONDOCK_VERSION;
 
   try {
     let packages = await service.info();
-    if (allowedPackageIds && allowedPackageIds.length > 0) {
-      packages = packages.filter((p) => p.id && allowedPackageIds.includes(p.id));
-    }
+    // 包元数据按整包授权可见性收敛（含 * 全授权），单动作授权不推导整包身份
+    packages = packages.filter((p) => isPackageAllowedByPolicy(p.id, policy));
     if (packages && packages.length === 1) {
       serverName = packages[0].name || packages[0].id || serverName;
       serverVersion = packages[0].version || serverVersion;
@@ -132,14 +138,16 @@ export async function createActionDockMcpServer(
     // 忽略元数据读取失败，使用默认值
   }
 
+  // 即使当前授权集合为空，tools/list 也应明确返回空列表而非未注册方法。
   const server = new McpServer({
     name: serverName,
     version: serverVersion,
-  });
+  }, { capabilities: { tools: {} } });
 
-  // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
+  // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()；
+  // 过滤仅用单一 policy 并集判定，不先按包选择截断单动作授权目标
   let rawActions = await service.discovery.listActions();
-  const mappedActions = mapAndFilterActions(rawActions, allowedPackageIds, options.actionAllowlist);
+  const mappedActions = mapAndFilterActions(rawActions, undefined, undefined, policy);
 
   for (const { toolName, action, description } of mappedActions) {
     // 工具执行：tools/call 委托 service.execution.run()
@@ -166,14 +174,14 @@ export async function createActionDockMcpServer(
     );
   }
 
-  // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
+  // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt。
+  // 仅整包授权（或 * 全授权）的包开放对应规程；
+  // 单动作授权（如 B/read）不得借资源或提示获取该包完整规程（防泄露）
   try {
     let playbooks = await service.discovery.listPlaybooks();
-    if (allowedPackageIds && allowedPackageIds.length > 0) {
-      playbooks = playbooks.filter(
-        (pb) => pb.packageId && allowedPackageIds.includes(pb.packageId)
-      );
-    }
+    playbooks = playbooks.filter(
+      (pb) => isPackageAllowedByPolicy(pb.packageId, policy)
+    );
     for (const pb of playbooks) {
       server.registerResource(
         pb.id,

@@ -31,6 +31,7 @@ describe("startActionDockServer 支持 ActionDockService 绑定与生命周期�
       port: 0,
       service,
       token: "secret-test-token",
+      packageAllowlist: ["*"],
     });
 
     // 验证 serverInstance.service 正确暴露

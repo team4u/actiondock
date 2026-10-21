@@ -17,7 +17,73 @@ import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
 import { createAbortError } from "../../ipc/service";
 import { parseDuration } from "../../utils";
 import { readJsonBody } from "../body";
-import { getSubPath, isActionAllowedByPolicy, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
+import { parseActionRef } from "../../catalog/resolve-action";
+import { getSubPath, isActionAllowedByPolicy, isFullAccessGranted, isPackageAllowedByPolicy, isPackageVisibleByPolicy, jsonResponse, type RouteContext } from "./common";
+import type { EffectiveServerPolicy } from "../types";
+
+/** 清理范围必须落在整包或精确动作授权内，全局清理必须显式拥有全部授权。 */
+function resolveRunCleanupScope(
+  packageId: string | undefined,
+  actionId: string | undefined,
+  policy: EffectiveServerPolicy
+): { ok: true; filter: { packageId?: string; actionId?: string } } | { ok: false; reason: string } {
+  if (isFullAccessGranted(policy)) {
+    if (packageId && !isPackageVisibleByPolicy(packageId, policy)) {
+      return {
+        ok: false,
+        reason: `Package '${packageId}' is not in the allowed package list`,
+      };
+    }
+    return { ok: true, filter: { packageId, actionId } };
+  }
+
+  // 单动作清理必须解析出完整身份，避免鉴权与实际清理范围不一致。
+  if (actionId) {
+    let parsed: { packageId?: string; actionId: string };
+    try {
+      parsed = parseActionRef(actionId);
+    } catch {
+      return { ok: false, reason: `Invalid action reference '${actionId}'` };
+    }
+    // 全限定引用与显式 packageId 归一化后不一致必须拒绝，防止鉴权与过滤范围错位
+    if (parsed.packageId && packageId && parsed.packageId !== packageId) {
+      return {
+        ok: false,
+        reason: `Action reference '${parsed.packageId}/${parsed.actionId}' does not match the requested package scope '${packageId}'`,
+      };
+    }
+    const targetPkgId = parsed.packageId || packageId;
+    if (!targetPkgId) {
+      return {
+        ok: false,
+        reason: "Restricted access policy requires a fully qualified 'packageId/actionId' action reference for run cleanup",
+      };
+    }
+    if (!isActionAllowedByPolicy({ packageId: targetPkgId, actionId: parsed.actionId }, policy)) {
+      return {
+        ok: false,
+        reason: `Action '${targetPkgId}/${parsed.actionId}' is not in the allowed action list`,
+      };
+    }
+    // 以归一化完整引用传递，确保底层过滤范围与鉴权引用一致且不扩大
+    return { ok: true, filter: { packageId: targetPkgId, actionId: parsed.actionId } };
+  }
+
+  // 无 actionId：必须有明确包范围，且该范围必须是整包授权
+  if (!packageId) {
+    return {
+      ok: false,
+      reason: "Restricted access policy requires an explicit 'packageId' or fully qualified 'actionId' scope for run cleanup",
+    };
+  }
+  if (!isPackageAllowedByPolicy(packageId, policy)) {
+    return {
+      ok: false,
+      reason: `Package '${packageId}' is not fully granted; run cleanup requires a fully granted package or an explicitly granted 'packageId/actionId' reference`,
+    };
+  }
+  return { ok: true, filter: { packageId } };
+}
 
 /**
  * 处理历史运行记录查询、清理、详情及 SSE 流式日志接口。
@@ -77,7 +143,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         }
       }
 
-      if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
+      if (packageId && !isPackageVisibleByPolicy(packageId, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -91,7 +157,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         );
       }
 
-      if (actionId && !isActionAllowedByPolicy({ packageId, actionId }, policy)) {
+      if (actionId && (packageId || actionId.includes("/")) && !isActionAllowedByPolicy({ packageId, actionId }, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -103,6 +169,16 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           403,
           corsHeaders
         );
+      }
+
+      // 下推的是包可见性并集，仍须逐条校验动作，不能丢弃单动作授权包的记录。
+      const visiblePackageIds = new Set([
+        ...(policy.packageAllowlist || []).filter((id) => id !== "*"),
+        ...(policy.actionAllowlist || []).map((ref) => parseActionRef(ref).packageId!),
+      ]);
+      const backendPackageFilter = isFullAccessGranted(policy) ? undefined : [...visiblePackageIds];
+      if (backendPackageFilter?.length === 0) {
+        return jsonResponse({ ok: true, items: [], total: 0, limit, offset }, 200, corsHeaders);
       }
 
       const queryOptions: import("../../service/types").ListRunsOptions = {
@@ -119,16 +195,10 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         intent,
         requestIds: requestIds.length > 0 ? requestIds : undefined,
         signal: req.signal,
-        packageAllowlist:
-          policy.packageAllowlist && policy.packageAllowlist.length > 0
-            ? policy.packageAllowlist
-            : undefined,
+        packageAllowlist: backendPackageFilter,
       };
 
-      const hasPolicyFilter = Boolean(
-        (policy.packageAllowlist && policy.packageAllowlist.length > 0) ||
-        (policy.actionAllowlist && policy.actionAllowlist.length > 0)
-      );
+      const hasPolicyFilter = !isFullAccessGranted(policy);
 
       let runs: RunRecord[];
       let total: number | undefined;
@@ -163,7 +233,9 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           }
 
           for (const run of batch) {
-            const packageAllowed = isPackageAllowedByPolicy(run.packageId, policy);
+            // 逐条以实际 packageId/actionId 完整引用判定授权：
+            // 包可见性拦无关包，动作授权保留单动作授权目标（如 B/read）
+            const packageAllowed = isPackageVisibleByPolicy(run.packageId, policy);
             const actionAllowed = isActionAllowedByPolicy(
               { packageId: run.packageId, actionId: run.actionId },
               policy
@@ -288,25 +360,27 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         }
       }
 
-      if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
+      const scopeCheck = resolveRunCleanupScope(packageId, actionId, policy);
+      if (!scopeCheck.ok) {
         return jsonResponse(
           {
             ok: false,
             error: {
               code: PACKAGE_FORBIDDEN,
-              message: `Package '${packageId}' is not in the allowed package list`,
+              message: scopeCheck.reason,
             },
           },
           403,
           corsHeaders
         );
       }
+      const clearedScope = scopeCheck.filter;
 
       let clearedCount = 0;
       if (service.runs.clear) {
         clearedCount = await service.runs.clear({
-          packageId,
-          actionId,
+          packageId: clearedScope.packageId,
+          actionId: clearedScope.actionId,
           status,
           olderThanMs,
           keep,
@@ -324,7 +398,21 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   }
 
   // 2.1 Runs Clean Expired: POST /api/v2/runs/clean-expired, POST /runs/clean-expired
+  // 此操作无法按包或动作收窄范围，只允许显式的全部授权。
   if (subpath === "/runs/clean-expired" && req.method === "POST") {
+    if (!isFullAccessGranted(policy)) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: PACKAGE_FORBIDDEN,
+            message: "Expired run cleanup cannot be scoped under a restricted access policy",
+          },
+        },
+        403,
+        corsHeaders
+      );
+    }
     try {
       let body: any = {};
       if (req.headers.get("content-type")?.includes("json")) {
@@ -358,7 +446,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (!isPackageAllowedByPolicy(run.packageId, policy)) {
+    if (!isPackageVisibleByPolicy(run.packageId, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -566,7 +654,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (!isPackageAllowedByPolicy(run.packageId, policy)) {
+    if (!isPackageVisibleByPolicy(run.packageId, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -601,13 +689,10 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runCancelMatch = subpath.match(/^\/runs\/([^/]+)\/cancel$/);
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
-    if (
-      (policy.packageAllowlist && policy.packageAllowlist.length > 0) ||
-      (policy.actionAllowlist && policy.actionAllowlist.length > 0)
-    ) {
+    if (!isFullAccessGranted(policy)) {
       const run = await service.runs.get(runId);
       if (run) {
-        if (!isPackageAllowedByPolicy(run.packageId, policy)) {
+        if (!isPackageVisibleByPolicy(run.packageId, policy)) {
           return jsonResponse(
             {
               ok: false,

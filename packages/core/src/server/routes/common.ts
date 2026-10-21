@@ -1,6 +1,6 @@
 import type { PackageInfo } from "../../package/types";
 import { assertValidPackageId } from "../../utils";
-import { ActionDockError, PACKAGE_NOT_FOUND } from "../../errors";
+import { ActionDockError, PACKAGE_NOT_ALLOWED, PACKAGE_NOT_FOUND } from "../../errors";
 import type { EffectiveServerPolicy, RouteContext, ServerOptions } from "../types";
 import {
   ActionForbiddenError,
@@ -10,128 +10,81 @@ import {
   filterPackagesByPolicy,
   isActionAllowed,
   isActionAllowedByPolicy,
+  isFullAccessGranted,
   isManagementAllowedByPolicy,
   isPackageAllowedByPolicy,
+  isPackageVisibleByPolicy,
   PackageNotAllowedError,
+  requiresMinimalPackageProjection,
 } from "../policy";
 
 export type { RouteContext };
-
 export {
   ActionForbiddenError,
   PackageNotAllowedError,
   isActionAllowed,
   isActionAllowedByPolicy,
+  isFullAccessGranted,
   isPackageAllowedByPolicy,
+  isPackageVisibleByPolicy,
   isManagementAllowedByPolicy,
+  requiresMinimalPackageProjection,
   filterActionsByPolicy,
   filterPackagesByPolicy,
   assertActionAllowedByPolicy,
   assertPackageAllowedByPolicy,
 };
 
-/**
- * 构造带 CORS 头的标准 JSON HTTP 响应。
- */
-export function jsonResponse(
-  data: unknown,
-  status = 200,
-  corsHeaders: Record<string, string> = {}
-): Response {
+export function jsonResponse(data: unknown, status = 200, corsHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders,
-    },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
 
-/**
- * 剥离标准版本前缀 (/api/v2/)，获取相对路由子路径。
- */
 export function getSubPath(pathname: string): string {
-  if (pathname.startsWith("/api/v2/")) {
-    return pathname.slice(7);
-  }
-  return pathname;
+  return pathname.startsWith("/api/v2/") ? pathname.slice(7) : pathname;
 }
 
-/**
- * 校验目标 action 是否属于允许动作白名单。
- * 当 options 或 policy 中的 actionAllowlist 存在且目标 action 不在白名单中时抛出 403 ACTION_FORBIDDEN 异常。
- */
 export function assertActionAllowed(
   action: { actionId?: string; id?: string; packageId?: string } | string,
   options?: ServerOptions | EffectiveServerPolicy
 ): void {
-  const policy: EffectiveServerPolicy | undefined = options
-    ? {
-        packageAllowlist: options.packageAllowlist,
-        actionAllowlist: options.actionAllowlist,
-      }
-    : undefined;
-  assertActionAllowedByPolicy(action, policy);
+  assertActionAllowedByPolicy(action, options);
 }
 
-/**
- * 校验目标 packageId 是否属于允许包白名单。
- * 当 options 或 policy 中的 packageAllowlist 存在且目标 packageId 不在白名单中时抛出 403 PACKAGE_NOT_ALLOWED 异常。
- */
-export function assertPackageAllowed(
-  packageId: string,
-  options?: ServerOptions | EffectiveServerPolicy
-): void {
-  const policy: EffectiveServerPolicy | undefined = options
-    ? {
-        packageAllowlist: options.packageAllowlist,
-      }
-    : undefined;
-  assertPackageAllowedByPolicy(packageId, policy);
+export function assertPackageAllowed(packageId: string, options?: ServerOptions | EffectiveServerPolicy): void {
+  assertPackageAllowedByPolicy(packageId, options);
 }
 
-/**
- * 解析并确定生效的目标 packageId。
- * 遵循严格的解析规则与白名单检查。
- */
+/** 包发现可见性与整包能力分开判断，不能因单动作授权开放包级管理。 */
+export function assertPackageVisible(packageId: string, options?: ServerOptions | EffectiveServerPolicy): void {
+  if (!isPackageVisibleByPolicy(packageId, options)) throw new PackageNotAllowedError(packageId);
+}
+
+/** 管理接口只能选取整包授权目标；全局管理必须显式拥有全部授权。 */
 export function resolveTargetPackageId(
   packages: PackageInfo[],
   requestedPackageId?: string,
   options?: ServerOptions | EffectiveServerPolicy
 ): string {
-  const allowlist = options?.packageAllowlist;
   if (requestedPackageId) {
     if (requestedPackageId === "global") {
+      if (options && !isFullAccessGranted(options)) {
+        throw new ActionDockError(PACKAGE_NOT_ALLOWED, "Global management requires explicit full package authorization");
+      }
       return "global";
     }
     assertValidPackageId(requestedPackageId);
     assertPackageAllowed(requestedPackageId, options);
-    const matched = packages.find(
-      (p) => p.id === requestedPackageId || p.packageRoot === requestedPackageId
-    );
+    const matched = packages.find((pkg) => pkg.id === requestedPackageId || pkg.packageRoot === requestedPackageId);
     if (!matched) {
-      throw new ActionDockError(
-        PACKAGE_NOT_FOUND,
-        `Unknown or unregistered package: '${requestedPackageId}'`
-      );
+      throw new ActionDockError(PACKAGE_NOT_FOUND, `Unknown or unregistered package: '${requestedPackageId}'`);
     }
     return matched.id;
   }
-
-  let targetId: string;
-  if (
-    allowlist &&
-    Array.isArray(allowlist) &&
-    allowlist.length > 0
-  ) {
-    const allowed = packages.find((p) => allowlist.includes(p.id));
-    targetId = allowed ? allowed.id : (packages[0]?.id || "");
-  } else if (packages.length > 0) {
-    targetId = packages[0].id;
-  } else {
-    throw new ActionDockError(PACKAGE_NOT_FOUND, "No registered package found in service");
-  }
-
-  assertPackageAllowed(targetId, options);
-  return targetId;
+  if (packages.length === 0) throw new ActionDockError(PACKAGE_NOT_FOUND, "No registered package found in service");
+  const target = packages.find((pkg) => isPackageAllowedByPolicy(pkg.id, options));
+  if (!target) throw new PackageNotAllowedError("No fully authorized package available for management");
+  return target.id;
 }

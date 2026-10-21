@@ -142,6 +142,7 @@ Follow these steps to greet a user.
       projectRoot: projectDir,
       customHome: tempDir,
       enableManagement: true,
+      packageAllowlist: ["*"],
     });
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;
   });
@@ -324,6 +325,7 @@ Follow these steps to greet a user.
       startActionDockServer({
         port: 0,
         host: "0.0.0.0",
+        packageAllowlist: ["*"],
       })
     , /Authentication token is required when binding to a non\-loopback address/);
 
@@ -332,6 +334,7 @@ Follow these steps to greet a user.
       port: 0,
       host: "0.0.0.0",
       allowInsecureNoAuth: true,
+      packageAllowlist: ["*"],
     });
     assert.ok((insecureServer.port) > 0);
     await insecureServer.stop();
@@ -341,6 +344,7 @@ Follow these steps to greet a user.
       port: 0,
       host: "0.0.0.0",
       token: "secret-token-for-public",
+      packageAllowlist: ["*"],
     });
     assert.ok((secureServer.port) > 0);
     await secureServer.stop();
@@ -447,6 +451,7 @@ Follow these steps to greet a user.
       token: SECRET_TOKEN,
       projectRoot: projectDir,
       exposeDebugInfo: true,
+      packageAllowlist: ["*"],
     });
     const debugUrl = `http://127.0.0.1:${debugServer.port}`;
 
@@ -476,6 +481,7 @@ Follow these steps to greet a user.
       host: "127.0.0.1",
       token: SECRET_TOKEN,
       corsOrigins: ["http://allowed.local:3000", "https://trusted.app"],
+      packageAllowlist: ["*"],
     });
     const corsUrl = `http://127.0.0.1:${corsServer.port}`;
 
@@ -516,6 +522,7 @@ Follow these steps to greet a user.
       token: SECRET_TOKEN,
       projectRoot: projectDir,
       maxBodyBytes: 100,
+      packageAllowlist: ["*"],
     });
     const smallUrl = `http://127.0.0.1:${smallBodyServer.port}`;
 

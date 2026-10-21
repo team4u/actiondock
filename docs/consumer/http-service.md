@@ -13,26 +13,31 @@
 在包含 `actiondock.json` 的工程目录中运行，服务端会自动加载本项目及其声明锁定的全部 Action 依赖：
 
 ```bash
-# 生产与远程微服务（监听所有网卡，强制要求令牌鉴权）
-ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
+# 生产与远程微服务（监听所有网卡，使用令牌鉴权并显式开放当前宿主的全部包）
+ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret" -P '*'
 
 # 本地单机调试（默认绑定 127.0.0.1 本地回环）
-ad serve --port 5177 --token "sk-actiondock-secret"
+ad serve --port 5177 --token "sk-actiondock-secret" -P '*'
 ```
 
 ### 包与动作访问白名单（细粒度权限隔离）
 
-在多包工作区、集成宿主工程或共享部署节点中，如果仅希望向外部客户端暴露特定的 Action Package 或特定动作，可以使用 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 参数指定白名单。两项参数均支持多次指定或使用逗号分隔：
+在多包工作区、集成宿主工程或共享部署节点中，如果仅希望向外部客户端暴露特定的 Action Package 或特定动作，可以使用 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 参数指定授权白名单，两份白名单取并集授权。`-P` 授予所列整包当前与未来全部动作；`-A` 仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符。两项参数均支持多次指定或使用逗号分隔：
 
 ```bash
-# 启动微服务并仅对外暴露 github-tools 与 ci-tools 两个包（逗号分隔，推荐）
+# 启动微服务并授予 github-tools 与 ci-tools 两个整包（逗号分隔，推荐）
 ad serve -P github-tools,ci-tools --port 5177 --token "sk-actiondock-secret"
 
-# 限制特定动作白名单（支持短名与全限定名，多次指定或逗号分隔）
-ad serve -A sample.greet,calc.add --port 5177 --token "sk-actiondock-secret"
+# 限制特定动作授权白名单（仅接受全限定名，多次指定或逗号分隔）
+ad serve -A sample-tools/greet,calc-tools/add --port 5177 --token "sk-actiondock-secret"
 
-# 同时指定包白名单与动作白名单（取两者权限交集）
-ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-actiondock-secret"
+# 同时指定包与动作白名单（取并集：github-tools 整包 + sample-tools/greet 单动作）
+ad serve -P github-tools -A sample-tools/greet --port 5177 --token "sk-actiondock-secret"
+
+# 显式全量访问（不支持其他通配模式，不自动开启管理端点）
+ad serve -P '*' --port 5177 --token "sk-actiondock-secret"
+
+# 未声明 -P/-A 时默认视图没有任何授权，服务无动作可用
 ```
 
 #### 白名单保护与隔离机制
@@ -40,16 +45,16 @@ ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-action
 - **启动状态与横幅展示**：
   服务成功启动时，控制台横幅将输出当前激活的包清单与动作清单（如 `* Packages: github-tools, ci-tools` 与 `* Actions: sample.greet`），清晰标识服务的能力边界。
 - **全方位 API 路由与端点保护**：
-  - **能力发现与自省过滤**：`GET /api/v2/info` 与 `GET /api/v2/actions` 仅返回白名单内包含的 Package 及 Action 元数据；未在白名单中的内容在列表中被彻底过滤，对客户端不可见。
-  - **显式路径与执行阻断**：任何针对未授权包或动作的查询与执行请求（包括 `GET /api/v2/packages/:packageId/...`、`GET /api/v2/actions/:id`、`POST /api/v2/actions/:id/run`、`POST /api/v2/actions/:id/start` 等），均会被服务端严格阻断，返回 HTTP 403 状态码及错误码 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
+  - **能力发现与自省过滤**：`GET /api/v2/info` 与 `GET /api/v2/actions` 仅返回授权范围内的 Package 及 Action 元数据；仅获单动作授权的包仅返回最小身份元数据与已授权动作，未授权内容在列表中被彻底过滤，对客户端不可见。
+  - **显式路径与执行阻断**：任何针对未授权包或动作的查询与执行请求（包括 `GET /api/v2/packages/:packageId/...`、`GET /api/v2/actions/:id`、`POST /api/v2/actions/:id/run`、`POST /api/v2/actions/:id/start` 等），均会被服务端严格阻断，返回 HTTP 403 状态码及错误码 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`；动作按解析后的实际 `packageId/actionId` 完整引用判定，未知或缺失包不放行。
   - **历史记录与任务治理隔离**：`GET /api/v2/runs` 执行记录列表自动应用白名单过滤；未授权包或动作的单次详情查询（`GET /api/v2/runs/:runId`）、任务主动取消（`POST /api/v2/runs/:runId/cancel`）与实时事件流推送（`GET /api/v2/runs/:runId/events`）均返回 403 状态码。
-  - **环境诊断与规程隔离**：`GET /api/v2/doctor`、`GET /api/v2/playbooks` 以及配置/状态接口同样限制在白名单允许的包与动作范围内。
+  - **环境诊断与规程隔离**：`GET /api/v2/doctor`、`GET /api/v2/playbooks` 以及配置/状态接口仅对获得整包授权的包开放；单动作授权不推导规程、诊断与管理能力。
 - **统一内嵌 MCP 端点同步受控**：
-  - 服务默认挂载的统一内嵌 `/mcp` 协议端点（支持通过 `--no-mcp` 关闭）会完全同步继承包与动作白名单。
-  - 接入 MCP 协议的智能体客户端在调用 `tools/list` 时仅能感知到白名单内的工具集合；若客户端发起调用未授权的工具（`tools/call`），服务端将直接拒绝调用。
+  - 服务默认挂载的统一内嵌 `/mcp` 协议端点（支持通过 `--no-mcp` 关闭）会完全同步继承包与动作授权白名单。
+  - 接入 MCP 协议的智能体客户端在调用 `tools/list` 时仅能感知到授权范围内的工具集合；若客户端发起调用未授权的工具（`tools/call`），服务端将直接拒绝调用。
   - MCP 任务扩展（`tasks/get`、`tasks/cancel`、`tasks/list`）同步实施白名单校验与过滤。
 - **严格的包与动作解析校验**：
-  - 参数支持传入当前工作区工程、本地相对/绝对路径或通过 `ad link` 注册在全局注册表中的包标识符；动作参数支持短名与全限定名。
+  - 参数支持传入当前工作区工程、本地相对/绝对路径或通过 `ad link` 注册在全局注册表中的包标识符；动作参数仅接受全限定名。
   - 若传入的包标识符在本地或全局注册表中无法定位，服务端在启动解析阶段将直接报错并终止退出，防止因拼写错误导致非预期的空服务或隐蔽安全隐患。
 
 ### 单端口多权限与虚拟投影视图
@@ -67,22 +72,27 @@ ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-action
     "name": "my-service",
     "server": {
       "views": {
+        "default": {
+          "packageAllowlist": [],
+          "actionAllowlist": [],
+          "enableMcp": false
+        },
         "readonly": {
           "token": "sk-readonly-secret",
-          "packageAllowlist": ["github-tools"],
           "actionAllowlist": ["github-tools/list-prs"],
           "enableManagement": false,
           "enableMcp": true
         },
         "agent": {
           "token": "sk-agent-secret",
-          "packageAllowlist": ["github-tools", "ci-tools"],
-          "actionAllowlist": ["github-tools/list-prs", "ci-tools/trigger-build"],
+          "packageAllowlist": ["github-tools"],
+          "actionAllowlist": ["ci-tools/trigger-build"],
           "enableManagement": false,
           "enableMcp": true
         },
         "admin": {
           "token": "sk-admin-secret",
+          "packageAllowlist": ["*"],
           "enableManagement": true,
           "enableMcp": false
         }
@@ -97,7 +107,19 @@ ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-action
   ```
   外部配置文件支持直接对象字典、对象数组、或包含 `views` / `server.views` 的外层包装结构。此外，亦支持通过 `--views <json>` 选项以 JSON 字符串直接内联传参。
 - 配置合并优先级：
-  命令行 `--views` 优先于 `--views-file`，`--views-file` 优先于 `actiondock.json` 中的 `server.views` 声明。
+  命令行 `--views` 优先于 `--views-file`，`--views-file` 优先于 `actiondock.json` 中的 `server.views` 声明。同名视图按字段覆盖合并：上层配置显式提供的字段整项替换基础侧取值，未提供的字段保留基础侧取值，安全字段不会被静默丢弃。
+
+#### 视图授权语义与安全边界
+
+- 并集授权：每个视图以 `packageAllowlist` 与 `actionAllowlist` 声明授权范围，两份白名单取并集。
+  - `packageAllowlist` 数组中的包获得整包能力授权，覆盖该包当前与未来新增的全部动作；新增包内动作时无需变更视图配置，评估暴露面时需将其视为该视图的永久授权面。
+  - `actionAllowlist` 数组仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符；只想授权某个包的单动作时只写 `actionAllowlist`，不再授权整包。
+  - 两份白名单取并集：如 `packageAllowlist: ["github-tools"]` 加 `actionAllowlist: ["ci-tools/trigger-build"]` 表示 github-tools 整包可用（含未来新增动作），同时 ci-tools 仅 `trigger-build` 单动作可见可用。
+  - 某一白名单省略或为空数组只表示不增加该项授权，不会取消另一白名单的有效授权；两份白名单均无授权时，包与动作清单为空，执行请求被拒绝。
+  - `packageAllowlist: ["*"]` 为显式全量访问标记（不支持其他通配模式），适用于全开放的管理视图，仍不自动开启 `enableManagement`。
+- 视图独立性：命名视图不继承默认视图的白名单与 Token，命令行 `-P/-A` 不是所有视图的共同权限上限。声明授权不会让未装载、未注册或不存在的动作凭空出现。默认视图没有任何授权时不暴露包与动作；管理员全授权视图显式使用 `["*"]`。新增命名视图不会关闭默认视图与根路径；应像上例为默认视图显式声明 `packageAllowlist: []`、`actionAllowlist: []` 并关闭其 MCP，或为默认管理视图配置独立 Token 与授权。
+- 调用边界：视图授权约束对外入口，不是 Action 代码沙箱。已授权 Action 内部调用依然遵循 `uses` 与运行时依赖规则；客户端不能直接调用某动作，并不意味着可信 Action 的内部依赖调用也会被 View 拦截。
+- 最小发现投影：仅持有单动作授权的包在信息与发现接口中仅返回最小身份元数据（`id`、`name`、`version`、`description` 与已授权动作列表），不暴露完整动作清单、规程列表、配置定义或目录路径；整包授权的包返回安全脱敏后的完整结构。历史运行记录按逐条动作授权过滤：单动作授权包的已授权动作记录可见可查，其余动作记录不可见。发现结果只包含真实注册动作；缺少包内动作清单时补查目录，查询失败透明报错，不用授权声明伪造发现结果。
 
 #### 视图命名空间路径规范
 
@@ -114,16 +136,19 @@ ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-action
 
 #### 多维度安全隔离保障
 
-- 包白名单隔离：通过 `packageAllowlist` 限制视图可见与可调用的包。能力发现接口自动过滤非白名单包；显式调用未授权包直接返回 403 `PACKAGE_NOT_ALLOWED`。
-- 动作白名单隔离：通过 `actionAllowlist` 精准控制动作权限（支持短名与全限定名）。执行未授权动作直接拦截并返回 403 `ACTION_FORBIDDEN`；历史任务列表与任务取消同步过滤。
-- 管理权限门禁：通过 `enableManagement` 控制配置与状态接口。默认关闭，仅在显式配置为 `true` 的视图下开放 `/api/v2/config` 与 `/api/v2/state` 端点，未授权视图请求一律返回 403 `CAPABILITY_UNAVAILABLE`。
-- 模型上下文协议工具隔离：各视图专属 MCP 端点根据当前视图白名单过滤 `tools/list` 工具清单，并在 `tools/call` 时严格执行白名单拦截；若视图配置 `enableMcp: false`，则彻底关闭该视图的 MCP 端点并返回 404。
+- 包能力授权隔离：通过 `packageAllowlist` 授予整包能力，覆盖包内全部动作。能力发现接口自动过滤未授权包；显式调用未授权包直接返回 403 `PACKAGE_NOT_ALLOWED`。
+- 单动作授权隔离：通过 `actionAllowlist` 精准控制动作权限（仅接受全限定 `packageId/actionId` 引用）。执行未授权动作直接拦截并返回 403 `ACTION_FORBIDDEN`；动作路由的包可见性检查返回 `PACKAGE_FORBIDDEN`，包可见但动作未授权时返回 `ACTION_FORBIDDEN`。仅获单动作授权的包不开放其余动作、规程与诊断；历史任务列表与任务取消同步过滤。
+- 并集授权隔离：两份白名单取并集；某一白名单省略或为空数组只表示不增加该项授权，两份白名单均无授权时不暴露包与动作，执行请求被拒绝；`packageAllowlist: ["*"]` 覆盖全部包。
+- 管理权限门禁：通过 `enableManagement` 控制配置与状态接口。默认关闭，仅在显式配置为 `true` 的视图下开放 `/api/v2/config` 与 `/api/v2/state` 端点，未授权视图请求一律返回 403 `CAPABILITY_UNAVAILABLE`。`packageAllowlist: ["*"]` 不自动开启管理能力，仍需显式 `enableManagement: true`；受限授权下 `package=global` 特殊值不能绕过包级授权，未指定包时仅从持有整包授权的包中解析目标，单动作授权不推导管理权限。
+- 历史清理边界：受限授权下，`runs/clear` 必须显式指定已获整包授权的包，或精确到已授权动作。无范围的清理、对单动作授权包的整包清理与全局 `runs/clean-expired` 均返回 403；`packageAllowlist: ["*"]` 保留全局清理能力。
+- 规程与诊断边界：规程（playbooks）与环境诊断（doctor）仅对整包授权的包开放；单动作授权不开放目标包规程与诊断，受限授权下全局 doctor 请求安全拒绝，`packageAllowlist: ["*"]` 保留全局诊断能力。
+- 模型上下文协议工具隔离：各视图专属 MCP 端点根据当前视图授权策略过滤 `tools/list` 工具清单，并在 `tools/call` 时严格执行拦截；单动作授权包的规程不得通过 MCP 资源与提示泄露；若视图配置 `enableMcp: false`，则彻底关闭该视图的 MCP 端点并返回 404。
 
-#### 根路径与单令牌向后兼容
+#### 根路径与默认视图
 
 - 传统路由完全兼容：既有客户端请求根路径路由（`/api/v2/*` 与 `/mcp`）完全保持向后兼容，无需调整调用路径。
 - 智能令牌视图匹配：当客户端请求根路径时，服务端提取请求中的 Bearer 令牌，并在全部已注册视图中使用常数时间安全比对进行遍历匹配；若命中匹配，自动激活该视图对应的安全策略。
-- 默认视图平滑回退：若客户端未携带令牌或未命中任何自定义视图，请求自动降级应用默认视图（继承全局命令行参数 `--token`、`-P`、`-A`、`--management` 等构建的默认策略），确保既有系统的平滑升级与零迁移成本。
+- 默认视图回退：若客户端未携带令牌或未命中任何自定义视图，请求自动降级应用默认视图（由全局命令行参数 `--token`、`-P`、`-A`、`--management` 等构建）。未声明 `-P/-A` 授权时默认视图没有任何授权，服务无动作可用；需要开放时显式声明白名单，全量访问使用 `-P '*'`。
 
 ### 原生 HTTPS 传输加密支持
 
@@ -150,8 +175,8 @@ ActionDock 服务端原生支持通过 TLS 运行 HTTPS 协议，支持零配置
 ## 安全机制与身份鉴权
 
 - 非回环强制令牌鉴权：当 `--host` 设置为非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，框架强制要求配置鉴权令牌（通过 `--token` 参数或环境变量 `ACTIONDOCK_TOKEN` 注入），否则服务端拒绝启动。
-- 单端口多权限与虚拟视图：支持通过虚拟投影视图为不同调用角色定义细粒度策略，各视图独立的鉴权令牌、包白名单、动作白名单与管理权限由统一策略守卫严格把关。
-- 权限隔离与白名单保护：通过 `-P, --package` 与 `-A, --action` 指定包与动作白名单，使服务端仅对外暴露受信任能力。无论 RESTful API 还是内嵌 MCP 端点均统一受控，访问未授权包返回 403 `PACKAGE_NOT_ALLOWED`，访问未授权动作返回 403 `ACTION_FORBIDDEN`。
+- 单端口多权限与虚拟视图：支持通过虚拟投影视图为不同调用角色定义细粒度策略，各视图独立的鉴权令牌、包授权与动作授权由统一策略守卫严格把关。
+- 权限隔离与授权保护：通过 `-P, --package` 与 `-A, --action` 声明包与动作授权白名单（取并集），使服务端仅对外暴露受信任能力。无论 RESTful API 还是内嵌 MCP 端点均统一受控，访问未授权包返回 403 `PACKAGE_NOT_ALLOWED`，访问未授权动作返回 403 `ACTION_FORBIDDEN`。
 - 常数时间安全比对防范时序攻击：内置常数时间比对算法验证请求令牌。在多视图环境下遍历已注册视图进行令牌匹配时，同样坚持常数时间全量比对，杜绝利用微秒级时延差异推测敏感凭据的时序侧信道攻击。
 - 请求体上限防御：默认限制单个 JSON 请求体大小为 1MB（可通过 `--max-body 10mb` 调整），超限自动拦截并返回 413 状态码。
 - 鉴权传参方式：受保护接口默认推荐在 HTTP 请求头中携带 `Authorization: Bearer <token>`。若需要通过 URL 查询参数 `?token=<token>` 传参，服务端启动时需显式开启 `--allow-query-token` 安全开关（默认关闭）。

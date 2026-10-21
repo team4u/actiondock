@@ -29,9 +29,9 @@ export interface ServerViewOptions {
   name?: string;
   /** 该视图独立的 Bearer Token 鉴权令牌 */
   token?: string;
-  /** 该视图允许访问执行的 Package ID 白名单列表（为空允许全部） */
+  /** 整包授权列表，与动作授权取并集；空列表不授予权限，独立 * 显式授权全部 */
   packageAllowlist?: string[];
-  /** 该视图允许访问执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  /** 全限定 packageId/actionId 精确动作授权列表；空列表不授予权限 */
   actionAllowlist?: string[];
   /** 该视图是否开启配置与状态管理路由能力（默认关闭） */
   enableManagement?: boolean;
@@ -51,9 +51,9 @@ export interface EffectiveServerPolicy {
   viewName?: string;
   /** 当前生效的 Bearer Token 鉴权令牌 */
   token?: string;
-  /** 当前生效的 Package ID 白名单列表 */
+  /** 当前生效的整包授权列表，独立 * 代表全部 */
   packageAllowlist?: string[];
-  /** 当前生效的 Action 标识白名单列表 */
+  /** 当前生效的全限定精确动作授权列表，与整包授权取并集 */
   actionAllowlist?: string[];
   /** 当前生效的管理能力开关 */
   enableManagement?: boolean;
@@ -87,9 +87,9 @@ export interface ServerOptions {
   allowInsecureNoAuth?: boolean;
   /** 允许跨域请求的 CORS Origin 白名单列表 */
   corsOrigins?: string[];
-  /** 允许访问执行的 Package ID 白名单列表（为空允许全部） */
+  /** 整包授权列表，与动作授权取并集；空列表不授予权限，独立 * 显式授权全部 */
   packageAllowlist?: string[];
-  /** 允许访问执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  /** 全限定 packageId/actionId 精确动作授权列表；空列表不授予权限 */
   actionAllowlist?: string[];
   /** 最大允许的请求体字节限制（默认 1MB，防 DoS） */
   maxBodyBytes?: number;

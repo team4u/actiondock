@@ -407,6 +407,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   # HTTP 传输微服务模式
   ad mcp serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--token-env <env>] [--allow-insecure-no-auth] [--allow-insecure-http] [--allow-query-token] [--cors-origin <origin>] [--max-body <size>] [-d, --dir <path>] [--package <package-id>] [--all] [--timeout <duration>]
   ```
+  - 命令入口即授权边界：`ad mcp` 的选定运行环境由命令入口显式授权，无需另设一套普通用户模式。`--package` 声明包授权白名单（授予整包能力），`--all` 显式授权选定运行环境中的全部包；未指定 `--package` 时，命令入口也会显式授权本次选定环境。直接调用 MCP 库且未声明白名单时，工具清单为空。入口授权不改变执行宿主已装载能力的实际边界，也不是 Action 代码沙箱。
 
 - 启动远程调度 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
@@ -414,10 +415,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```
   原生支持 HTTPS 运行。仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载指定的生产机构证书。
   - 参数说明：
-    - `-P, --package <package-id>`：限制服务对外暴露的 Action Package 白名单，可多次指定或使用逗号分隔（例如 `-P pkg-a,pkg-b` 或 `-P pkg-a -P pkg-b`）。指定后仅允许访问白名单中的包，RESTful API 与统一内嵌 `/mcp` 端点均受此限制，请求未授权的包将返回 403 `PACKAGE_NOT_ALLOWED`。
-    - `-A, --action <action-ref>`：限制服务对外暴露的动作白名单，可多次指定或使用逗号分隔（例如 `-A greet,calc` 或 `-A pkg-a/action-1`）。支持指定动作短名 `actionId` 与全限定名 `packageId/actionId`。同时指定 `-P, --package` 与 `-A, --action` 时取两者权限交集。未在白名单中的动作详情与执行均返回 403 错误（错误码 `ACTION_FORBIDDEN`）；历史运行记录列表、单次详情与取消同样受白名单限制；统一内嵌 `/mcp` 端点的工具列表与任务扩展同步过滤。
-    - `--views-file <path>`：指定包含虚拟投影视图配置的 JSON 外部文件路径。支持在单个服务监听端口上划分出多个具备独立鉴权令牌、包白名单、动作白名单、管理权限门禁与专属 MCP 端点的视图。文件格式支持视图字典对象、数组形态或包裹形态。合并优先级高于 `actiondock.json` 中的 `server.views`。
+    - `-P, --package <package-id>`：限制服务对外暴露的 Action Package 授权白名单，授予所列整包当前与未来全部动作，可多次指定或使用逗号分隔（例如 `-P pkg-a,pkg-b` 或 `-P pkg-a -P pkg-b`）。该项授予所列包的整包能力，另有 `-A` 授权时按并集补充动作。RESTful API 与统一内嵌 `/mcp` 使用同一策略，未获授权的包级访问返回 403 `PACKAGE_NOT_ALLOWED`。`-P '*'` 为显式全量访问标记（不支持其他通配模式），仍不自动开启管理端点。
+    - `-A, --action <action-ref>`：限制服务对外暴露的动作授权白名单，仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符，可多次指定或使用逗号分隔（例如 `-A pkg-a/action-1,pkg-b/action-2`）。与 `-P` 的包授权取并集；只想暴露某包单动作时只写 `-A`，不声明整包。未授权动作的详情与执行均返回 403 错误（错误码 `ACTION_FORBIDDEN`）；历史运行记录列表、单次详情与取消同样受授权限制；统一内嵌 `/mcp` 端点的工具列表与任务扩展同步过滤。
+    - `--views-file <path>`：指定包含虚拟投影视图配置的 JSON 外部文件路径。支持在单个服务监听端口上划分出多个具备独立鉴权令牌、授权策略、管理权限门禁与专属 MCP 端点的视图。文件格式支持视图字典对象、数组形态或包裹形态。合并优先级高于 `actiondock.json` 中的 `server.views`；同名视图按字段覆盖合并，显式提供的字段整项替换基础侧取值，未提供的字段保留基础取值，安全字段不会被静默删除。
     - `--views <json>`：以 JSON 字符串形式直接内联指定虚拟投影视图配置。合并优先级高于 `--views-file`。
+    - 视图授权策略（并集）：视图以 `packageAllowlist` 与 `actionAllowlist` 声明授权范围，两份白名单取并集，最小可用示例为 `"packageAllowlist": ["pkg-a"]` 加 `"actionAllowlist": ["pkg-b/read"]`，表示 pkg-a 整包可用（含未来新增动作）且 pkg-b 仅 `read` 单动作可见可用。`actionAllowlist` 仅接受 `packageId/actionId` 全限定精确引用，不支持短名与通配符；只想授权单动作时只写 `actionAllowlist`，不声明整包。某一白名单省略或为空数组只表示不增加该项授权，不会取消另一白名单的有效授权；两份白名单均无授权时，包与动作清单为空，执行请求被拒绝。`packageAllowlist: ["*"]` 为显式全量访问标记（不支持其他通配模式），仍不自动开启 `enableManagement`。整包授权有意覆盖未来新增动作，评估暴露面时需将其视为该视图的永久授权面。
+    - 视图独立性与默认视图：命名视图不继承默认视图的 Token 与白名单，命令行 `-P/-A` 不是所有视图的共同权限上限。默认视图在未声明授权时不暴露包与动作；可显式声明 `packageAllowlist: []` 与 `actionAllowlist: []` 并关闭其 MCP，管理员全授权视图使用 `["*"]`。仅持有单动作授权的包在发现接口仅返回最小身份元数据，规程与 `doctor` 仅对整包授权开放，受限授权下 `package=global` 不能绕过包级授权。
+    - 历史清理边界：受限授权下，`runs/clear` 需显式指定已获整包授权的包或已授权单动作；禁止无范围的清理、对单动作授权包的整包清理与全局 `runs/clean-expired`。`packageAllowlist: ["*"]` 保留全局清理能力。
     - `-H, --host <host>`：服务监听地址（默认 `127.0.0.1`）。
     - `-p, --port <port>`：服务监听端口（默认 `5177`）。
     - `-t, --token <token>`：服务访问鉴权令牌（亦可通过环境变量 `ACTIONDOCK_TOKEN` 设置）。监听非回环地址时强制要求配置。

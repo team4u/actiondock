@@ -29,9 +29,9 @@ export interface ActionDockMcpOptions {
   packageId?: string;
   /** 多个 Package ID 列表 */
   packageIds?: string[];
-  /** 允许访问执行的 Package ID 白名单列表（为空允许全部） */
+  /** 整包授权白名单列表；与动作授权取并集，独立 * 显式授予全部，省略或空数组不增加授权 */
   packageAllowlist?: string[];
-  /** 允许暴露执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  /** 全限定 packageId/actionId 精确动作授权白名单列表；与整包授权取并集，省略或空数组不增加授权 */
   actionAllowlist?: string[];
   /** 是否聚合暴露全局 Registry 中的所有 Package */
   all?: boolean;

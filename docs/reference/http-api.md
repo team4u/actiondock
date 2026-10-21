@@ -10,7 +10,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 - 标准 API 根路由：统一采用 `/api/v2` 前缀（例如 `GET /api/v2/actions`、`POST /api/v2/actions/:id/run`）。
 - 虚拟投影视图命名空间路由：统一采用 `/views/:viewName/api/v2/*` 前缀（例如 `GET /views/:viewName/api/v2/actions`、`POST /views/:viewName/api/v2/actions/:id/run`、`GET /views/:viewName/api/v2/config`）。
-  - 视图端点隔离：请求带有 `/views/:viewName` 前缀的端点时，服务端自动激活该指定视图的安全策略（包括该视图独立的 Bearer 令牌、包白名单、动作白名单与管理权限开关）。
+  - 视图端点隔离：请求带有 `/views/:viewName` 前缀的端点时，服务端自动激活该指定视图的安全策略（包括该视图独立的 Bearer 令牌、`packageAllowlist` 与 `actionAllowlist` 并集授权声明及管理权限开关）。
   - 视图专属 MCP 协议端点：挂载在 `/views/:viewName/mcp` 路径下，各视图的工具集合与调用权限严格限定在该视图权限范围内。
   - 子路径规范化防穿透：服务端在解析视图请求时，对 `:viewName` 之后的子路径执行规范化解析，自动消除多斜杠并解析相对路径跳转，防范命名空间混淆与目录穿透。
   - 视图未找到拦截：若请求的 `:viewName` 未在服务端注册，直接返回 HTTP 404 状态码与 `NOT_FOUND` 错误。
@@ -36,6 +36,12 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - **虚拟投影视图独立令牌**：在单端口多视图服务中，每个虚拟视图可声明独立的鉴权令牌。当访问 `/views/:viewName/...` 命名空间端点时，必须提供与该视图相匹配的 Bearer 令牌；访问根路径端点时，服务端通过常数时间比对自动识别令牌归属的视图。
 - **防时序侧信道攻击**：令牌校验底层采用 Node.js 原生的常数时间比对算法（`crypto.timingSafeEqual`），遍历全部已注册视图执行比对，彻底防范时序侧信道嗅探。
 - **未授权拦截**：当配置了令牌且客户端未提供有效凭据时，服务端一律拒绝请求并返回 HTTP 401 状态码与 `UNAUTHORIZED` 错误。
+
+### 视图授权语义
+
+- 视图以 `packageAllowlist` 与 `actionAllowlist` 声明授权范围，两份白名单取并集。视图可声明 `"packageAllowlist": ["pkg-a"]`、`"actionAllowlist": ["pkg-b/read"]`，表示 pkg-a 整包与 pkg-b/read 单动作的并集授权；整包授权包含未来新增动作，单动作引用必须全限定且不支持通配符。
+- 某一白名单省略或为空数组只表示不增加该项授权，另一白名单的授权仍生效；两份白名单均无授权时，包与动作清单为空，执行请求被拒绝。`packageAllowlist: ["*"]` 显式开放全部，但不会自动开启配置与状态管理接口。
+- 仅获单动作授权的包只返回必要身份元数据与已授权动作，不展开其他动作、配置、规程或目录路径；发现结果以真实注册动作为准，不用授权声明伪造能力。动作列表、详情、执行与运行记录按同一授权策略判断；规程、包级诊断与配置状态管理另需整包授权，管理接口仍需 `enableManagement: true`。受限授权下 `package=global` 不能绕过授权。
 
 ### HTTP 状态码映射标准
 
@@ -394,6 +400,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 批量清理历史执行记录：
 
+- 授权范围：受限授权下，必须显式指定已获整包授权的包或精确到已授权动作。未指定范围、对仅获单动作授权的包发起整包清理，或请求未授权动作，均返回 403 且不执行清理。`packageAllowlist: ["*"]` 保留全局清理能力。
 - 请求参数（支持查询参数或 JSON 请求体）：
   - `packageId`：按目标包标识过滤
   - `actionId`：按目标动作标识过滤
@@ -412,6 +419,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 基于时间与数量双重保留策略，清理过期的终态运行记录与超出上限的最旧记录：
 
+- 授权范围：此接口不支持按包与动作限定范围，受限授权一律返回 403，仅 `packageAllowlist: ["*"]` 显式全量授权可以调用。
 - 请求方式：`POST`
 - 请求参数（JSON 请求体，可选覆盖默认策略）：
   - `maxAgeMs`：最大保留时长（毫秒，默认 14 天）
@@ -596,11 +604,11 @@ ActionDock 服务端内嵌支持标准 MCP 协议端点，便于 AI 智能体通
 
 - 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
 - 鉴权说明：需携带当前生效的 Bearer 令牌。
-- 策略约束：继承全局策略或基于令牌自动匹配的视图策略，`tools/list` 仅返回白名单内的工具，`tools/call` 严格实施白名单校验。
+- 策略约束：继承全局策略或基于令牌自动匹配的视图策略，`tools/list` 仅返回授权范围内的工具，`tools/call` 严格实施授权校验。
 
 ### 虚拟视图专属 MCP 端点 (`POST /views/:viewName/mcp`)
 
 - 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
 - 鉴权说明：需携带与 `:viewName` 视图匹配的 Bearer 令牌。
-- 策略约束：严格限定在该视图的 `packageAllowlist` 与 `actionAllowlist` 范围内。
+- 策略约束：严格限定在该视图的 `packageAllowlist` 与 `actionAllowlist` 并集授权范围内。单动作授权包的规程不得通过 MCP 资源与提示暴露，未授权工具不可调用。
 - 视图禁用状态：若目标视图配置了 `enableMcp: false`，服务端拒绝连接并返回 HTTP 404 状态码与 `NOT_FOUND` 错误。

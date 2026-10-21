@@ -257,6 +257,7 @@ describe("CLI runs list - 过滤项与总数统计能力", () => {
       customHome: tempHome,
       port: 0,
       token: AUTH_TOKEN,
+      packageAllowlist: ["*"],
     });
 
     try {

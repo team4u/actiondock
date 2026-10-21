@@ -3,8 +3,8 @@ import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
 import { ActionDockError, ACCESS_DENIED, NOT_FOUND, SERVICE_ERROR, UNAUTHORIZED } from "../errors";
 import { parseActionRef } from "../catalog/resolve-action";
-import { findProjectRoot } from "../project/loader";
-import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
+import { findProjectRoot, loadProjectConfig } from "../project/loader";
+import { resolvePackageRoot } from "../registry/registry";
 import type { ActionDockService } from "../service/types";
 import {
   handleActionsRoutes,
@@ -115,73 +115,40 @@ export async function startActionDockServer(
 
   let serviceInstance: ActionDockService | undefined = options.service;
 
-  // 若未传 service，服务端统一通过 createActionDock() 实例化，不再接受或处理外部传入的 Host 实体
+  // 包授权与单动作引用都参与自建服务的装载；外部注入服务自行负责能力装配。
   if (!serviceInstance) {
-    const scanLinkedPackages = options.scanLinkedPackages ?? !projectRoot;
+    const declaredId = projectRoot ? loadProjectConfig(projectRoot).id : undefined;
+    const referencedPackages = new Set<string>();
+    for (const view of views.values()) {
+      for (const pkgId of view.policy.packageAllowlist || []) {
+        if (pkgId !== "*") referencedPackages.add(pkgId);
+      }
+      for (const action of view.policy.actionAllowlist || []) {
+        referencedPackages.add(parseActionRef(action).packageId!);
+      }
+    }
+    const extraPackages: Array<{ packageRoot: string }> = [];
+    for (const pkgId of referencedPackages) {
+      if (pkgId === declaredId) continue;
+      const root = resolvePackageRoot(pkgId, projectRoot || undefined, customHome);
+      if (root && !extraPackages.some((pkg) => pkg.packageRoot === root)) {
+        extraPackages.push({ packageRoot: root });
+      }
+    }
     serviceInstance = await createActionDock({
       projectRoot: projectRoot || undefined,
+      packages: extraPackages.length > 0 ? extraPackages : undefined,
       customHome,
       platform: options.platform,
       dataDir: options.dataDir,
       inMemory: options.inMemory,
-      scanLinkedPackages,
+      scanLinkedPackages: options.scanLinkedPackages ?? !projectRoot,
       enableManagement: options.enableManagement,
     });
   }
 
   if (!serviceInstance) {
     throw new ActionDockError(SERVICE_ERROR, "Failed to initialize ActionDockService for server");
-  }
-
-  // 2. 聚合所有 views 声明的依赖包与动作，确保依赖闭包满足
-  const roots: string[] = [];
-  if (projectRoot) {
-    roots.push(projectRoot);
-  }
-
-  const aggregatedPackageAllowlist = new Set<string>();
-  const aggregatedActionAllowlist = new Set<string>();
-
-  for (const v of views.values()) {
-    if (v.policy.packageAllowlist) {
-      for (const pkg of v.policy.packageAllowlist) {
-        aggregatedPackageAllowlist.add(pkg);
-      }
-    }
-    if (v.policy.actionAllowlist) {
-      for (const act of v.policy.actionAllowlist) {
-        aggregatedActionAllowlist.add(act);
-      }
-    }
-  }
-
-  if (aggregatedPackageAllowlist.size > 0) {
-    for (const pkgId of aggregatedPackageAllowlist) {
-      const r = resolvePackageRoot(pkgId, projectRoot || undefined, customHome);
-      if (r && !roots.includes(r)) {
-        roots.push(r);
-      }
-    }
-  } else if (!projectRoot) {
-    for (const pkg of listLinkedPackages(customHome)) {
-      if (!roots.includes(pkg.path)) {
-        roots.push(pkg.path);
-      }
-    }
-  }
-
-  if (aggregatedActionAllowlist.size > 0) {
-    for (const actRef of aggregatedActionAllowlist) {
-      try {
-        const parsed = parseActionRef(actRef);
-        if (parsed.packageId) {
-          const r = resolvePackageRoot(parsed.packageId, projectRoot || undefined, customHome);
-          if (r && !roots.includes(r)) {
-            roots.push(r);
-          }
-        }
-      } catch {}
-    }
   }
 
   // 3. 为每个启用 MCP 的视图独立装配 MCP 处理器

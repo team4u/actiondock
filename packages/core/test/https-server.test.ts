@@ -82,6 +82,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
       host: "127.0.0.1",
       token: TOKEN,
       projectRoot: projectDir,
+      packageAllowlist: ["*"],
       tls: {
         cert: TEST_CERT,
         key: TEST_KEY,

@@ -199,11 +199,11 @@ export default defineAction({
           views: {
             admin: {
               token: ADMIN_TOKEN,
+              packageAllowlist: ["*"],
               enableManagement: true,
             },
             restricted: {
               token: RESTRICTED_TOKEN,
-              packageAllowlist: ["test.calc-pkg"],
               actionAllowlist: ["test.calc-pkg/calc-add"],
               enableManagement: false,
             },

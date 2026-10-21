@@ -70,7 +70,7 @@ describe("CLI End-to-End", () => {
     const serverHome = mkdtempSync(join(tmpdir(), "actiondock-server-home-"));
 
     const serveProc = startCommand(
-      ["bun", cliPath, "serve", "--port", String(port), "--host", "127.0.0.1", "--token", SECRET],
+      ["bun", cliPath, "serve", "--port", String(port), "--host", "127.0.0.1", "--token", SECRET, "-P", "*"],
       {
         cwd: tempDir,
         env: {

@@ -313,6 +313,7 @@ export default defineAction(async (input: any) => {
       port: 0,
       host: "127.0.0.1",
       token: "test-secret-stdin-field",
+      packageAllowlist: ["*"],
       projectRoot: remoteDir,
     });
 

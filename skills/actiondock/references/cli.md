@@ -323,14 +323,38 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```bash
   ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--views-file <path>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
   ```
-  将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。支持通过 `-P, --package` 指定包白名单，通过 `-A, --action` 指定动作白名单（支持短名与全限定名，多次指定或逗号分隔，两者取交集过滤，越权访问返回 403 `ACTION_FORBIDDEN`）。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
+  将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。支持通过 `-P, --package` 指定包授权白名单，通过 `-A, --action` 指定动作授权白名单，两份白名单取并集授权，越权访问返回 403 `ACTION_FORBIDDEN`。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
   - 参数说明：
+    - `-P, --package <package-id>`：包授权白名单，授予所列整包当前与未来全部动作，可多次指定或使用逗号分隔。`-P '*'` 是显式全量访问标记（不支持其他通配模式），仍不自动开启管理端点。
+    - `-A, --action <action-ref>`：动作授权白名单，仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符，可多次指定或使用逗号分隔。只想暴露 pkg-a/read 时只写 `-A pkg-a/read`，不要再授权整包。未声明 `-P/-A` 时默认视图没有任何授权，服务无动作可用。
     - `--views-file <path>`：指定包含虚拟投影视图配置的外部 JSON 配置文件路径。支持在单个服务监听端口上划分出多个具备独立权限策略的虚拟视图，合并优先级高于 `actiondock.json` 中的 `server.views`。
   - 单端口多权限与虚拟投影视图：
-    - 声明方式：支持在 `actiondock.json` 的 `server.views` 声明多视图配置，或通过 `--views-file <path>` 传入外部配置文件。命令行指定的文件优先级高于清单配置。
-    - 权限完全隔离：在单个监听端口下划分出多个具备独立安全策略的虚拟端点视图，免去为不同权限角色启动多个服务的运维成本。各视图拥有独立的鉴权 Token、包白名单与动作白名单，越权调用拦截并返回 403。
-    - 管理端点门禁：通过 `enableManagement` 精细化控制配置与状态端点（`/api/v2/config` 与 `/api/v2/state`），默认关闭，仅对显式授权的视图开放。
-    - 专属协议端点：各视图提供独立的 MCP 端点 `/views/:viewName/mcp` 与 RESTful 端点 `/views/:viewName/api/v2/*`，根据白名单严格暴露纯净工具集，杜绝元数据泄露。
+    - 声明方式：支持在 `actiondock.json` 的 `server.views` 声明多视图配置，或通过 `--views-file <path>` 传入外部配置文件。命令行指定的文件优先级高于清单配置；同名视图按字段覆盖合并，显式提供的字段整项替换基础侧取值，仅覆盖 `token` 等其他字段时不会删除基础视图已有的授权字段，安全字段不会被静默丢弃。
+    - 权限完全隔离：在单个监听端口下划分出多个具备独立安全策略的虚拟端点视图，免去为不同权限角色启动多个服务的运维成本。各视图拥有独立的鉴权 Token 与授权策略，越权调用拦截并返回 403。
+    - 并集授权语义：每个视图以 `packageAllowlist` 与 `actionAllowlist` 声明授权范围，两份白名单取并集：
+      ```json
+      {
+        "views": {
+          "default": {
+            "packageAllowlist": [],
+            "actionAllowlist": [],
+            "enableMcp": false
+          },
+          "agent": {
+            "token": "agent-secret",
+            "packageAllowlist": ["github-tools"],
+            "actionAllowlist": ["ci-tools/trigger-build"]
+          }
+        }
+      }
+      ```
+      `packageAllowlist` 中的包获得整包能力授权，覆盖该包当前与未来新增的全部动作；新增包内动作时无需变更视图配置，评估暴露面时需将其视为该视图的永久授权面。`actionAllowlist` 仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符；只想授权某个包的单动作时只写 `actionAllowlist`，不再授权整包。两份白名单取并集：上例中 github-tools 整包可用（含未来新增动作），同时 ci-tools 仅 `trigger-build` 单动作可见可用。某一白名单省略或为空数组只表示不增加该项授权，不会取消另一白名单的有效授权；两份白名单均无授权时，包与动作清单为空，执行请求被拒绝。`packageAllowlist: ["*"]` 为显式全量访问标记（不支持其他通配模式），适用于全开放的管理视图，仍不自动开启 `enableManagement`。
+    - 视图独立性：命名视图不继承默认视图的白名单与 Token，命令行 `-P/-A` 不是所有视图的共同权限上限。通过 `/views/agent/...` 或对应 Token 请求该视图，授权声明不会改变执行宿主已装载能力的实际边界。默认视图没有任何授权时不暴露包与动作；管理员全授权视图显式使用 `["*"]`。声明命名视图不会关闭根路径，部署时应为默认视图显式声明 `packageAllowlist: []`、`actionAllowlist: []` 并关闭其 MCP，或为默认管理视图配置独立 Token 与授权。
+    - 调用边界：视图授权限制对外入口，不是 Action 代码沙箱。已授权 Action 内部的 `ctx.actions.invoke` 仍按 `uses` 与运行时依赖规则执行；授权前应评估其实现与依赖，不能将“客户端不能直接调用某动作”理解为“已授权动作内部不能调用它”。
+    - 历史清理边界：受限授权下，`runs/clear` 必须显式指定已获整包授权的包，或精确到已授权动作；无范围的清理、对单动作授权包的整包清理与全局 `runs/clean-expired` 均返回 403。`packageAllowlist: ["*"]` 保留全局清理能力。
+    - 最小发现投影：仅持有单动作授权的包（如上例 `ci-tools`）在信息与发现接口中仅返回最小身份元数据（`id`、`name`、`version`、`description` 与已授权动作列表），不暴露完整动作清单、规程、配置定义或目录路径；整包授权的包返回安全脱敏后的完整结构。动作清单以真实注册能力为准；缺少包内清单时补查目录，查询失败透明报错，不用授权声明伪造发现结果。单动作授权不推导整包能力：目标包的其余动作、规程与 `doctor` 诊断均拒绝，MCP 工具列表与资源提示同样不包含未授权内容。
+    - 管理端点门禁：通过 `enableManagement` 精细化控制配置与状态端点（`/api/v2/config` 与 `/api/v2/state`），默认关闭，仅对显式授权的视图开放。`packageAllowlist: ["*"]` 不自动开启管理能力；受限授权下 `package=global` 特殊值不能绕过包级授权。
+    - 专属协议端点：各视图提供独立的 MCP 端点 `/views/:viewName/mcp` 与 RESTful 端点 `/views/:viewName/api/v2/*`，根据授权策略严格暴露纯净工具集，杜绝元数据泄露。
 
 - 启动 Model Context Protocol 协议服务 (`ad mcp`)：
   ```bash
@@ -339,6 +363,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # HTTP 与 SSE 模式启动
   ad mcp serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>]
   ```
+  - 命令入口即授权边界：`ad mcp` 的选定运行环境由命令入口显式授权，无需另设一套普通用户模式。STDIO 与 HTTP 模式通过 `--package` 显式声明包授权白名单，`--all` 显式授权选定运行环境中的全部包；未指定 `--package` 时，命令入口也会显式授权本次选定环境。直接调用 MCP 库且未声明白名单时，工具清单为空。入口授权不改变执行宿主已装载能力的实际边界，也不是 Action 代码沙箱。
 
 - 管理远端执行环境配置 (`ad profile`)：
   ```bash

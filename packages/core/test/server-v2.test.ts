@@ -104,6 +104,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       token: AUTH_TOKEN,
       service,
       enableManagement: false,
+      packageAllowlist: ["*"],
     });
 
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;
@@ -363,6 +364,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         token: AUTH_TOKEN,
         service: mgmtService,
         enableManagement: true,
+        packageAllowlist: ["*"],
       });
 
       const url = `http://127.0.0.1:${mgmtServer.port}`;
@@ -727,8 +729,9 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     });
   });
 
-  describe("packageAllowlist: [] 空数组白名单放行契约验证", () => {
+  describe("packageAllowlist: [] 空数组白名单默认拒绝契约验证", () => {
     let emptyListServer: any;
+    let emptyService: any;
     let emptyListUrl: string;
 
     before(async () => {
@@ -793,7 +796,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
 
-      const emptyService = emptyHost;
+      emptyService = emptyHost;
 
       emptyListServer = await startActionDockServer({
         port: 0,
@@ -812,33 +815,33 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       }
     });
 
-    it("空数组白名单时不拦截任何包，所有包的 /packages、/info、/playbooks、Action 运行与全局 doctor 均可正常访问", async () => {
-      // 1. GET /packages 返回所有包
+    it("空数组白名单零授权：发现为空、执行拒绝、管理拒绝且不拦截为 403 型失败", async () => {
+      // 1. GET /packages 返回空集合而非全量
       const pkgsRes = await fetch(`${emptyListUrl}/api/v2/packages`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(pkgsRes.status, 200);
       const pkgsData = await pkgsRes.json();
-      assert.strictEqual(pkgsData.packages.length, 2);
+      assert.strictEqual(pkgsData.packages.length, 0);
 
-      // 2. GET /info 返回所有包
+      // 2. GET /info 返回空集合而非全量
       const infoRes = await fetch(`${emptyListUrl}/api/v2/info`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(infoRes.status, 200);
       const infoData = await infoRes.json();
-      assert.strictEqual(infoData.packages.length, 2);
+      assert.strictEqual(infoData.packages.length, 0);
 
-      // 3. GET /playbooks 正常返回规程
+      // 3. GET /playbooks 空授权返回空列表
       const pbsRes = await fetch(`${emptyListUrl}/api/v2/playbooks`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(pbsRes.status, 200);
       const pbsData = await pbsRes.json();
       assert.strictEqual(Array.isArray(pbsData), true);
-      assert.strictEqual(pbsData.some((p: any) => p.id.endsWith("calc-sop")), true);
+      assert.strictEqual(pbsData.length, 0);
 
-      // 4. Action 运行正常放行
+      // 4. Action 运行默认拒绝
       const runRes = await fetch(`${emptyListUrl}/api/v2/actions/pkg.math/calc/run`, {
         method: "POST",
         headers: {
@@ -847,18 +850,49 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         },
         body: JSON.stringify({ input: { x: 2, y: 3 } }),
       });
-      assert.strictEqual(runRes.status, 200);
+      assert.strictEqual(runRes.status, 403);
       const runData = await runRes.json();
-      assert.strictEqual(runData.ok, true);
-      assert.deepStrictEqual(runData.data, { result: 5 });
+      assert.strictEqual(runData.ok, false);
 
-      // 5. 全局 doctor 正常放行
+      // 5. 全局 doctor 在受限白名单下拒绝
       const docRes = await fetch(`${emptyListUrl}/api/v2/doctor`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      assert.strictEqual(docRes.status, 200);
+      assert.strictEqual(docRes.status, 403);
       const docData = await docRes.json();
-      assert.strictEqual(docData.ok, true);
+      assert.strictEqual(docData.ok, false);
+
+      // 6. 空数组仅作用于包维度，另一项动作白名单授权仍然生效
+      const actionsOnlyServer = await startActionDockServer({
+        port: 0,
+        hostname: "127.0.0.1",
+        token: AUTH_TOKEN,
+        service: emptyService,
+        packageAllowlist: [],
+        actionAllowlist: ["pkg.math/calc"],
+      });
+      try {
+        const actionsRes = await fetch(`${actionsOnlyServer.url}/api/v2/actions`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        assert.strictEqual(actionsRes.status, 200);
+        const actions: any[] = await actionsRes.json();
+        assert.deepStrictEqual(actions.map((a) => a.id), ["pkg.math/calc"]);
+
+        const runAllowedRes = await fetch(`${actionsOnlyServer.url}/api/v2/actions/pkg.math/calc/run`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${AUTH_TOKEN}`,
+          },
+          body: JSON.stringify({ input: { x: 2, y: 3 } }),
+        });
+        assert.strictEqual(runAllowedRes.status, 200);
+        const runAllowedData = await runAllowedRes.json();
+        assert.deepStrictEqual(runAllowedData.data, { result: 5 });
+      } finally {
+        await actionsOnlyServer.stop();
+      }
     });
   });
 
@@ -906,6 +940,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         service,
         enableManagement: false,
         exposeDebugInfo: false,
+        packageAllowlist: ["*"],
       });
       const noDebugUrl = `http://127.0.0.1:${noDebugServer.port}`;
 
@@ -950,6 +985,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         service,
         enableManagement: true,
         corsOrigins: ["http://localhost:3000", "https://app.actiondock.com"],
+        packageAllowlist: ["*"],
       });
       corsUrl = `http://127.0.0.1:${corsServer.port}`;
     });
@@ -1040,6 +1076,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         service: customService,
         token: "test-token",
+        packageAllowlist: ["*"],
       });
 
       try {
@@ -1080,6 +1117,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         hostname: "127.0.0.1",
         service: customService,
         token: "test-token",
+        packageAllowlist: ["*"],
       });
 
       try {
@@ -1110,6 +1148,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         hostname: "::1",
         token: "test-token",
         service,
+        packageAllowlist: ["*"],
       });
 
       try {
@@ -1174,6 +1213,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         hostname: "127.0.0.1",
         token: "test-token",
         service: abortService,
+        packageAllowlist: ["*"],
       });
 
       try {
@@ -1227,6 +1267,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         hostname: "127.0.0.1",
         service: mockService,
+        packageAllowlist: ["*"],
       });
 
       await server.stop();

@@ -163,7 +163,7 @@ describe("@actiondock/mcp Adapter", () => {
   setupTestProject(tmpDir);
 
   it("M01-M05: tools/list discovers all actions and maps schemas correctly", async () => {
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir, packageAllowlist: ["*"] });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -230,7 +230,7 @@ describe("@actiondock/mcp Adapter", () => {
   });
 
   it("M06, M09: tools/call executes through ActionRunner and writes run record", async () => {
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir, packageAllowlist: ["*"] });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -283,7 +283,7 @@ describe("@actiondock/mcp Adapter", () => {
   });
 
   it("M07: input validation fails gracefully in MCP tool call", async () => {
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir, packageAllowlist: ["*"] });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -330,7 +330,7 @@ describe("@actiondock/mcp Adapter", () => {
   });
 
   it("M10: action error maps to MCP isError=true", async () => {
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir, packageAllowlist: ["*"] });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -393,6 +393,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       projectRoot: tmpDir,
+      packageAllowlist: ["*"],
       actions: new Map([["task.test-cancel", testCancelAction]]),
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -456,6 +457,7 @@ describe("@actiondock/mcp Adapter", () => {
       host: "127.0.0.1",
       port: 0,
       token: "mcp-secret-123",
+      packageAllowlist: ["*"],
       projectRoot: tmpDir,
     });
 
@@ -513,6 +515,7 @@ describe("@actiondock/mcp Adapter", () => {
       host: "127.0.0.1",
       port: 0,
       token: "mcp-secret-123",
+      packageAllowlist: ["*"],
       maxBodyBytes: 1024,
       projectRoot: tmpDir,
     });
@@ -690,6 +693,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       projectRoots: [pkg1Dir, pkg2Dir],
+      packageAllowlist: ["*"],
     });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -758,6 +762,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       all: true,
+      packageAllowlist: ["*"],
       customHome,
     });
 
@@ -878,6 +883,7 @@ describe("@actiondock/mcp Adapter", () => {
     // Internal storage created by server should be closed cleanly
     const internalServer = await createActionDockMcpServer({
       projectRoot: tmpDir,
+      packageAllowlist: ["*"],
     });
     await (internalServer.close());
   });
@@ -932,6 +938,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       projectRoots: [pkg1Dir, pkg2Dir],
+      packageAllowlist: ["*"],
     });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -984,6 +991,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       actions: new Map([["strict-action", strictAction]]),
+      packageAllowlist: ["*"],
       storage: {
         getRun: () => undefined,
         listRuns: () => [],
@@ -1044,6 +1052,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       service: dummyService,
+      packageAllowlist: ["*"],
       // 独立持有实例：close 级联释放 service
       cascadeServiceClose: true,
     });
@@ -1063,6 +1072,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const httpServer = await startMcpHttpServer({
       service: dummyService,
+      packageAllowlist: ["*"],
       port: 0,
       host: "127.0.0.1",
     });
@@ -1079,6 +1089,7 @@ describe("@actiondock/mcp Adapter", () => {
 
       const server = await createActionDockMcpServer({
         packageId: "test.mcp-pkg",
+        packageAllowlist: ["*"],
         customHome: fakeHome,
         // 测试独立持有实例：close 必须级联释放 service 及其 SQLite 句柄，否则 Windows 下临时目录无法删除
         cascadeServiceClose: true,
@@ -1104,6 +1115,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const httpServer = await startMcpHttpServer({
       service: dummyService,
+      packageAllowlist: ["*"],
       port: 0,
       host: "127.0.0.1",
     });
@@ -1128,7 +1140,7 @@ describe("@actiondock/mcp Adapter", () => {
       "# Step 1\nRun test."
     );
 
-    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir, packageAllowlist: ["*"] });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -1196,6 +1208,7 @@ describe("@actiondock/mcp Adapter", () => {
       actions: {
         "proc.echo": procAction,
       },
+      packageAllowlist: ["*"],
     });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

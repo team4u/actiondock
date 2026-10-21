@@ -80,10 +80,11 @@ async function createHttpFixture(t: TestContext, token: string | undefined = "ro
     port: 0,
     token,
     enableMcp: false,
+    packageAllowlist: ["*"],
     views: {
-      reader: { token: "reader-token" },
-      worker: { token: "worker-token" },
-      public: {},
+      reader: { token: "reader-token", packageAllowlist: ["*"] },
+      worker: { token: "worker-token", packageAllowlist: ["*"] },
+      public: { packageAllowlist: ["*"] },
     },
   });
   t.after(() => server.stop());
@@ -413,10 +414,11 @@ describe("MCP run origin", () => {
     const { host } = await createFixture(t);
     const server = await startActionDockServer({
       service: host, host: "127.0.0.1", port: 0, token: "root-token",
-      views: { reader: { token: "reader-token" }, worker: { token: "worker-token" } },
+      packageAllowlist: ["*"],
+      views: { reader: { token: "reader-token", packageAllowlist: ["*"] }, worker: { token: "worker-token", packageAllowlist: ["*"] } },
       mcpHandlerFactory: (policy) => {
         const origin = createServerRunOrigin(policy, "mcp");
-        const handler = createMcpHandler(() => createActionDockMcpServer({ service: host, origin }));
+        const handler = createMcpHandler(() => createActionDockMcpServer({ service: host, origin, packageAllowlist: ["*"] }));
         return (request) => handler.fetch(request);
       },
     });
@@ -438,7 +440,7 @@ describe("MCP run origin", () => {
 
   it("does not add a service origin to an unbound MCP adapter", async (t) => {
     const { host } = await createFixture(t);
-    const handler = createMcpHandler(() => createActionDockMcpServer({ service: host }));
+    const handler = createMcpHandler(() => createActionDockMcpServer({ service: host, packageAllowlist: ["*"] }));
     const request = new Request("http://localhost/mcp", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },

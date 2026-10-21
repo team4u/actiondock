@@ -52,7 +52,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](references/cli.md) |
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
 | **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use`、`ad profile update` | 管理远端 Runner 服务的连接凭证、内网证书忽略与当前切换目标 | [cli.md](references/cli.md) |
-| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离与 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
+| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离、`packageAllowlist` 与 `actionAllowlist` 并集授权及 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
 | **本地注册与开发挂载** | `ad link [path]`、`ad unlink [id|path]` | 将本地源码目录登记至本机注册表；不注册远端 Profile，也不代替工程正式依赖 | [cli.md](references/cli.md) |
 | **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 
@@ -123,6 +123,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 动态配置可使用 `MYSQL_*` 这类单星号模板；具体键优先于模板，模板不允许 `required`、`default` 或 `env`。对象中的密码可通过受限 `schema` 的字段级 `secret: true` 隐藏，详见 [developer.md](references/developer.md)。
 - 配置管理只提供安全视图，Action 的 `ctx.config.get` 仍返回完整原值；不要将原值写入日志、状态或返回结果。脱敏输出不能直接回写，否则掩码会被当成普通字符串保存。配置视图的 `source` 与核心 `ConfigSource` 契约一致，仅取 `override`、`package`、`global`、`env`、`default` 或 `null`，未命中为 `null` 而非 `default`；`ad config schema` 中模板项与缺失项 `source` 同样为 `null`，语义由 `status` 表达。
 - 回退旧版本前，必须给已存动态配置补上具体键的顶层 `secret: true` 声明，避免旧版本不认识模板而显示原文。远端查询要求服务端提供 `configViewVersion: 1` 完整视图，旧服务端响应被直接拒绝（`PROTOCOL_UNSUPPORTED`）；服务端回退至不支持该协议的版本后，新客户端配置查询将被拒绝，必须保留协议能力或配套调整客户端版本，远端契约与全局配置规则见 [cli.md](references/cli.md)。
+- 远端服务授权边界：`ad serve` 的包与动作授权统一由 `packageAllowlist` 与 `actionAllowlist` 两份白名单的并集决定。`packageAllowlist` 授予整包能力，覆盖该包当前与未来新增的全部动作；`actionAllowlist` 仅接受 `packageId/actionId` 全限定精确引用，拒绝短名与通配符；某一白名单省略或为空数组只表示不增加该项授权，两份白名单均无授权时不暴露包与动作，执行请求被拒绝。`packageAllowlist: ["*"]` 是唯一的显式全量访问标记（不支持其他通配模式），且不自动开启 `enableManagement`。CLI 的 `-P/-A` 参数与视图配置遵循同一并集语义，`ad serve -P '*'` 即显式全开放。例如在 `server.views.agent` 中设置 `"packageAllowlist": ["pkg-a"]`、`"actionAllowlist": ["pkg-b/read"]`，表示 pkg-a 整包可用（含未来新增动作）且 pkg-b 仅 `read` 单动作可见可用；只想开放 pkg-a/read 时只写 `actionAllowlist: ["pkg-a/read"]`，不再授权整包。默认视图未授予权限时不暴露包与动作，部署时可用 `packageAllowlist: []` 与 `actionAllowlist: []` 显式声明并关闭其 MCP；命名视图独立配置，不继承默认视图的 Token 与白名单。受限授权不能发起无范围或越权的历史清理，也不能通过 `package=global` 绕过包级授权。安全边界详见 [cli.md](references/cli.md)。
 
 ## 参考文档按需调阅索引
 

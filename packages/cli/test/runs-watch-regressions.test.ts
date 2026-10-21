@@ -70,6 +70,7 @@ describe("CLI runs watch - 四大核心回归用例", () => {
       port: 0,
       host: "127.0.0.1",
       token: SECRET_TOKEN,
+      packageAllowlist: ["*"],
       projectRoot: tempRemoteDir,
     });
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;

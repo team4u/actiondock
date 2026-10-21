@@ -437,6 +437,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         token: AUTH_TOKEN,
         service,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });

@@ -163,6 +163,7 @@ describe("MCP adapter tool description anchoring", () => {
     });
 
     const server = await createActionDockMcpServer({
+      packageAllowlist: ["*"],
       actions: new Map([
         ["echo.a", echoA],
         ["echo.b", echoB],
@@ -212,6 +213,7 @@ describe("MCP adapter tool description anchoring", () => {
     });
 
     const server = await createActionDockMcpServer({
+      packageAllowlist: ["*"],
       actions: new Map([["cancel.probe", echo]]),
     });
 

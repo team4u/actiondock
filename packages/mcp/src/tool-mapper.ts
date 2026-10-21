@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { MCP_TOOL_NAME_COLLISION } from "@actiondock/core";
 import { parseActionRef } from "@actiondock/core/graph";
-import { isActionAllowed } from "@actiondock/core/server";
+import { isActionAllowedByPolicy, type EffectiveServerPolicy } from "@actiondock/core/server";
 
 /**
  * 构造携带结构化错误码的工具名冲突异常。
@@ -40,12 +40,20 @@ export interface MappedAction<T> {
 
 /**
  * 映射与过滤工具，处理冲突检测、去重、白名单过滤及 SHA-256 截断散列逻辑。
+ * 过滤统一委托 core 策略函数做并集判定（整包 ∪ 全限定单动作），适配层不复制授权逻辑；
+ * 未传 policy 时从两份 allowlist 构造同一 policy（空授权仍为空，不回退全访问）。
  */
 export function mapAndFilterActions<T extends { id: string; packageId?: string; description?: string }>(
   rawActions: T[],
   allowedPackageIds?: string[],
-  actionAllowlist?: string[]
+  actionAllowlist?: string[],
+  policy?: EffectiveServerPolicy
 ): MappedAction<T>[] {
+  // 策略单点归一：调用方未传 policy 时按同两份 allowlist 构造，保证与 adapter 主链路同一并集语义
+  const effectivePolicy = policy || {
+    packageAllowlist: allowedPackageIds,
+    actionAllowlist,
+  };
   // 引用解析单点归一：每项仅解析一次，后续各轮（白名单过滤、去重、频次统计、
   // 工具命名）复用同一结果，避免同一列表对 splitActionRef 的三轮重复调用；
   // 显式 packageId 与解析所得 packageId 分别留存，各轮按既有优先级消费
@@ -67,22 +75,12 @@ export function mapAndFilterActions<T extends { id: string; packageId?: string; 
     }
   }
 
-  if (allowedPackageIds && allowedPackageIds.length > 0) {
-    // 白名单轮：显式 packageId 优先，缺失时回退解析所得
-    rawActions = rawActions.filter((act) => {
-      const ref = parsedRefs.get(act)!;
-      const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
-      return pkgId ? allowedPackageIds.includes(pkgId) : false;
-    });
-  }
-
-  if (actionAllowlist && actionAllowlist.length > 0) {
-    rawActions = rawActions.filter((act) => {
-      const ref = parsedRefs.get(act)!;
-      const pkgId = ref.explicitPkgId || ref.parsedPkgId || undefined;
-      return isActionAllowed({ packageId: pkgId, actionId: ref.baseId }, actionAllowlist);
-    });
-  }
+  // 授权过滤单轮：仅用 core 策略函数并集判定，不先按包选择截断单动作授权目标
+  rawActions = rawActions.filter((act) => {
+    const ref = parsedRefs.get(act)!;
+    const pkgId = ref.explicitPkgId || ref.parsedPkgId || undefined;
+    return isActionAllowedByPolicy({ packageId: pkgId, actionId: ref.baseId }, effectivePolicy);
+  });
 
   const seenActionKeys = new Map<string, T>();
   for (const act of rawActions) {

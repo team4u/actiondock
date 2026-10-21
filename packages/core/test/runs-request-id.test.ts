@@ -237,6 +237,7 @@ describe("requestId 幂等键反查运行记录", () => {
         token: AUTH_TOKEN,
         service: host,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });
@@ -438,6 +439,7 @@ describe("requestId 幂等键反查运行记录", () => {
         token: PAGING_AUTH_TOKEN,
         service: pagingHost,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
       pagingServerUrl = `http://127.0.0.1:${pagingServerInstance.port}`;
     });

@@ -22,16 +22,16 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
     it("正确归一化默认视图与对象字典形式的自定义视图", () => {
       const { defaultView, views } = normalizeServerViews({
         token: "global-token",
-        packageAllowlist: ["pkg.a"],
+        packageAllowlist: ["*"],
         enableManagement: false,
         views: {
           admin: {
             token: "admin-token",
+            packageAllowlist: ["*"],
             enableManagement: true,
           },
           readonly: {
             token: "ro-token",
-            packageAllowlist: ["pkg.b"],
             actionAllowlist: ["pkg.b/read"],
           },
         },
@@ -39,7 +39,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
 
       assert.strictEqual(defaultView.name, "default");
       assert.strictEqual(defaultView.policy.token, "global-token");
-      assert.deepStrictEqual(defaultView.policy.packageAllowlist, ["pkg.a"]);
+      assert.deepStrictEqual(defaultView.policy.packageAllowlist, ["*"]);
       assert.strictEqual(defaultView.policy.enableManagement, false);
 
       assert.strictEqual(views.size, 3);
@@ -53,7 +53,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
 
       const roView = views.get("readonly")!;
       assert.strictEqual(roView.policy.token, "ro-token");
-      assert.deepStrictEqual(roView.policy.packageAllowlist, ["pkg.b"]);
+      assert.deepStrictEqual(roView.policy.packageAllowlist, undefined);
       assert.deepStrictEqual(roView.policy.actionAllowlist, ["pkg.b/read"]);
     });
 
@@ -69,7 +69,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
           {
             name: "worker",
             token: "worker-token",
-            actionAllowlist: ["run-job"],
+            actionAllowlist: ["pkg.worker/run-job"],
           },
         ],
       });
@@ -78,7 +78,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       assert.deepStrictEqual(defaultView.policy.packageAllowlist, ["pkg.common"]);
 
       assert.strictEqual(views.get("worker")?.policy.token, "worker-token");
-      assert.deepStrictEqual(views.get("worker")?.policy.actionAllowlist, ["run-job"]);
+      assert.deepStrictEqual(views.get("worker")?.policy.actionAllowlist, ["pkg.worker/run-job"]);
     });
 
     it("通过 matchViewByToken 安全匹配视图并防范未命中", () => {
@@ -102,40 +102,41 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
       assert.strictEqual(emptyToken, undefined);
     });
 
-    it("isActionAllowedByPolicy 与 filterActionsByPolicy 判定逻辑正确", () => {
+    it("isActionAllowedByPolicy 与 filterActionsByPolicy 按并集判定", () => {
       const policy = {
         viewName: "test",
         packageAllowlist: ["pkg.math"],
-        actionAllowlist: ["pkg.math/calc", "ping"],
+        actionAllowlist: ["pkg.math/calc", "pkg.other/ping"],
       };
 
-      // 允许列表中的全限定动作
+      // 允许列表中的全限定动作（整包与单动作并集）
       assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "calc" }, policy), true);
       assert.strictEqual(isActionAllowedByPolicy("pkg.math/calc", policy), true);
 
-      // 短名 ping，但所属包在 packageAllowlist 中
+      // 整包授权覆盖 pkg.math 全部动作，即使不在动作列表中
       assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "ping" }, policy), true);
 
-      // 所属包不在 packageAllowlist 中
-      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.other", actionId: "calc" }, policy), false);
+      // 单动作授权命中其他包的精确引用
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.other", actionId: "ping" }, policy), true);
 
-      // 包允许但动作不在 actionAllowlist 中
-      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.math", actionId: "unknown" }, policy), false);
+      // 未授权包的未列动作拒绝
+      assert.strictEqual(isActionAllowedByPolicy({ packageId: "pkg.other", actionId: "calc" }, policy), false);
 
       // 过滤动作列表
       const allActions = [
         { id: "pkg.math/calc", packageId: "pkg.math", actionId: "calc" },
         { id: "pkg.math/advanced", packageId: "pkg.math", actionId: "advanced" },
         { id: "pkg.other/ping", packageId: "pkg.other", actionId: "ping" },
+        { id: "pkg.third/ping", packageId: "pkg.third", actionId: "ping" },
       ];
       const filtered = filterActionsByPolicy(allActions, policy);
-      assert.strictEqual(filtered.length, 1);
-      assert.strictEqual(filtered[0].id, "pkg.math/calc");
+      assert.deepStrictEqual(filtered.map((a) => a.id), ["pkg.math/calc", "pkg.math/advanced", "pkg.other/ping"]);
     });
 
     it("isPackageAllowedByPolicy 与 isManagementAllowedByPolicy 判定正确", () => {
       const policyA = { packageAllowlist: ["pkg.a"], enableManagement: true };
-      const policyB = { enableManagement: false };
+      // 无白名单时默认拒绝，需显式 * 才全量授权
+      const policyB = { packageAllowlist: ["*"], enableManagement: false };
 
       assert.strictEqual(isPackageAllowedByPolicy("pkg.a", policyA), true);
       assert.strictEqual(isPackageAllowedByPolicy("pkg.b", policyA), false);
@@ -212,6 +213,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         service,
         token: "master-token",
         enableManagement: false,
+        packageAllowlist: ["*"],
         mcpHandler: (req, view) => {
           recordedMcpCalls.push({
             path: new URL(req.url).pathname,
@@ -225,11 +227,12 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         views: {
           admin: {
             token: "admin-token",
+            packageAllowlist: ["*"],
             enableManagement: true,
           },
           "math-only": {
             token: "math-token",
-            packageAllowlist: ["pkg.math"],
+            // 只授予 pkg.math/calc 精确动作，不授整包能力
             actionAllowlist: ["pkg.math/calc"],
             enableManagement: false,
           },
@@ -530,6 +533,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         host: "127.0.0.1",
         service,
         token: "global-master-token",
+        packageAllowlist: ["*"],
         mcpHandlerFactory: (policy) => {
           const handler = createMcpHandler(
             () => {
@@ -545,11 +549,12 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         views: {
           admin: {
             token: "admin-token",
+            packageAllowlist: ["*"],
             enableManagement: true,
           },
           restricted: {
             token: "restricted-token",
-            packageAllowlist: ["pkg.math"],
+            // 只授予 pkg.math/calc 精确动作，不授整包能力
             actionAllowlist: ["pkg.math/calc"],
             enableManagement: false,
           },
@@ -770,6 +775,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         host: "127.0.0.1",
         service,
         token: "master-token",
+        packageAllowlist: ["*"],
         views: {
           "特殊 视图": {
             token: "special-token",

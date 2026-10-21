@@ -1,9 +1,10 @@
 import { DOCTOR_ERROR, PACKAGE_NOT_ALLOWED } from "../../errors";
 import { runDoctorChecks } from "../../doctor/doctor";
-import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, isFullAccessGranted, jsonResponse, type RouteContext } from "./common";
 
 /**
  * 处理环境与依赖诊断接口（GET /api/v2/doctor 与 /doctor）。
+ * 只有整包授权开放该包诊断，全局诊断必须显式授予全部包。
  */
 export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | null> {
   const { req, url, pathname, corsHeaders, projectRoot, customHome, service, options, activePolicy: policy } = ctx;
@@ -15,7 +16,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
 
   try {
     const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-    if (policy.packageAllowlist && policy.packageAllowlist.length > 0) {
+    if (!isFullAccessGranted(policy)) {
       if (!targetPkg) {
         return jsonResponse(
           {
@@ -45,7 +46,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
       cwd: packageRoot || projectRoot || process.cwd(),
       packageIdOrPath: packageRoot || targetPkg,
       customHome,
-      packageAllowlist: policy.packageAllowlist,
+      packageAllowlist: isFullAccessGranted(policy) ? undefined : policy.packageAllowlist,
     });
     return jsonResponse({ ok: true, report }, 200, corsHeaders);
   } catch (err: any) {

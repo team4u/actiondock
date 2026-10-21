@@ -80,6 +80,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "secret-office-token",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -193,6 +194,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-cloud",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -297,6 +299,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-identify",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -481,6 +484,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-uses",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -609,6 +613,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-shared",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -728,6 +733,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-file-test",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -847,6 +853,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-immut",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -938,6 +945,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-flaky",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -1060,6 +1068,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-quota",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -1179,6 +1188,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-recursive",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -1275,6 +1285,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-profile-test",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(
@@ -1358,6 +1369,7 @@ describe("Host 端到端 Action 绑定与远端调用测试 (host-action-binding
         token: "token-audit",
         service: remoteService,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
 
       addProfile(

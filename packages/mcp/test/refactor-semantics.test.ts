@@ -45,6 +45,7 @@ describe("MCP adapter pure contract semantics", () => {
 
     const server = await createActionDockMcpServer({
       actions: new Map([["biz-action", action]]),
+      packageAllowlist: ["*"],
       storage: {
         getRun: () => undefined,
         listRuns: () => [],
@@ -188,6 +189,7 @@ describe("MCP adapter execution timeout passing", () => {
 
     const server = await createActionDockMcpServer({
       actions: new Map([["timeout-probe", action]]),
+      packageAllowlist: ["*"],
       storage: buildMockStorage(),
       timeoutMs: 5000,
     });

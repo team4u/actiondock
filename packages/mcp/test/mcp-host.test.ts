@@ -86,8 +86,8 @@ describe("@actiondock/mcp Host Integration", () => {
       inMemory: true,
     });
 
-    // 3. 传入 service 创建 MCP 服务端
-    const server = await createActionDockMcpServer({ service, cascadeServiceClose: true });
+    // 3. 传入 service 创建 MCP 服务端（命令入口显式全量授权，工具清单以授权为准）
+    const server = await createActionDockMcpServer({ service, packageAllowlist: ["*"], cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -281,7 +281,7 @@ describe("@actiondock/mcp Host Integration", () => {
       inMemory: true,
     });
 
-    const server = await createActionDockMcpServer({ service, cascadeServiceClose: true });
+    const server = await createActionDockMcpServer({ service, packageAllowlist: ["*"], cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 

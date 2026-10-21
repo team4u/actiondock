@@ -80,6 +80,7 @@ describe("安全的远端嵌套调用适配器 (RemoteInvocationExecutor)", () =
       token: AUTH_TOKEN,
       service,
       enableManagement: false,
+      packageAllowlist: ["*"],
     });
 
     target = Object.freeze({

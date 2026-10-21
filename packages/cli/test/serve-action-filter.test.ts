@@ -309,7 +309,7 @@ export default defineAction({
     );
     assert.strictEqual(showForbiddenOtherPkgRes.status, 403);
     const showForbiddenOtherPkgData = await showForbiddenOtherPkgRes.json();
-    assert.strictEqual(showForbiddenOtherPkgData.error.code, "ACTION_FORBIDDEN");
+    assert.strictEqual(showForbiddenOtherPkgData.error.code, "PACKAGE_FORBIDDEN");
 
     // 4. 验证 POST run 路由阻断与放行
     const runAllowedRes = await fetch(
@@ -489,7 +489,7 @@ export default defineAction({
     );
     assert.strictEqual(runCRes.status, 403);
     const runCData = await runCRes.json();
-    assert.strictEqual(runCData.error.code, "ACTION_FORBIDDEN");
+    assert.strictEqual(runCData.error.code, "PACKAGE_FORBIDDEN");
   });
 
   it("当 -A 参数指定不存在的包时输出告警信息至 stderr", async () => {

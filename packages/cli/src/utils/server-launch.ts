@@ -183,8 +183,53 @@ export function loadViewsFromFile(
 }
 
 /**
+ * 同名视图按字段覆盖合并。
+ * 覆盖侧（外部文件/命令行）显式提供的字段整项替换基础侧同名字段；
+ * 未提供的字段保留基础侧取值。白名单数组若在覆盖侧显式提供则整项替换
+ * （不做数组拼接或深度合并）；覆盖侧仅覆盖 Token 等字段时
+ * 不得静默删除基础侧既有安全字段（packageAllowlist/actionAllowlist/enableManagement 等同理保留）。
+ */
+function mergeViewOptions(
+  base: ServerViewOptions | undefined,
+  override: ServerViewOptions | undefined
+): ServerViewOptions | undefined {
+  if (!base) return override ? { ...override } : undefined;
+  if (!override) return { ...base };
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    if (value !== undefined) {
+      merged[key] = value;
+    }
+  }
+  return merged as ServerViewOptions;
+}
+
+/**
+ * 解析视图的规范化实际名称。
+ * 与 core normalizeServerViews 的命名规则单一事实源保持一致：
+ * 显式 name（trim 后）优先，其次对象字典键（trim 后），最后回退键名原样。
+ * 合并必须按规范化后的实际名称进行，否则 alias 键名声明 name 的视图
+ * 会被字典键重复登记，normalize 后同名覆盖导致白名单等安全字段丢失。
+ */
+function resolveCanonicalViewName(
+  item: ServerViewOptions | undefined,
+  fallbackKey: string
+): string {
+  const trimmedName = item?.name?.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+  return fallbackKey.trim() || fallbackKey;
+}
+
+/**
  * 合并项目配置与独立配置文件中的虚拟视图定义。
  * 命令行 --views-file 优先级高于项目配置文件 actiondock.json 中的 server.views。
+ * 所有形态（对象/对象、对象/数组、数组/对象、数组/数组）统一按规范化后的
+ * 实际 View 名合并（显式 name trim 优先，其次字典键 trim），而非原字典键：
+ * 键名与 name 不一致的 alias 视图与同实际名的视图合并为同一项，
+ * 不产生重复登记，避免 normalize 后同名覆盖丢失白名单等安全字段。
+ * 同名视图按字段覆盖（白名单数组显式提供时整项替换），不丢失基础侧安全字段。
  *
  * @param configViews 项目配置中的 views
  * @param fileViews 独立配置文件中的 views
@@ -203,24 +248,25 @@ export function mergeServerViews(
     return configViews;
   }
 
-  if (!Array.isArray(configViews) && !Array.isArray(fileViews)) {
-    return { ...configViews, ...fileViews };
-  }
-
   const merged: Record<string, ServerViewOptions> = {};
-  const addEntry = (item: ServerViewOptions, fallbackKey: string) => {
-    const key = item.name?.trim() || fallbackKey;
-    merged[key] = { ...item, name: key };
+  const addEntry = (item: ServerViewOptions | undefined, fallbackKey: string): void => {
+    if (!item || typeof item !== "object") return;
+    const canonicalName = resolveCanonicalViewName(item, fallbackKey);
+    const incoming: ServerViewOptions =
+      item.name === canonicalName ? item : { ...item, name: canonicalName };
+    merged[canonicalName] = merged[canonicalName]
+      ? (mergeViewOptions(merged[canonicalName], incoming) as ServerViewOptions)
+      : incoming;
   };
 
   if (Array.isArray(configViews)) {
-    configViews.forEach((item, index) => addEntry(item, item.name || `view_${index}`));
+    configViews.forEach((item, index) => addEntry(item, item?.name || `view_${index}`));
   } else {
     Object.entries(configViews).forEach(([k, v]) => addEntry(v, k));
   }
 
   if (Array.isArray(fileViews)) {
-    fileViews.forEach((item, index) => addEntry(item, item.name || `view_${index}`));
+    fileViews.forEach((item, index) => addEntry(item, item?.name || `view_${index}`));
   } else {
     Object.entries(fileViews).forEach(([k, v]) => addEntry(v, k));
   }

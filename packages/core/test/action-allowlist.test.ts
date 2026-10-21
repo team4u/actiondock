@@ -167,7 +167,7 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       const allowedData = await allowedRes.json();
       assert.strictEqual(allowedData.id, "calc");
 
-      // 同包非白名单动作阻断
+      // 同包非白名单动作阻断：pkg.math 未整包授权，long-task 不在动作清单，返回 ACTION_FORBIDDEN
       const forbiddenSamePkgRes = await fetch(`${serverUrl}/api/v2/packages/pkg.math/actions/long-task`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
@@ -176,14 +176,14 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(forbiddenSamePkgData.ok, false);
       assert.strictEqual(forbiddenSamePkgData.error.code, ACTION_FORBIDDEN);
 
-      // 其他包同名动作阻断
-      const forbiddenOtherPkgRes = await fetch(`${serverUrl}/api/v2/packages/pkg.extra/actions/calc`, {
+      // pkg.extra 没有包或动作授权，因此整个包不可见。
+      const forbiddenOtherPkgRes = await fetch(`${serverUrl}/api/v2/packages/pkg.extra/actions/greet`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(forbiddenOtherPkgRes.status, 403);
       const forbiddenOtherPkgData = await forbiddenOtherPkgRes.json();
       assert.strictEqual(forbiddenOtherPkgData.ok, false);
-      assert.strictEqual(forbiddenOtherPkgData.error.code, ACTION_FORBIDDEN);
+      assert.strictEqual(forbiddenOtherPkgData.error.code, "PACKAGE_FORBIDDEN");
     });
 
     it("GET /api/v2/actions/:actionId 短路由与全限定路由拦截未授权动作", async () => {
@@ -193,15 +193,15 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       });
       assert.strictEqual(allowedFullRes.status, 200);
 
-      // 全限定未允许路径
-      const forbiddenFullRes = await fetch(`${serverUrl}/api/v2/actions/pkg.extra/calc`, {
+      // 未获任何授权的 pkg.extra 不能通过全限定动作路由访问。
+      const forbiddenFullRes = await fetch(`${serverUrl}/api/v2/actions/pkg.extra/greet`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(forbiddenFullRes.status, 403);
       const forbiddenFullData = await forbiddenFullRes.json();
-      assert.strictEqual(forbiddenFullData.error.code, ACTION_FORBIDDEN);
+      assert.strictEqual(forbiddenFullData.error.code, "PACKAGE_FORBIDDEN");
 
-      // 短名路径未在白名单中的动作
+      // 短名路径未在白名单中的动作：long-task 属于 pkg.math（整包未授权、动作未列）
       const forbiddenShortRes = await fetch(`${serverUrl}/api/v2/actions/long-task`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
@@ -225,19 +225,19 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(allowedRunData.ok, true);
       assert.strictEqual(allowedRunData.data.result, 30);
 
-      // 未授权动作同步执行被拦截（403）
-      const forbiddenRunRes = await fetch(`${serverUrl}/api/v2/packages/pkg.extra/actions/calc/run`, {
+      // 未授权包 pkg.extra 的同步执行被包可见性门禁拒绝。
+      const forbiddenRunRes = await fetch(`${serverUrl}/api/v2/packages/pkg.extra/actions/greet/run`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${AUTH_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ input: { x: 10, y: 20 } }),
+        body: JSON.stringify({ input: { name: "test" } }),
       });
       assert.strictEqual(forbiddenRunRes.status, 403);
       const forbiddenRunData = await forbiddenRunRes.json();
       assert.strictEqual(forbiddenRunData.ok, false);
-      assert.strictEqual(forbiddenRunData.error.code, ACTION_FORBIDDEN);
+      assert.strictEqual(forbiddenRunData.error.code, "PACKAGE_FORBIDDEN");
 
       // 短路由执行未授权动作被拦截
       const forbiddenShortRunRes = await fetch(`${serverUrl}/api/v2/actions/greet/run`, {
@@ -251,7 +251,7 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(forbiddenShortRunRes.status, 403);
       const forbiddenShortRunData = await forbiddenShortRunRes.json();
       assert.strictEqual(forbiddenShortRunData.ok, false);
-      assert.strictEqual(forbiddenShortRunData.error.code, ACTION_FORBIDDEN);
+      assert.strictEqual(forbiddenShortRunData.error.code, "PACKAGE_FORBIDDEN");
     });
 
     it("POST /api/v2/packages/:packageId/actions/:actionId/start 异步启动阻断与放行", async () => {
@@ -296,14 +296,12 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(runs.some((r: any) => r.id === allowedRunId), true);
       assert.strictEqual(runs.some((r: any) => r.id === forbiddenRunId), false);
 
-      // GET /runs?actionId=long-task 显式查询未授权动作返回 403
+      // 短名检索条件不增加授权，逐条过滤后不能出现 long-task 记录。
       const queryForbiddenActionRes = await fetch(`${serverUrl}/api/v2/runs?actionId=long-task`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
-      assert.strictEqual(queryForbiddenActionRes.status, 403);
-      const queryForbiddenActionData = await queryForbiddenActionRes.json();
-      assert.strictEqual(queryForbiddenActionData.ok, false);
-      assert.strictEqual(queryForbiddenActionData.error.code, ACTION_FORBIDDEN);
+      assert.strictEqual(queryForbiddenActionRes.status, 200);
+      assert.deepStrictEqual((await queryForbiddenActionRes.json()).items, []);
 
       // GET /runs/:runId 单次查询未授权动作记录返回 403
       const showForbiddenRunRes = await fetch(`${serverUrl}/api/v2/runs/${forbiddenRunId}`, {
@@ -340,14 +338,14 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(cancelForbiddenData.error.code, ACTION_FORBIDDEN);
     });
 
-    it("规程 Playbook 列表不被隐藏，调用时执行拦截", async () => {
-      // 规程列表保留
+    it("规程 Playbook 列表仅整包授权可见，单动作授权不开放", async () => {
+      // 仅动作白名单下无整包授权，规程列表收敛为空
       const pbListRes = await fetch(`${serverUrl}/api/v2/playbooks`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       assert.strictEqual(pbListRes.status, 200);
       const pbList = await pbListRes.json();
-      assert.strictEqual(pbList.some((p: any) => p.id.includes("task-sop")), true);
+      assert.deepStrictEqual(pbList, []);
 
       // 调用未授权动作时被阻断
       const runBlockedRes = await fetch(`${serverUrl}/api/v2/packages/pkg.math/actions/long-task/run`, {
@@ -360,7 +358,7 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
     });
   });
 
-  describe("短名动作白名单测试", () => {
+  describe("仅动作白名单契约验证", () => {
     let service: any;
     let server: any;
     let serverUrl: string;
@@ -372,8 +370,8 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
         hostname: "127.0.0.1",
         token: AUTH_TOKEN,
         service,
-        // 短名放行所有包下的 calc
-        actionAllowlist: ["calc"],
+        // 仅授予两个包的 calc 精确动作，不授予任何整包能力
+        actionAllowlist: ["pkg.math/calc", "pkg.extra/calc"],
       });
       serverUrl = `http://127.0.0.1:${server.port}`;
     });
@@ -384,7 +382,7 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       }
     });
 
-    it("短名白名单放行所有包中的同名动作", async () => {
+    it("精确动作白名单只放行清单内全限定动作", async () => {
       // pkg.math/calc 允许
       const resA = await fetch(`${serverUrl}/api/v2/packages/pkg.math/actions/calc`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
@@ -404,6 +402,24 @@ describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", (
       assert.strictEqual(resC.status, 403);
       const dataC = await resC.json();
       assert.strictEqual(dataC.error.code, ACTION_FORBIDDEN);
+    });
+
+    it("短名动作白名单配置在启动时即拒绝", async () => {
+      const shortNameService = await createTestService();
+      try {
+        await assert.rejects(
+          startActionDockServer({
+            port: 0,
+            hostname: "127.0.0.1",
+            token: AUTH_TOKEN,
+            service: shortNameService,
+            actionAllowlist: ["calc"],
+          }),
+          (err: any) => err instanceof Error && err.message.includes("actionAllowlist")
+        );
+      } finally {
+        await shortNameService.close();
+      }
     });
   });
 });

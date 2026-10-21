@@ -90,6 +90,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           packageIds,
           all,
           timeoutMs,
+          // 命令入口显式授权选定包；未指定包时开放该次选定运行环境的全部能力。
+          packageAllowlist: packageIds?.length ? packageIds : ["*"],
           customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
@@ -191,6 +193,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           packageIds,
           all,
           timeoutMs,
+          // 显式包选择仍限定授权，不因附带装载依赖而开放其他包。
+          packageAllowlist: packageIds?.length ? packageIds : ["*"],
           customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
           platform,

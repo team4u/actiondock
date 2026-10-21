@@ -212,7 +212,7 @@ describe("配置来源契约统一（ConfigSource）", () => {
       }],
     });
     const server = await startActionDockServer({
-      service: host, port: 0, hostname: "127.0.0.1", token: "src-test", enableManagement: true,
+      service: host, port: 0, hostname: "127.0.0.1", token: "src-test", enableManagement: true, packageAllowlist: ["*"],
     });
     const remote = new RemoteActionDockService({ serverUrl: `http://127.0.0.1:${server.port}`, token: "src-test" });
     t.after(async () => {

@@ -73,6 +73,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         token: AUTH_TOKEN,
         service: host,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });
@@ -336,7 +337,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
 
     before(async () => {
       storage = new SqliteRuntimeStorage({
-        packageId: "pkg.policy_test",
+        packageId: "pkg.policy-test",
         dbPath: ":memory:",
       });
 
@@ -346,7 +347,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         storage.createRun({
           id: `run-forbidden-${String(i).padStart(4, "0")}`,
           rootRunId: `run-forbidden-${String(i).padStart(4, "0")}`,
-          packageId: "pkg.policy_test",
+          packageId: "pkg.policy-test",
           actionId: "forbidden_action",
           status: "success",
           startedAt: new Date(baseTime + i * 1000).toISOString(),
@@ -356,7 +357,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         storage.createRun({
           id: `run-allowed-${String(i).padStart(4, "0")}`,
           rootRunId: `run-allowed-${String(i).padStart(4, "0")}`,
-          packageId: "pkg.policy_test",
+          packageId: "pkg.policy-test",
           actionId: "allowed_action",
           status: "success",
           startedAt: new Date(baseTime + i * 1000).toISOString(),
@@ -372,7 +373,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
 
       const app = await createPackageRuntime({
         projectConfig: {
-          id: "pkg.policy_test",
+          id: "pkg.policy-test",
           name: "Policy Test Package",
           version: "1.0.0",
           actions: {
@@ -398,7 +399,8 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         hostname: "127.0.0.1",
         token: AUTH_TOKEN,
         service: host,
-        actionAllowlist: ["allowed_action"],
+        // 仅允许 pkg.policy-test/allowed_action 精确动作（无整包授权）
+        actionAllowlist: ["pkg.policy-test/allowed_action"],
       });
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });
@@ -441,11 +443,11 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
 
     it("包白名单配置下 602 条记录中仅 100 条属于允许包，返回 total 严格为 100 且分页正确返回允许记录", async () => {
       const allowedStorage = new SqliteRuntimeStorage({
-        packageId: "pkg.allowed_pkg",
+        packageId: "pkg.allowed-pkg",
         dbPath: ":memory:",
       });
       const forbiddenStorage = new SqliteRuntimeStorage({
-        packageId: "pkg.forbidden_pkg",
+        packageId: "pkg.forbidden-pkg",
         dbPath: ":memory:",
       });
 
@@ -455,7 +457,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         allowedStorage.createRun({
           id: `run-allow-${String(i).padStart(4, "0")}`,
           rootRunId: `run-allow-${String(i).padStart(4, "0")}`,
-          packageId: "pkg.allowed_pkg",
+          packageId: "pkg.allowed-pkg",
           actionId: "noop",
           status: "success",
           startedAt: new Date(baseTime + i * 1000).toISOString(),
@@ -466,7 +468,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         forbiddenStorage.createRun({
           id: `run-forbid-${String(i).padStart(4, "0")}`,
           rootRunId: `run-forbid-${String(i).padStart(4, "0")}`,
-          packageId: "pkg.forbidden_pkg",
+          packageId: "pkg.forbidden-pkg",
           actionId: "noop",
           status: "success",
           startedAt: new Date(baseTime + 200_000 + i * 1000).toISOString(),
@@ -476,7 +478,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
       const noop = defineAction({ run: async () => ({ ok: true }) });
       const allowedApp = await createPackageRuntime({
         projectConfig: {
-          id: "pkg.allowed_pkg",
+          id: "pkg.allowed-pkg",
           name: "Allowed Package",
           version: "1.0.0",
           actions: { noop: { entry: "", description: "允许动作" } },
@@ -487,7 +489,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
 
       const forbiddenApp = await createPackageRuntime({
         projectConfig: {
-          id: "pkg.forbidden_pkg",
+          id: "pkg.forbidden-pkg",
           name: "Forbidden Package",
           version: "1.0.0",
           actions: { noop: { entry: "", description: "禁止动作" } },
@@ -507,7 +509,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         hostname: "127.0.0.1",
         token: "pkg-allow-token",
         service: multiHost,
-        packageAllowlist: ["pkg.allowed_pkg"],
+        packageAllowlist: ["pkg.allowed-pkg"],
       });
       const serverBase = `http://127.0.0.1:${server.port}`;
       const headers = { Authorization: "Bearer pkg-allow-token" };
@@ -520,7 +522,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         assert.strictEqual(data1.ok, true);
         assert.strictEqual(data1.total, 100);
         assert.strictEqual(data1.items.length, 50);
-        assert.ok(data1.items.every((item: any) => item.packageId === "pkg.allowed_pkg"));
+        assert.ok(data1.items.every((item: any) => item.packageId === "pkg.allowed-pkg"));
 
         // 第二页（offset: 50, limit: 50）：返回剩余 50 条允许记录
         const res2 = await fetch(`${serverBase}/api/v2/runs?limit=50&offset=50`, { headers });
@@ -529,7 +531,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         assert.strictEqual(data2.ok, true);
         assert.strictEqual(data2.total, 100);
         assert.strictEqual(data2.items.length, 50);
-        assert.ok(data2.items.every((item: any) => item.packageId === "pkg.allowed_pkg"));
+        assert.ok(data2.items.every((item: any) => item.packageId === "pkg.allowed-pkg"));
 
         // 第三页（offset: 100, limit: 50）：无更多允许记录，返回空集合
         const res3 = await fetch(`${serverBase}/api/v2/runs?limit=50&offset=100`, { headers });
@@ -540,7 +542,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         assert.strictEqual(data3.items.length, 0);
 
         // 显式查询被禁止的包返回 403
-        const resForbidden = await fetch(`${serverBase}/api/v2/runs?packageId=pkg.forbidden_pkg`, { headers });
+        const resForbidden = await fetch(`${serverBase}/api/v2/runs?packageId=pkg.forbidden-pkg`, { headers });
         assert.strictEqual(resForbidden.status, 403);
       } finally {
         await server.stop();
@@ -570,7 +572,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         corsHeaders: {},
         options: {},
         service: mockService,
-        activePolicy: {},
+        activePolicy: { packageAllowlist: ["*"] },
       };
 
       const res = await handleRunsRoutes(ctx);
@@ -600,7 +602,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         corsHeaders: {},
         options: {},
         service: mockService,
-        activePolicy: {},
+        activePolicy: { packageAllowlist: ["*"] },
       };
 
       const res = await handleRunsRoutes(ctx);
@@ -627,7 +629,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         corsHeaders: {},
         options: {},
         service: mockService,
-        activePolicy: {},
+        activePolicy: { packageAllowlist: ["*"] },
       };
 
       const res = await handleRunsRoutes(ctx);
@@ -653,7 +655,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         corsHeaders: {},
         options: {},
         service: mockService,
-        activePolicy: {},
+        activePolicy: { packageAllowlist: ["*"] },
       };
 
       const res = await handleRunsRoutes(ctx);
@@ -719,6 +721,7 @@ describe("运行记录查询分页与意图过滤增强验证", () => {
         token: serverToken,
         service: serviceWithoutCount,
         enableManagement: false,
+        packageAllowlist: ["*"],
       });
       const serverUrl = `http://127.0.0.1:${serverInstance.port}`;
 

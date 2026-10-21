@@ -22,7 +22,7 @@ import {
   filterActionsByPolicy,
   getSubPath,
   isActionAllowedByPolicy,
-  isPackageAllowedByPolicy,
+  isPackageVisibleByPolicy,
   jsonResponse,
   type RouteContext,
 } from "./common";
@@ -84,7 +84,9 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
   if (pkgActionShowMatch && req.method === "GET") {
     const packageId = decodeURIComponent(pkgActionShowMatch[1]);
     const actionId = decodeURIComponent(pkgActionShowMatch[2]);
-    if (!isPackageAllowedByPolicy(packageId, policy)) {
+    // 先按包可见性拦截完全无关包，再按实际完整引用判定动作授权，
+    // 保证仅持有单动作授权（如 B/read）时 B/read 可见可用
+    if (!isPackageVisibleByPolicy(packageId, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -136,7 +138,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     try {
       const parsed = parseActionRef(actionId);
       if (parsed.packageId) {
-        if (!isPackageAllowedByPolicy(parsed.packageId, policy)) {
+        if (!isPackageVisibleByPolicy(parsed.packageId, policy)) {
           return jsonResponse(
             {
               ok: false,
@@ -167,7 +169,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     try {
       const spec = await service.discovery.describeAction(actionId);
-      if (!isPackageAllowedByPolicy(spec.packageId, policy)) {
+      if (!isPackageVisibleByPolicy(spec.packageId, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -239,8 +241,8 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       } catch {}
     }
 
-    // 解析并补全包与动作标识（仅在必要时单次查询 spec）
-    if ((!pkgId || !actId) && (policy.packageAllowlist?.length || policy.actionAllowlist?.length)) {
+    // 查询实际包与动作身份，短名请求不能绕过全限定授权判断。
+    if (!pkgId || !actId) {
       try {
         const spec = await service.discovery.describeAction(actionRef);
         pkgId = pkgId || spec?.packageId;
@@ -258,8 +260,8 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       }
     }
 
-    // 校验 Package 允许白名单
-    if (!isPackageAllowedByPolicy(pkgId, policy)) {
+    // 单动作授权只要求其所属包可见，不能用整包能力门禁将其拦截。
+    if (!isPackageVisibleByPolicy(pkgId, policy)) {
       return jsonResponse(
         {
           ok: false,

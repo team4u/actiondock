@@ -187,6 +187,13 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
 
       if (rawPackages.length > 0) {
         for (const pkgId of rawPackages) {
+          // * 是全授权标记而非真实包：不解析路径、不进 registry，直接透传至 packageAllowlist
+          if (pkgId === "*") {
+            if (!packageAllowlist!.includes("*")) {
+              packageAllowlist!.push("*");
+            }
+            continue;
+          }
           const root = resolvePackageRoot(pkgId, projectRoot || undefined, context?.customHome);
           if (!root) {
             throw packageNotFoundError(pkgId);
@@ -248,7 +255,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           if (!item || typeof item !== "object") continue;
           if (Array.isArray(item.packageAllowlist)) {
             for (const pkgId of item.packageAllowlist) {
-              if (typeof pkgId === "string") {
+              if (typeof pkgId === "string" && pkgId !== "*") {
                 const root = resolvePackageRoot(pkgId, projectRoot || undefined, context?.customHome);
                 if (root && (!projectRoot || root !== projectRoot)) {
                   if (!explicitPackages.some((p) => p.packageRoot === root)) {
@@ -314,10 +321,11 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           mcpHandlerFactory = (view: EffectiveServerPolicy) => {
             const handler = createMcpHandler(
               () => {
+                // MCP 适配器必须复用实际视图的两份白名单，不默认授全量：
+                // packageAllowlist 同时作为装载选择与整包授权，动作授权仅按全限定并集收敛
                 return createActionDockMcpServer({
                   service,
                   packageAllowlist: view.packageAllowlist,
-                  packageIds: view.packageAllowlist,
                   actionAllowlist: view.actionAllowlist,
                   origin: createServerRunOrigin(view, "mcp"),
                 });

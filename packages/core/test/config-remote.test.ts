@@ -58,7 +58,7 @@ describe("远端配置接口与客户端安全归一化", () => {
           },
         },
       },
-      activePolicy: { enableManagement: true },
+      activePolicy: { enableManagement: true, packageAllowlist: ["*"] },
     };
 
     const res = await handleConfigRoutes(mockCtx);
@@ -110,7 +110,7 @@ describe("远端配置接口与客户端安全归一化", () => {
           },
         },
       },
-      activePolicy: { enableManagement: true },
+      activePolicy: { enableManagement: true, packageAllowlist: ["*"] },
     };
 
     const res = await handleConfigRoutes(mockCtx);
@@ -145,7 +145,7 @@ describe("远端配置接口与客户端安全归一化", () => {
           },
         },
       },
-      activePolicy: { enableManagement: true },
+      activePolicy: { enableManagement: true, packageAllowlist: ["*"] },
     };
 
     const res = await handleConfigRoutes(mockCtx);

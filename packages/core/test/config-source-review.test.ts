@@ -82,7 +82,7 @@ describe("配置来源独立验收", () => {
     });
     await host.setConfig("source.review.http", "SOURCE_REVIEW_HTTP_PACKAGE", "package-value");
     await host.setConfig("global", "SOURCE_REVIEW_HTTP_GLOBAL", "global-value");
-    const server = await startActionDockServer({ service: host, hostname: "127.0.0.1", port: 0, enableManagement: true });
+    const server = await startActionDockServer({ service: host, hostname: "127.0.0.1", port: 0, enableManagement: true, packageAllowlist: ["*"] });
     const remote = new RemoteActionDockService({ serverUrl: `http://127.0.0.1:${server.port}` });
     t.after(async () => { await remote.close(); await server.stop(); await host.close(); });
     for (const source of sources) {

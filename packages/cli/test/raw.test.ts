@@ -596,6 +596,7 @@ export default defineAction(async () => {
       port: 0,
       host: "127.0.0.1",
       token: REMOTE_SECRET,
+      packageAllowlist: ["*"],
       projectRoot: tempRemoteDir,
     });
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;

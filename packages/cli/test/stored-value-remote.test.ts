@@ -25,7 +25,7 @@ describe("配置和状态输入的真实远端写入", () => {
       } } }],
     });
     const token = "stored-value-test-token";
-    const server = await startActionDockServer({ service: host, hostname: "127.0.0.1", port: 0, token, enableManagement: true });
+    const server = await startActionDockServer({ service: host, hostname: "127.0.0.1", port: 0, token, packageAllowlist: ["*"], enableManagement: true });
     t.after(async () => { await server.stop(); await host.close(); rmSync(root, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true }); });
     const target = ["--server", `http://127.0.0.1:${server.port}`, "--token", token, "-P", "remote.value-input"];
     const run = (args: string[], input?: string | NodeJS.ReadableStream) => runCliAsync(args, root, { ACTIONDOCK_HOME: home, ACTIONDOCK_PROFILE: undefined }, input);

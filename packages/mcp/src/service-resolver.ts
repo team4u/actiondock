@@ -6,11 +6,13 @@ import {
   createActionDock,
   createNodePlatform,
   findProjectRoot,
+  loadProjectConfig,
   PACKAGE_NOT_FOUND,
   PROJECT_ROOT_NOT_FOUND,
   type ActionDockService,
 } from "@actiondock/core";
-import { createActionDockHost } from "@actiondock/core/server";
+import { assertServerPolicyValid, createActionDockHost } from "@actiondock/core/server";
+import { parseActionRef } from "@actiondock/core/graph";
 import { resolvePackageRoot } from "@actiondock/core/registry";
 import { createNonClosingStorageView } from "@actiondock/core/package";
 import type { PackageRuntimeOptions } from "@actiondock/core/package";
@@ -22,6 +24,11 @@ import type { ActionDockMcpOptions } from "./types";
 export async function resolveService(
   options: ActionDockMcpOptions
 ): Promise<{ service: ActionDockService; ownsService: boolean }> {
+  // 授权声明前置校验（单一事实源：core assertServerPolicyValid）：
+  // 在任何资源创建、包装载或注入实例复用之前执行，
+  // 覆盖 service/host/runtime 直接调用 resolveService 的入口
+  assertServerPolicyValid(options, "mcp options");
+
   if (options.service) {
     return { service: options.service, ownsService: false };
   }
@@ -88,9 +95,68 @@ export async function resolveService(
     }
   }
 
-  const targetPackageIds = options.packageIds || options.packageAllowlist;
-  if (targetPackageIds && targetPackageIds.length > 0) {
-    for (const pkgId of targetPackageIds) {
+  // 单一 projectRoot 分支提前解析并统一登记已声明包身份，
+  // 与 projectRoots/内存 actions 包共同构成“无需额外 registry 解析”的身份集合
+  let projectRoot = options.projectRoot;
+  if (projectRoot) {
+    const abs = resolve(projectRoot);
+    const detected = findProjectRoot(abs);
+    if (!detected) {
+      throw new ActionDockError(
+        PROJECT_ROOT_NOT_FOUND,
+        `Project root '${options.projectRoot}' is not a valid ActionDock package (actiondock.json not found)`
+      );
+    }
+    projectRoot = detected;
+    packages.push({
+      ...basePkgOpts,
+      packageRoot: detected,
+    } as PackageRuntimeOptions);
+  }
+
+  // 统一收集全部已声明来源的包身份（projectRoot、projectRoots、内存 actions 包）。
+  // 已声明来源（projectRoot、projectRoots、内存 actions 包）身份优先登记，
+  // 额外授权目标在查 registry 前先比对身份集合：
+  // 已声明身份无需重复装载，避免本地项目未 link 时误走 registry 抛 PACKAGE_NOT_FOUND
+  const declaredIds = new Set<string>();
+  const collectDeclaredId = (packageRoot: string | undefined): void => {
+    if (!packageRoot) return;
+    const id = loadProjectConfig(packageRoot).id;
+    if (id) declaredIds.add(id);
+  };
+  if (projectRoot) {
+    collectDeclaredId(projectRoot);
+  }
+  for (const pkg of packages) {
+    if (typeof pkg === "object" && pkg !== null && "packageRoot" in pkg) {
+      collectDeclaredId((pkg as { packageRoot?: string }).packageRoot);
+    }
+  }
+  if (options.actions) {
+    declaredIds.add(options.packageId || "default");
+  }
+
+  // 附加装载目标为两份白名单的并集：整包授权包与单动作授权引用的所属包均需装载，
+  // 仅装载整包授权包会导致单动作授权目标缺失而不可用。
+  // * 是全授权标记而非真实包，必须跳过；动作引用用 core parseActionRef 单一事实源解析。
+  // packageId/packageIds 是装载选择，不与授权目标混同：显式授权 B/read 必须装载 B。
+  const allowedPackageIds = [
+    ...(options.packageId ? [options.packageId] : []),
+    ...(options.packageIds || []),
+    ...(options.packageAllowlist || []).filter((id) => id !== "*"),
+    ...(options.actionAllowlist || []).map((ref) => parseActionRef(ref).packageId!),
+  ];
+  const dedupedTargetPackageIds: string[] = [];
+  for (const pkgId of allowedPackageIds) {
+    if (declaredIds.has(pkgId)) {
+      continue;
+    }
+    if (!dedupedTargetPackageIds.includes(pkgId)) {
+      dedupedTargetPackageIds.push(pkgId);
+    }
+  }
+  if (dedupedTargetPackageIds.length > 0) {
+    for (const pkgId of dedupedTargetPackageIds) {
       const root = resolvePackageRoot(pkgId, undefined, options.customHome);
       if (!root || !existsSync(root)) {
         throw new ActionDockError(
@@ -103,19 +169,6 @@ export async function resolveService(
         packageRoot: root,
       } as PackageRuntimeOptions);
     }
-  }
-
-  let projectRoot = options.projectRoot;
-  if (options.projectRoot) {
-    const abs = resolve(options.projectRoot);
-    const detected = findProjectRoot(abs);
-    if (!detected) {
-      throw new ActionDockError(
-        PROJECT_ROOT_NOT_FOUND,
-        `Project root '${options.projectRoot}' is not a valid ActionDock package (actiondock.json not found)`
-      );
-    }
-    projectRoot = detected;
   }
 
   if (
@@ -132,21 +185,6 @@ export async function resolveService(
       );
     }
     projectRoot = currentRoot;
-  }
-
-  if (options.packageId && !options.actions && packages.length === 0) {
-    const root = resolvePackageRoot(options.packageId, undefined, options.customHome);
-    if (!root || !existsSync(root)) {
-      throw new ActionDockError(
-        PACKAGE_NOT_FOUND,
-        `Package '${options.packageId}' not found in registry`
-      );
-    }
-    packages.push({
-      ...basePkgOpts,
-      packageRoot: root,
-      dataDir: options.dataDir,
-    } as PackageRuntimeOptions);
   }
 
   let platform = options.platform;

@@ -192,7 +192,7 @@ describe("配置安全边界回归", () => {
       autoLoadCurrentProject: false,
       packages: [{ projectConfig: { id: "config.remote", config: { "MYSQL_*": connection, env: { default: "reserved-key" } } } }],
     });
-    const server = await startActionDockServer({ service: host, port: 0, hostname: "127.0.0.1", token: "config-test", enableManagement: true });
+    const server = await startActionDockServer({ service: host, port: 0, hostname: "127.0.0.1", token: "config-test", enableManagement: true, packageAllowlist: ["*"] });
     const remote = new RemoteActionDockService({ serverUrl: `http://127.0.0.1:${server.port}`, token: "config-test" });
     t.after(async () => { await remote.close(); await server.stop(); await host.close(); if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
     const reserved = await remote.management!.config.get("config.remote", "env");

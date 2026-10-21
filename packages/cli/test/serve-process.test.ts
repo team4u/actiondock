@@ -143,6 +143,8 @@ export default defineAction({
         "127.0.0.1",
         "--token",
         SECRET,
+        "-P",
+        "*",
         "--dir",
         tempDir,
         "--data-dir",

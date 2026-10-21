@@ -50,6 +50,8 @@ export async function startMcpStdio(
           packageId: options.packageId,
           packageIds: options.packageIds,
           all: options.all,
+          packageAllowlist: options.packageAllowlist,
+          actionAllowlist: options.actionAllowlist,
           customHome: options.customHome,
           dataDir: options.dataDir,
           configOverrides: options.configOverrides,
