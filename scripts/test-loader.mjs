@@ -62,10 +62,15 @@ export async function load(url, context, nextLoad) {
   }
 
   const result = await nextLoad(url, context);
-  if (url.startsWith("file:") && (url.endsWith(".ts") || url.endsWith(".js"))) {
+  const rootDirHref = pathToFileURL(rootDir).href;
+  if (
+    url.startsWith(rootDirHref) &&
+    !url.includes("/node_modules/") &&
+    (url.endsWith(".ts") || url.endsWith(".js"))
+  ) {
     let source = typeof result.source === "string" ? result.source : result.source?.toString("utf8");
     if (source && source.includes("__dirname")) {
-      source = source.replace(/\b__dirname\b/g, "import.meta.dirname");
+      source = source.replace(/(?<!\b(?:const|let|var)\s+)\b__dirname\b/g, "import.meta.dirname");
       return {
         ...result,
         source,

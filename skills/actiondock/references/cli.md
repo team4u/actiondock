@@ -272,7 +272,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   # 读取配置安全视图
   ad config get <key> [-g, --global] [-P, --package <id>]
   # 写入配置键值（全量替换，写前校验）
-  ad config set <key> [value] [-g, --global] [-P, --package <id>] [--stdin | --stdin-field <field>] [-- <assignments...>]
+  ad config set <key> [value] [-g, --global] [-P, --package <id>] [--stdin | --stdin-field <field>] [--browser] [-- <assignments...>]
+  # 浏览器交互式录入敏感配置
+  ad config set <key> [-g, --global] [-P, --package <id>] --browser
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>]
   # 查看包配置模式（通配模板单列 TEMPLATE 并统计 matchCount）
@@ -286,6 +288,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
     ad config set MYSQL_191 --stdin < connection.json
     ```
+  - 浏览器敏感配置录入：`ad config set <key> [-g, --global] [-P, --package <id>] --browser` 通过本地临时页面录入凭据，不经命令参数或模型对话传递；输入渠道与保存作用域正交，保存后退出，不自动执行 Action。
+    - 适用范围与目标：支持本地包级目标与全局配置（`-g/--global`），拒绝显式远端参数（`--server` 与 `--profile`）以及默认激活 Profile 决议出的隐式远端目标；包级寻址失败时明确报错，绝不退回全局作用域。包级需匹配目标包声明，全局需匹配当前宿主所有已加载包声明，要求至少有一项顶层 `secret: true` 且所有显式类型均为 `string`。全局配置在多个包同名声明时共享写入，同名包级配置优先生效。
+    - 参数互斥约束：`--browser` 与位置参数值、`--stdin`、`--stdin-field` 以及 `--` 分隔符后的结构化赋值严格互斥（包含显式空分隔符 `--`），冲突时在读取流、启动服务与写库前以退出码 2 退出。
+    - 声明模式校验：仅支持已声明且顶层为 `secret: true` 的字符串配置；拒绝未声明项、仅嵌套属性敏感项及非字符串声明；无显式类型的顶层敏感配置可按字符串输入。输入不裁剪空白，不将 `123`、`false` 或 JSON 外观文本自动解码。
+    - 交互与安全边界：仅监听 `127.0.0.1` 随机端口，严格校验精确 Host、Origin（POST 缺失 Origin 直接拒绝）与一次性凭据，请求体最大 64KiB；页面无第三方资源、不回显旧值，使用内容安全策略并禁止缓存。输入等待自创建起最多 5 分钟，校验失败不重置期限；等待时可页面取消或终端中断，一旦进入保存阶段则等待实际写入结果，不再取消或超时打断。
+    - 存储与降级说明：SQLite 仍明文存储，不构成对已授权 Action 或本机程序的秘密隔离。URL 片段携带临时提交权限，请勿分享链接；无法确认自动打开浏览器成功时，标准错误流提示手动打开链接并继续等待。
   - 写入原子性与写前校验：先组装完整值，再按模式校验并整键替换；缺少密码等必填字段时也报 `CONFIG_VALUE_INVALID`（错误明细严禁携带实际输入值），原值保持不变。扁平赋值不是局部更新，不支持掩码回写、部分更新与对象合并。
   - 拒绝通配符实键：`get`、`set` 与 `delete` 严格拒绝包含 `*` 的实键操作。
   - 模板诊断支持：通配模板键（如 `MYSQL_*`）单列在模式视图中并不判缺失，环境变量满足度体检自动跳过模板。列表不枚举仅在环境变量中存在的模板实例，但可按具体键执行 `get`。
