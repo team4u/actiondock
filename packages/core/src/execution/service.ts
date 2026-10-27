@@ -459,7 +459,22 @@ export class DefaultExecutionService implements ExecutionService {
       }
 
       if (typeof context.timeoutMs === "number" && context.timeoutMs > 0) {
-        finalizer.startTimeout(controller, context.timeoutMs);
+        if (context.deadline !== undefined) {
+          const remainingMs = Math.max(0, context.deadline - Date.now());
+          if (remainingMs <= 0) {
+            controller.abort(
+              new ActionDockError(
+                ACTION_TIMEOUT,
+                `Action exceeded timeout of ${context.initialTimeoutMs ?? context.timeoutMs}ms`,
+                { timeoutMs: context.initialTimeoutMs ?? context.timeoutMs }
+              )
+            );
+          } else {
+            finalizer.startTimeout(controller, remainingMs, context.initialTimeoutMs ?? context.timeoutMs);
+          }
+        } else {
+          finalizer.startTimeout(controller, context.timeoutMs, context.initialTimeoutMs);
+        }
       }
 
       const effectiveOwner: ProcessOwner =
@@ -614,6 +629,8 @@ export class DefaultExecutionService implements ExecutionService {
       package: opts.package || this.identity,
       signal: opts.signal,
       timeoutMs: opts.timeoutMs,
+      initialTimeoutMs: opts.initialTimeoutMs,
+      deadline: opts.deadline,
       maxCallDepth: opts.maxCallDepth,
       config: opts.config || opts.configOverrides,
       tenantId: opts.tenantId || opts.owner?.tenantId,
@@ -685,21 +702,22 @@ export class DefaultExecutionService implements ExecutionService {
         data: rawOutput as JsonValue,
       };
     } catch (err: any) {
-      return this.classifyExecutionError(err, runId, context.timeoutMs, controller, finalizer);
+      return this.classifyExecutionError(err, runId, context, controller, finalizer);
     }
   }
 
   private classifyExecutionError(
     err: any,
     runId: string,
-    timeoutMs: number | undefined,
+    context: InvocationContext,
     controller: AbortController,
     finalizer: RunFinalizer
   ): ExecutionResult {
+    const timeoutBudget = context.initialTimeoutMs ?? context.timeoutMs;
     if (finalizer.isTimeout) {
       const error: RuntimeError = {
         code: ACTION_TIMEOUT,
-        message: `Action exceeded timeout of ${timeoutMs}ms`,
+        message: `Action exceeded timeout of ${timeoutBudget}ms`,
       };
       finalizer.finalize("timed_out", undefined, error);
       return { ok: false, runId, error: finalizer.persistError || error };
@@ -707,6 +725,25 @@ export class DefaultExecutionService implements ExecutionService {
 
     if (controller.signal.aborted) {
       const reason = controller.signal.reason;
+      const reasonCode = (reason as any)?.code;
+      const isTimeoutReason =
+        reasonCode === ACTION_TIMEOUT ||
+        (reason?.details && (reason.details as any).code === ACTION_TIMEOUT) ||
+        (reason instanceof Error && reason.message?.includes("exceeded timeout")) ||
+        (typeof reason === "string" && reason.includes("exceeded timeout"));
+
+      if (isTimeoutReason) {
+        const error: RuntimeError = {
+          code: ACTION_TIMEOUT,
+          message:
+            (reason instanceof Error && reason.message?.includes("exceeded timeout"))
+              ? reason.message
+              : `Action exceeded timeout of ${timeoutBudget}ms`,
+        };
+        finalizer.finalize("timed_out", undefined, error);
+        return { ok: false, runId, error: finalizer.persistError || error };
+      }
+
       const reasonMsg =
         reason instanceof Error
           ? reason.message
@@ -791,6 +828,8 @@ export class DefaultExecutionService implements ExecutionService {
       package: this.identity,
       signal: controller.signal,
       timeoutMs: context.timeoutMs,
+      initialTimeoutMs: context.initialTimeoutMs,
+      deadline: context.deadline,
       maxCallDepth: context.maxCallDepth,
       config: context.config,
       tenantId: effectiveOwner.tenantId,

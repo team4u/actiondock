@@ -135,7 +135,13 @@ export function acquireProjectLock(
 /**
  * 依据恢复后的锁文件异步执行禁用安装脚本的冻结安装，使 node_modules 与声明重新一致。
  */
-export async function runFrozenInstall(projectRoot: string): Promise<void> {
+export async function runFrozenInstall(
+  projectRoot: string,
+  options?: { signal?: AbortSignal } | AbortSignal
+): Promise<void> {
+  const signal = options instanceof AbortSignal ? options : options?.signal;
+  signal?.throwIfAborted();
+
   if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
     return;
   }
@@ -172,8 +178,12 @@ export async function runFrozenInstall(projectRoot: string): Promise<void> {
     proc = await runPackageManager(pm, args, {
       cwd: projectRoot,
       env,
+      signal,
     });
   } catch (err: any) {
+    if (signal?.aborted || err?.name === "AbortError") {
+      throw err;
+    }
     const errorMsg = err?.message || "Unknown error";
     throw new ActionDockError(
       PROJECT_RECOVERY_REQUIRED,
@@ -328,8 +338,10 @@ export async function beginTransaction(
  */
 export async function recoverPendingTransactions(
   projectRoot: string,
-  options?: { frozenInstall?: boolean; allowInstall?: boolean }
+  options?: { frozenInstall?: boolean; allowInstall?: boolean; signal?: AbortSignal }
 ): Promise<string[]> {
+  options?.signal?.throwIfAborted();
+
   const txBaseDir = join(projectRoot, ".actiondock", "transactions");
   if (!existsSync(txBaseDir)) {
     return [];
@@ -346,6 +358,7 @@ export async function recoverPendingTransactions(
   }
 
   try {
+    options?.signal?.throwIfAborted();
     const recoveredIds: string[] = [];
     const entries = readdirSync(txBaseDir);
 
@@ -362,6 +375,8 @@ export async function recoverPendingTransactions(
       }
 
       if (meta.status === "pending") {
+        options?.signal?.throwIfAborted();
+
         if (
           options?.frozenInstall !== false &&
           (options?.allowInstall === false || process.env.ACTIONDOCK_AUTO_INSTALL === "false")
@@ -388,7 +403,7 @@ export async function recoverPendingTransactions(
         }
 
         if (options?.frozenInstall !== false) {
-          await runFrozenInstall(projectRoot);
+          await runFrozenInstall(projectRoot, { signal: options?.signal });
         }
 
         meta.status = "rolled_back";
@@ -404,6 +419,6 @@ export async function recoverPendingTransactions(
 
     return recoveredIds;
   } finally {
-    releaseLock();
+    releaseLock?.();
   }
 }

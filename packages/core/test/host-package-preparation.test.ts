@@ -12,6 +12,7 @@ import {
   ActionDockError,
   ACTION_CALL_CYCLE,
   ACTION_CANCELLED,
+  ACTION_TIMEOUT,
   DEPENDENCY_INSTALL_FAILED,
   EXECUTION_FAILED,
   PACKAGE_NOT_FOUND,
@@ -706,5 +707,159 @@ describe("Host 本地包运行前准备生命周期测试 (host-package-preparat
     } finally {
       await service.close();
     }
+  });
+
+  it("根调用注入 prepareLocalPackage 且设置 timeoutMs 时，准备超时未执行 handler 且清理完成", async () => {
+    const dirTimeout = createDummyPackageDir("pkg-timeout-prep");
+    let handlerExecuted = false;
+    let cleanupCompleted = false;
+
+    let finishCleanup!: () => void;
+    const cleanupWait = new Promise<void>((r) => {
+      finishCleanup = r;
+    });
+
+    const slowHook = async (
+      _target: LocalPackagePreparationTarget,
+      context: LocalPackagePreparationContext
+    ) => {
+      await new Promise<void>((resolve, reject) => {
+        context.signal.addEventListener("abort", async () => {
+          await cleanupWait;
+          cleanupCompleted = true;
+          reject(context.signal.reason);
+        });
+      });
+    };
+
+    activeHost = await createActionDockHost({
+      prepareLocalPackage: slowHook,
+      packages: [
+        {
+          packageRoot: dirTimeout,
+          projectConfig: { id: "pkg.timeout", name: "Timeout Test", version: "1.0.0" },
+          actions: [
+            {
+              id: "act",
+              action: defineAction({
+                run: async () => {
+                  handlerExecuted = true;
+                  return { ok: true };
+                },
+              }),
+            },
+          ],
+        },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+
+    const runPromise = activeHost.runAction("pkg.timeout/act", {}, { timeoutMs: 30 });
+
+    setTimeout(() => {
+      finishCleanup();
+    }, 60);
+
+    const result = await runPromise;
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.error.code, ACTION_TIMEOUT);
+      assert.match(result.error.message, /30ms/);
+    }
+    assert.strictEqual(handlerExecuted, false, "准备超时后 handler 绝对不得执行");
+    assert.strictEqual(cleanupCompleted, true, "必须已等待底层清理完成");
+  });
+
+  it("准备耗时大于总预算时，直接返回 ACTION_TIMEOUT 且 handler 绝不执行", async () => {
+    const dirBudgetExhausted = createDummyPackageDir("pkg-budget-exhausted");
+    let handlerExecuted = false;
+
+    const delayHook = async () => {
+      // 耗时 60ms 超过总预算 30ms
+      await new Promise<void>((resolve) => setTimeout(resolve, 60));
+    };
+
+    activeHost = await createActionDockHost({
+      prepareLocalPackage: delayHook,
+      packages: [
+        {
+          packageRoot: dirBudgetExhausted,
+          projectConfig: { id: "pkg.budget", name: "Budget Exhausted", version: "1.0.0" },
+          actions: [
+            {
+              id: "act",
+              action: defineAction({
+                run: async () => {
+                  handlerExecuted = true;
+                  return { ok: true };
+                },
+              }),
+            },
+          ],
+        },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+
+    const result = await activeHost.runAction("pkg.budget/act", {}, { timeoutMs: 30 });
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.error.code, ACTION_TIMEOUT);
+      assert.match(result.error.message, /30ms/);
+    }
+    assert.strictEqual(handlerExecuted, false, "准备阶段耗尽预算后 handler 绝对不得执行");
+  });
+
+  it("准备消耗部分预算后 handler 仍受总期限约束，超时触发 ACTION_TIMEOUT 且体现原始预算", async () => {
+    const dirPartial = createDummyPackageDir("pkg-budget-partial");
+    let handlerStarted = false;
+    let handlerCompleted = false;
+
+    const partialDelayHook = async () => {
+      // 消耗 30ms
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    };
+
+    activeHost = await createActionDockHost({
+      prepareLocalPackage: partialDelayHook,
+      packages: [
+        {
+          packageRoot: dirPartial,
+          projectConfig: { id: "pkg.partial", name: "Partial Budget", version: "1.0.0" },
+          actions: [
+            {
+              id: "act",
+              action: defineAction({
+                run: async (_input: unknown, ctx: ActionContext) => {
+                  handlerStarted = true;
+                  await new Promise<void>((resolve, reject) => {
+                    const timer = setTimeout(resolve, 100);
+                    ctx.signal.addEventListener("abort", () => {
+                      clearTimeout(timer);
+                      reject(ctx.signal.reason);
+                    });
+                  });
+                  handlerCompleted = true;
+                  return { ok: true };
+                },
+              }),
+            },
+          ],
+        },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+
+    const result = await activeHost.runAction("pkg.partial/act", {}, { timeoutMs: 60 });
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.strictEqual(result.error.code, ACTION_TIMEOUT);
+      assert.match(result.error.message, /60ms/);
+    }
+    assert.strictEqual(handlerStarted, true, "handler 应当在剩余预算内启动");
+    assert.strictEqual(handlerCompleted, false, "handler 受到总期限约束应超时中止");
   });
 });

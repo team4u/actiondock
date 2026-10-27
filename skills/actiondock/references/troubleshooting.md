@@ -66,7 +66,7 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `INVALID_ACTION_REF` | 跨包调用标识存在歧义，或向 invoke 传入了 Action 定义对象。 | 跨包调用使用完全限定标识符 `<pkg>/<action>`；确保 `invoke` 仅传入字符串标识符或 ActionRef 对象。 |
 | `ACTION_CALL_CYCLE` | 级联调用发生循环调用或超深递归。 | 检查 Action 间的相互调用链路，消除闭环逻辑。 |
 | `ACTION_SUBRUN_LIMIT` | 单个根任务派生的活跃子任务数超出配额限制。 | 优化业务编排逻辑，避免高并发派生大量子任务。 |
-| `ACTION_TIMEOUT` | Action 执行时间超过了设定的超时阈值。 | 优化底层耗时操作，或在调用时添加 `--timeout 60s` 增大超时时间。 |
+| `ACTION_TIMEOUT` | Action 执行时间超过了设定的超时阈值。本地 `ad run` 指定 `--timeout` 时，同一预算覆盖建图前事务恢复、依赖准备与动作执行。 | 优化底层耗时操作，或在调用时添加 `--timeout 60s` 增大超时时间。 |
 | `ACTION_LOAD_FAILED` | Action 源码入口模块加载失败（语法错误或依赖缺失）。 | 检查入口文件物理路径与 TypeScript 语法，并在包目录下执行依赖安装。 |
 | `UNMET_LOCAL_DEPENDENCY` | Action 源码引用了未在 files 字段中声明的本地代码模块。 | 在 `actiondock.json` 中配置 `"files": ["<dir>"]`（例如 `"files": ["src"]`）。 |
 | `DEPENDENCIES_NOT_READY` | 必需直接生产依赖未物化且禁止自动首装，或已有 node_modules 存在损坏。 | 若显式使用了 `--no-install` 或环境变量禁用，说明调用明确禁止安装，报告依赖未就绪，禁止擅自执行安装绕过策略；使用者明确要求预装或已有依赖损坏时，按对应管理器（npm 或 bun）在安装根目录执行安装修复。 |

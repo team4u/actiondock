@@ -327,4 +327,46 @@ rl.on("line", (cmd) => {
     const current = JSON.parse(readFileSync(join(tempDir, "package.json"), "utf-8"));
     assert.strictEqual(current.version, "modified-in-tx");
   });
+
+  it("当 signal 已中止时，recoverPendingTransactions 立即以取消语义抛出且不修改任何快照文件与事务状态", async () => {
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "tx-test", version: "1.0.0" }));
+    const tx = await beginTransaction(tempDir, "aborted recovery test");
+
+    // 模拟破坏性修改
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "tx-test", version: "broken-after-tx" }));
+    tx.releaseLock();
+
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+
+    const txDir = join(tempDir, ".actiondock", "transactions", tx.id);
+    const metaBefore = readFileSync(join(txDir, "transaction.json"), "utf-8");
+    const snapBefore = readFileSync(join(txDir, "snapshot", "package.json"), "utf-8");
+
+    const controller = new AbortController();
+    controller.abort();
+
+    let caughtErr: any;
+    try {
+      await recoverPendingTransactions(tempDir, {
+        frozenInstall: false,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    assert.notStrictEqual(caughtErr, undefined);
+    assert.strictEqual(caughtErr?.name, "AbortError");
+
+    // 事务状态与快照文件必须完全未修改，严禁改写
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+    const metaAfter = readFileSync(join(txDir, "transaction.json"), "utf-8");
+    assert.strictEqual(metaBefore, metaAfter);
+    const snapAfter = readFileSync(join(txDir, "snapshot", "package.json"), "utf-8");
+    assert.strictEqual(snapBefore, snapAfter);
+
+    // 工作区文件依然保持原样，未被快照覆盖
+    const current = JSON.parse(readFileSync(join(tempDir, "package.json"), "utf-8"));
+    assert.strictEqual(current.version, "broken-after-tx");
+  });
 });

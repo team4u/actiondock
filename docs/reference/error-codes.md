@@ -79,7 +79,7 @@ ActionDock 采用确定性的结构化错误体系。HTTP 接口与 CLI 的 `--j
 | `ACTION_FAILED` | 500 | Action 内部业务逻辑抛出未分类异常。 | 检查 Action 业务代码与错误堆栈。 |
 | `EXECUTION_FAILED` | 500 | 运行以失败状态终结且缺少结构化错误明细。 | 查看服务日志与底层执行信封。 |
 | `UNHANDLED_EXECUTION_ERROR` | 500 | 执行调度器外层捕获到非预期的未处理异常。 | 检查宿主运行环境与系统资源。 |
-| `ACTION_TIMEOUT` | 504 | Action 执行耗时超过了设定的超时阈值。 | 优化底层耗时操作，或在调用时通过 `--timeout` 调大超时时间。 |
+| `ACTION_TIMEOUT` | 504 | Action 执行耗时超过了设定的超时阈值；本地 `ad run` 的预算同时覆盖建图前事务恢复、依赖准备与动作执行。 | 优化底层耗时操作，或在调用时通过 `--timeout` 调大超时时间。 |
 | `ACTION_CANCELLED` | 499 / 500 | Action 执行被客户端取消信号主动中断。 | 确认取消意图，若非主动取消请检查网络或调用方超时配置。 |
 | `EXECUTION_ABORTED` | 400 | 调用在真正启动执行前已被中止信号取消。 | 检查请求发起时的取消信号时序。 |
 | `ACTION_SUBRUN_LIMIT` | 429 | 单个根任务发起的并发子任务数超出配额上限（默认上限为 64）。附带 `details.alias: "MAX_SUBRUNS_REACHED"` 标记。 | 检查级联调用规模，避免无节制并发派生过多子任务。 |

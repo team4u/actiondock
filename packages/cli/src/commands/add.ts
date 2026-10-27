@@ -105,6 +105,7 @@ export function registerAddCommand(program: Command, context?: CliContext): void
         const installProc = await runPackageManager(pm, args, {
           cwd: root,
           env,
+          signal: context?.control?.signal,
         });
 
         if (installProc.status !== 0) {

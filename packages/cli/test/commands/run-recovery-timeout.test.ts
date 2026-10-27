@@ -1,0 +1,243 @@
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beginTransaction, hasPendingTransactions } from "@actiondock/core/project";
+import { runCliAsync } from "../helpers/run-cli";
+
+describe("CLI ad run - 事务崩溃恢复与前置超时控制", () => {
+  let tempDir: string;
+  let fakeBinDir: string;
+  let spawnedPids: number[] = [];
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "ad-run-recovery-timeout-"));
+    fakeBinDir = mkdtempSync(join(tmpdir(), "ad-fake-bin-"));
+    spawnedPids = [];
+  });
+
+  afterEach(() => {
+    for (const pid of spawnedPids) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // 忽略已退出进程
+      }
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(fakeBinDir, { recursive: true, force: true });
+  });
+
+  function createProjectWithAction(options?: {
+    actionDependencies?: Record<string, string>;
+    npmDependencies?: Record<string, string>;
+    actionCode?: string;
+  }): string {
+    const manifest: Record<string, any> = {
+      id: "recovery-demo-pkg",
+      name: "recovery-demo-pkg",
+      version: "1.0.0",
+      actions: {
+        greet: {
+          entry: "actions/greet.ts",
+          description: "Greeting action",
+        },
+      },
+    };
+    if (options?.actionDependencies) {
+      manifest.dependencies = options.actionDependencies;
+    }
+    writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify(manifest, null, 2), "utf-8");
+
+    const pkgJson: Record<string, any> = {
+      name: "recovery-demo-pkg",
+      version: "1.0.0",
+      type: "module",
+    };
+    if (options?.npmDependencies) {
+      pkgJson.dependencies = options.npmDependencies;
+    }
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify(pkgJson, null, 2), "utf-8");
+
+    mkdirSync(join(tempDir, "actions"), { recursive: true });
+    const code =
+      options?.actionCode ||
+      `
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  run(input) {
+    return { message: "hello " + (input?.name || "world") };
+  }
+});
+`;
+    writeFileSync(join(tempDir, "actions", "greet.ts"), code, "utf-8");
+
+    return tempDir;
+  }
+
+  it("正式 Action 依赖 + pending 事务（模拟崩溃并损坏 manifest）+ 缺 node_modules 时 ad run 成功恢复并执行", async () => {
+    const dir = createProjectWithAction({
+      actionDependencies: {
+        "helper-action-dep": "^1.0.0",
+      },
+      npmDependencies: {
+        "helper-action-dep": "^1.0.0",
+      },
+    });
+
+    // 创建成功执行的 npm 替身，在恢复时物化依赖
+    const fakeNpm = join(fakeBinDir, "npm");
+    writeFileSync(
+      fakeNpm,
+      `#!/bin/sh
+mkdir -p node_modules/helper-action-dep
+echo '{"name":"helper-action-dep","version":"1.0.0"}' > node_modules/helper-action-dep/package.json
+echo '{"id":"helper-action-dep","name":"helper-action-dep","version":"1.0.0"}' > node_modules/helper-action-dep/actiondock.json
+exit 0
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeNpm, 0o755);
+
+    // 开启事务并在崩溃前损坏 manifest
+    const tx = await beginTransaction(dir, "simulated crash before run");
+    writeFileSync(join(dir, "actiondock.json"), "{ damaged corrupted json ...", "utf-8");
+    tx.releaseLock();
+
+    assert.strictEqual(hasPendingTransactions(dir), true);
+
+    const res = await runCliAsync(
+      ["run", "greet", "--json", "--", "name=Alice"],
+      dir,
+      { PATH: `${fakeBinDir}:${process.env.PATH}` }
+    );
+
+    assert.strictEqual(res.exitCode, 0);
+    const parsed = JSON.parse(res.stdout.toString());
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.data.message, "hello Alice");
+
+    // 验证事务快照已恢复且已无 pending 事务
+    assert.strictEqual(hasPendingTransactions(dir), false);
+    const restoredManifest = JSON.parse(readFileSync(join(dir, "actiondock.json"), "utf-8"));
+    assert.strictEqual(restoredManifest.id, "recovery-demo-pkg");
+    assert.strictEqual(restoredManifest.actions.greet.entry, "actions/greet.ts");
+  });
+
+  it("--no-install 时返回 PROJECT_RECOVERY_REQUIRED 且 transaction.json 与损坏 manifest 字节不变", async () => {
+    const dir = createProjectWithAction({
+      actionDependencies: {
+        "helper-action-dep": "^1.0.0",
+      },
+      npmDependencies: {
+        "helper-action-dep": "^1.0.0",
+      },
+    });
+
+    const tx = await beginTransaction(dir, "simulated crash no-install");
+    const damagedContent = "{ damaged manifest bytes for test }";
+    writeFileSync(join(dir, "actiondock.json"), damagedContent, "utf-8");
+    tx.releaseLock();
+
+    const txDir = join(dir, ".actiondock", "transactions", tx.id);
+    const metaPath = join(txDir, "transaction.json");
+    const manifestPath = join(dir, "actiondock.json");
+
+    const metaBytesBefore = readFileSync(metaPath);
+    const manifestBytesBefore = readFileSync(manifestPath);
+
+    const res = await runCliAsync(["run", "greet", "--no-install", "--json"], dir);
+
+    assert.strictEqual(res.exitCode, 1);
+    const parsed = JSON.parse(res.stdout.toString());
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "PROJECT_RECOVERY_REQUIRED");
+
+    // 验证 transaction.json 与损坏 manifest 字节绝对不变，零文件改动
+    const metaBytesAfter = readFileSync(metaPath);
+    const manifestBytesAfter = readFileSync(manifestPath);
+    assert.deepStrictEqual(metaBytesAfter, metaBytesBefore);
+    assert.deepStrictEqual(manifestBytesAfter, manifestBytesBefore);
+    assert.strictEqual(hasPendingTransactions(dir), true);
+  });
+
+  it("--timeout 50ms + 卡住安装（npm 替身挂起，PATH 注入）时返回 ACTION_TIMEOUT 且 handler 未执行、替身进程被终止", async () => {
+    const counterFile = join(tempDir, "exec-counter.txt");
+    writeFileSync(counterFile, "", "utf-8");
+
+    const dir = createProjectWithAction({
+      actionDependencies: {
+        "hanging-dep": "^1.0.0",
+      },
+      npmDependencies: {
+        "hanging-dep": "^1.0.0",
+      },
+      actionCode: `
+import { appendFileSync } from "node:fs";
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  run() {
+    appendFileSync(${JSON.stringify(counterFile)}, "handler-executed\\n");
+    return { ok: true };
+  }
+});
+`,
+    });
+
+    const pidFile = join(fakeBinDir, "npm.pid");
+    const fakeNpm = join(fakeBinDir, "npm");
+    writeFileSync(
+      fakeNpm,
+      `#!/bin/sh
+echo $$ > "${pidFile}"
+while true; do
+  sleep 1
+done
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeNpm, 0o755);
+
+    const res = await runCliAsync(
+      ["run", "greet", "--timeout", "50ms", "--json"],
+      dir,
+      { PATH: `${fakeBinDir}:${process.env.PATH}` }
+    );
+
+    assert.strictEqual(res.exitCode, 1);
+    const parsed = JSON.parse(res.stdout.toString());
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.error.code, "ACTION_TIMEOUT");
+    assert.match(parsed.error.message, /50ms/);
+
+    // handler 绝对未执行，计数文件保持为空
+    const counterContent = readFileSync(counterFile, "utf-8");
+    assert.strictEqual(counterContent, "");
+
+    // 验证替身进程已被终止
+    assert.strictEqual(existsSync(pidFile), true);
+    const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+    spawnedPids.push(pid);
+
+    let isAlive = true;
+    for (let i = 0; i < 20; i++) {
+      try {
+        process.kill(pid, 0);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } catch {
+        isAlive = false;
+        break;
+      }
+    }
+    assert.strictEqual(isAlive, false, "npm substitute process should be terminated");
+  });
+});

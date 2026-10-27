@@ -226,9 +226,26 @@ export function requireProjectManifestRoot(packageOption: string | undefined): {
 }
 
 /**
+ * 判定是否为取消或中断类错误。
+ */
+export function isCancellationError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; name?: string; constructor?: { name?: string } };
+  return (
+    e.code === "PROCESS_CANCELLED" ||
+    e.code === "ACTION_CANCELLED" ||
+    e.code === "SIGINT_INTERRUPTED" ||
+    e.name === "AbortError" ||
+    e.name === "SigintError" ||
+    e.constructor?.name === "SigintError"
+  );
+}
+
+/**
  * 依赖事务失败回滚辅助（ad add / ad remove 共享）：回滚事务后按统一规则透传异常。
  *
  * 回滚与包裹规则：
+ * - 取消异常（isCancellationError）：不执行 rollback，释放工程锁，保留事务记录为 pending，原样上抛；
  * - 先执行事务回滚快照，保留原始磁盘状态；
  * - ActionDockError 与 CliError 原样透传（保留 code 与 details）；
  * - 其余包裹为 ExecutionError 并保留原始 code，缺省时回退 fallbackCode。
@@ -242,6 +259,11 @@ export async function rollbackAndRethrow(
   err: unknown,
   fallbackCode: string
 ): Promise<never> {
+  if (isCancellationError(err)) {
+    await tx.releaseLock();
+    throw err;
+  }
+
   await tx.rollback({ frozenInstall: false });
   const passthrough = wrapAsExecutionError(err);
   if (passthrough !== err) {

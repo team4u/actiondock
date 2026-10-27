@@ -132,7 +132,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 子动作依赖准备失败不会撤销父动作此前已产生的副作用，框架也绝不自动重跑父动作；
     - 依赖判定以必需直接生产依赖元数据是否物化为依据，不执行业务代码，不承诺完整依赖健康检查，`optionalDependencies` 缺失不视为必须安装；
     - 若安装根已存在 `node_modules` 但必需生产依赖缺失或损坏，严禁自动重建，将抛出 `DEPENDENCIES_NOT_READY` 并提示手动修复；
-    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动对应 Action 且不自动重试。
+    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动对应 Action 且不自动重试；
+    - 本地调用指定 `--timeout` 时，同一预算覆盖建图前事务恢复、冷首装、目标包准备与动作执行；前置或准备阶段耗尽预算报 `ACTION_TIMEOUT` 且不启动动作，SIGINT 中断仍归并为退出码 130；
+    - 当前工程存在待恢复事务时，CLI 在读取清单与建图前先完成事务恢复（快照回滚与冻结安装）；禁装策略下在任何文件修改前直接报 `PROJECT_RECOVERY_REQUIRED`。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
@@ -192,6 +194,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ad add <package> [--allow-install-scripts] [-D, --dev] [-P, --package <path>] [--json]
   ```
   安装并锁定 Action 包依赖，同步更新 `package.json`、`actiondock.json` 与 `actiondock.lock.json`，受原子事务快照保护。
+  中断取消（如 Ctrl-C）会终止安装进程并等待其退出、释放工程排他锁，事务保留 `pending` 状态交由下一次允许安装的 owner 命令恢复；`ad remove` 取消行为一致。
 
 - 移除依赖并更新锁定 (`ad remove`)：
   ```bash

@@ -4,6 +4,8 @@ import {
   ensureProjectDependencies,
   createLocalPackagePreparer,
   loadManifest,
+  hasPendingTransactions,
+  recoverPendingTransactions,
 } from "@actiondock/core/project";
 import {
   resolveTarget,
@@ -13,6 +15,9 @@ import {
 } from "@actiondock/core/server";
 import {
   ACTION_NOT_FOUND,
+  ACTION_TIMEOUT,
+  PROJECT_RECOVERY_REQUIRED,
+  ActionDockError,
   NOT_FOUND,
   findProjectRoot,
   resolveExecutionHint,
@@ -196,32 +201,102 @@ export async function executeAction(
 
     let targetPackageRoot: string | undefined;
     let prepareLocalPackage: LocalPackagePreparer | undefined;
+    let effectiveExecutionTimeoutMs = timeoutMs;
 
     // 仅在 local 本地分支执行当前工程依赖准备与包寻址（remote 分支不进行本机包查找与环境准备）
     if (resolvedTopology.type === "local") {
-      const resolvedRoot = resolveLocalPackageRoot(options.package);
-      if (options.package && !resolvedRoot) {
-        throw packageNotFoundError(options.package);
+      const deadline = timeoutMs !== undefined ? Date.now() + timeoutMs : undefined;
+      const timeoutController = timeoutMs !== undefined ? new AbortController() : undefined;
+      let timer: NodeJS.Timeout | undefined;
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          timeoutController?.abort();
+        }, timeoutMs);
+        timer.unref?.();
       }
-      targetPackageRoot = resolvedRoot || undefined;
 
-      const currentRoot = targetPackageRoot || findProjectRoot() || undefined;
-      if (currentRoot) {
-        const manifest = loadManifest(currentRoot);
-        const hasActionDependencies = Object.keys(manifest?.dependencies ?? {}).length > 0;
-        if (hasActionDependencies) {
-          await ensureProjectDependencies(currentRoot, {
-            install: allowInstall,
-            signal: effectiveSignal,
-            onProgress: (msg) => writeStderr(msg, context),
-          });
+      const signals: AbortSignal[] = [];
+      if (effectiveSignal) signals.push(effectiveSignal);
+      if (timeoutController) signals.push(timeoutController.signal);
+      const compositeSignal = signals.length > 1
+        ? AbortSignal.any(signals)
+        : signals.length === 1
+          ? signals[0]
+          : undefined;
+
+      try {
+        const resolvedRoot = resolveLocalPackageRoot(options.package);
+        if (options.package && !resolvedRoot) {
+          throw packageNotFoundError(options.package);
+        }
+        targetPackageRoot = resolvedRoot || undefined;
+
+        const currentRoot = targetPackageRoot || findProjectRoot() || undefined;
+        if (currentRoot) {
+          const isInstallDisabled =
+            options.install === false || process.env.ACTIONDOCK_AUTO_INSTALL === "false";
+          if (isInstallDisabled && hasPendingTransactions(currentRoot)) {
+            throw new ActionDockError(
+              PROJECT_RECOVERY_REQUIRED,
+              `PROJECT_RECOVERY_REQUIRED: Project at '${currentRoot}' has pending transactions requiring recovery install, but installation is disabled (--no-install or ACTIONDOCK_AUTO_INSTALL=false).`
+            );
+          }
+
+          if (hasPendingTransactions(currentRoot)) {
+            await recoverPendingTransactions(currentRoot, {
+              frozenInstall: true,
+              allowInstall,
+              signal: compositeSignal,
+            });
+          }
+
+          const manifest = loadManifest(currentRoot);
+          const hasActionDependencies = Object.keys(manifest?.dependencies ?? {}).length > 0;
+          if (hasActionDependencies) {
+            await ensureProjectDependencies(currentRoot, {
+              install: allowInstall,
+              signal: compositeSignal,
+              onProgress: (msg) => writeStderr(msg, context),
+            });
+          }
+        }
+
+        prepareLocalPackage = createLocalPackagePreparer({
+          install: allowInstall,
+          onProgress: (msg) => writeStderr(msg, context),
+        });
+
+        if (deadline !== undefined) {
+          const remainingTimeoutMs = Math.max(0, deadline - Date.now());
+          if (remainingTimeoutMs === 0 || timeoutController?.signal.aborted) {
+            throw new ActionDockError(
+              ACTION_TIMEOUT,
+              `Action execution timed out after ${timeoutMs}ms.`
+            );
+          }
+          effectiveExecutionTimeoutMs = remainingTimeoutMs;
+        }
+      } catch (err: any) {
+        const isSigint =
+          effectiveControl?.cancellationSource === "sigint" ||
+          err?.code === "SIGINT_INTERRUPTED" ||
+          err instanceof SigintError;
+        if (isSigint) {
+          throw new SigintError();
+        }
+        if (timeoutController?.signal.aborted) {
+          throw new ActionDockError(
+            ACTION_TIMEOUT,
+            `Action execution timed out after ${timeoutMs}ms.`
+          );
+        }
+        throw err;
+      } finally {
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
         }
       }
-
-      prepareLocalPackage = createLocalPackagePreparer({
-        install: allowInstall,
-        onProgress: (msg) => writeStderr(msg, context),
-      });
     }
 
     // 通过 Service 统一执行
@@ -275,7 +350,7 @@ export async function executeAction(
 
           const result = await service.execution.run(targetRef, input as JsonValue, {
             signal: effectiveSignal,
-            timeoutMs,
+            timeoutMs: effectiveExecutionTimeoutMs,
             config: configOverrides,
             requestId: options.requestId,
           });

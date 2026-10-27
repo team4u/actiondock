@@ -332,6 +332,56 @@ describe("统一包管理器启动解析器 (resolvePackageManagerInvocation)", 
     assert.deepStrictEqual(invocation.args.slice(1), ["--version"]);
   });
 
+  it("Windows平台node_modules/.bin/npm.cmd布局正确解析并定位上级npm-cli.js", () => {
+    const projectDir = join(tempDir, "project-local-npm");
+    const binDir = join(projectDir, "node_modules", ".bin");
+    const cliDir = join(projectDir, "node_modules", "npm", "bin");
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(cliDir, { recursive: true });
+
+    // 标准 cmd-shim: node_modules/.bin/npm.cmd，指向 ../npm/bin/npm-cli.js
+    const npmCmd = join(binDir, "npm.cmd");
+    writeFileSync(npmCmd, "@ECHO OFF\r\n");
+    const cliPath = join(cliDir, "npm-cli.js");
+    writeFileSync(cliPath, "// local npm cli");
+
+    const fakeExecPath = join(tempDir, "node.exe");
+    const invocation = resolvePackageManagerInvocation("npm", ["run", "build"], {
+      platform: "win32",
+      execPath: fakeExecPath,
+      env: { PATH: binDir },
+    });
+
+    assert.strictEqual(invocation.executable, fakeExecPath);
+    assert.strictEqual(invocation.args[0], cliPath);
+    assert.deepStrictEqual(invocation.args.slice(1), ["run", "build"]);
+  });
+
+  it("Windows平台node_modules/.bin/npm.cmd在CLI缺失时坚决拒绝并报错", () => {
+    const projectDir = join(tempDir, "project-missing-cli");
+    const binDir = join(projectDir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+
+    const npmCmd = join(binDir, "npm.cmd");
+    writeFileSync(npmCmd, "@ECHO OFF\r\n");
+    // 故意不创建 ../npm/bin/npm-cli.js
+
+    const fakeExecPath = join(tempDir, "node.exe");
+    assert.throws(
+      () =>
+        resolvePackageManagerInvocation("npm", ["install"], {
+          platform: "win32",
+          execPath: fakeExecPath,
+          env: { PATH: binDir },
+        }),
+      (err: any) =>
+        err instanceof ActionDockError &&
+        err.code === DEPENDENCY_INSTALL_FAILED &&
+        err.message.includes("Unsupported npm wrapper") &&
+        err.details?.path === npmCmd
+    );
+  });
+
   it("Windows平台无PATH不偷选execPath旁npm或无关npm_execpath", () => {
     const nodeDir = join(tempDir, "nodejs");
     const cliDir = join(nodeDir, "node_modules", "npm", "bin");

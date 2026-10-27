@@ -1,5 +1,5 @@
 import type { JsonValue, RuntimeError, RunOrigin, RunRecord } from "@actiondock/sdk";
-import { ActionDockError, RUN_PERSISTENCE_FAILED, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
+import { ActionDockError, ACTION_TIMEOUT, RUN_PERSISTENCE_FAILED, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import { snapshotRunOrigin } from "./run-origin";
 
@@ -67,7 +67,7 @@ export interface RunFinalizer {
   /** 竞态监听句柄注销函数列表（finalize 时统一清理，覆盖成功路径） */
   raceListenerRemovers: Array<() => void>;
   /** 绑定取消控制器并启动超时定时器 */
-  startTimeout(controller: AbortController, timeoutMs: number): void;
+  startTimeout(controller: AbortController, timeoutMs: number, displayTimeoutMs?: number): void;
   /** 写入终态（幂等，自动清理超时定时器与全部监听句柄） */
   finalize(status: TerminalRunStatus, output?: unknown, error?: RuntimeError): void;
 }
@@ -186,11 +186,14 @@ export function createRunFinalizer(
     signal: undefined,
     onAbort: undefined,
     raceListenerRemovers: [],
-    startTimeout: (controller: AbortController, timeoutMs: number) => {
+    startTimeout: (controller: AbortController, timeoutMs: number, displayTimeoutMs?: number) => {
       finalizer.controller = controller;
+      const display = displayTimeoutMs ?? timeoutMs;
       finalizer.timeoutTimer = setTimeout(() => {
         finalizer.isTimeout = true;
-        finalizer.controller?.abort(new Error(`Action exceeded timeout of ${timeoutMs}ms`));
+        finalizer.controller?.abort(
+          new ActionDockError(ACTION_TIMEOUT, `Action exceeded timeout of ${display}ms`, { timeoutMs: display })
+        );
       }, timeoutMs);
     },
     finalize: (status: TerminalRunStatus, output?: unknown, error?: RuntimeError) => {

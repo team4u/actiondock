@@ -124,6 +124,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
 
         const uninstallProc = await runPackageManager(pm, args, {
           cwd: root,
+          signal: context?.control?.signal,
         });
         // 卸载失败不阻断事务提交，但必须可见：非零退出码输出 WARN 并在结果中标记
         const uninstallFailed = uninstallProc.status !== 0;

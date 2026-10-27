@@ -33,7 +33,7 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位：原�
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
-| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>]` | 规范调用语法；本地执行默认对主动作及已有本地子包按实际调用准备依赖，支持 `--no-install` 显式禁用 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>]` | 规范调用语法；本地执行默认对主动作及已有本地子包按实际调用准备依赖，支持 `--no-install` 显式禁用；`--timeout` 预算覆盖建图前恢复、准备与执行 | [cli.md](references/cli.md) |
 | **混合本地与远端依赖** | `ctx.actions.invoke(ref, input, { binding })` | 由调用方 `.actiondock/bindings.json` 选择执行目标；支持同一引用多绑定，`uses` 只声明逻辑权限，不自动降级 | [action-bindings.md](references/action-bindings.md) |
 | **编程式接入依赖准备** | `createActionDock({ prepareLocalPackage })` | SDK 默认不首装；显式注入准备器并统一事务恢复与首装策略 | [developer.md](references/developer.md#本地包执行前准备) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |

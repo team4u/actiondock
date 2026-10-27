@@ -106,6 +106,10 @@ export interface InvocationContext {
   readonly signal: AbortSignal;
   /** 超时毫秒数 */
   readonly timeoutMs?: number;
+  /** 初始超时毫秒数（原始预算） */
+  readonly initialTimeoutMs?: number;
+  /** 绝对超时时间戳 */
+  readonly deadline?: number;
   /** 配置覆盖项 */
   readonly config?: Record<string, unknown>;
   /** 幂等请求标识 */
@@ -158,6 +162,8 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
     package: pkg,
     signal: options.signal ?? new AbortController().signal,
     timeoutMs: options.timeoutMs,
+    initialTimeoutMs: options.initialTimeoutMs,
+    deadline: options.deadline,
     config: options.config,
     requestId: options.requestId,
     tenantId: options.tenantId,
@@ -190,6 +196,10 @@ export interface CreateRootInvocationContextOptions {
   signal?: AbortSignal;
   /** 最大超时时间（毫秒） */
   timeoutMs?: number;
+  /** 初始超时毫秒数（原始预算） */
+  initialTimeoutMs?: number;
+  /** 绝对超时时间戳 */
+  deadline?: number;
   /** 执行级临时配置覆盖字典 */
   config?: Record<string, unknown>;
   /** 幂等请求标识 */
@@ -224,11 +234,16 @@ export interface CreateRootInvocationContextOptions {
  * parentRunId 与 caller 为 undefined，并按根调用契约挑选字段，保持无血缘血缘字段的键序不变。
  */
 export function createRootInvocationContext(options: CreateRootInvocationContextOptions): InvocationContext {
+  const initialTimeoutMs = options.initialTimeoutMs ?? (typeof options.timeoutMs === "number" && options.timeoutMs > 0 ? options.timeoutMs : undefined);
+  const deadline = options.deadline ?? (initialTimeoutMs !== undefined ? Date.now() + initialTimeoutMs : undefined);
+  const remainingBudget = deadline !== undefined ? Math.max(0, deadline - Date.now()) : options.timeoutMs;
   const base = createInvocationContext({
     package: options.targetPackage,
     callStack: options.callStack,
     signal: options.signal,
-    timeoutMs: options.timeoutMs,
+    timeoutMs: remainingBudget,
+    initialTimeoutMs,
+    deadline,
     config: options.config,
     requestId: options.requestId,
     hostSessionId: options.hostSessionId,
@@ -250,6 +265,8 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     package: base.package,
     signal: base.signal,
     timeoutMs: base.timeoutMs,
+    initialTimeoutMs: base.initialTimeoutMs,
+    deadline: base.deadline,
     config: base.config,
     requestId: base.requestId,
     hostSessionId: base.hostSessionId,

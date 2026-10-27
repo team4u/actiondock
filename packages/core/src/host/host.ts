@@ -44,6 +44,7 @@ import {
   ACTION_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_SUBRUN_LIMIT,
+  ACTION_TIMEOUT,
   EXECUTION_FAILED,
   INVALID_ACTION_REF,
   PACKAGE_ID_CONFLICT,
@@ -1337,7 +1338,35 @@ export class DefaultActionDockHost implements ActionDockHost {
       };
     }
 
-    const mergedSignal = AbortSignal.any([context.signal, this.closeController.signal]);
+    const isRootCall = !context.caller;
+    const initialTimeoutMs = context.initialTimeoutMs ?? (typeof context.timeoutMs === "number" && context.timeoutMs > 0 ? context.timeoutMs : undefined);
+    const deadline = context.deadline ?? (initialTimeoutMs !== undefined ? Date.now() + initialTimeoutMs : undefined);
+
+    let timeoutController: AbortController | undefined;
+    let prepTimeoutTimer: NodeJS.Timeout | undefined;
+
+    if (isRootCall && typeof context.timeoutMs === "number" && context.timeoutMs > 0) {
+      timeoutController = new AbortController();
+      const remaining = deadline ? Math.max(0, deadline - Date.now()) : context.timeoutMs;
+      const timeoutReason = new ActionDockError(
+        ACTION_TIMEOUT,
+        `Action exceeded timeout of ${initialTimeoutMs ?? context.timeoutMs}ms`,
+        { package: targetRuntime.packageId, action: targetActionId, phase: "preparation" }
+      );
+      if (remaining <= 0) {
+        timeoutController.abort(timeoutReason);
+      } else {
+        prepTimeoutTimer = setTimeout(() => {
+          timeoutController?.abort(timeoutReason);
+        }, remaining);
+      }
+    }
+
+    const signalSources: AbortSignal[] = [context.signal, this.closeController.signal];
+    if (timeoutController) {
+      signalSources.push(timeoutController.signal);
+    }
+    const mergedSignal = AbortSignal.any(signalSources);
 
     if (this.prepareLocalPackage && targetRuntime.packageRoot) {
       const prepPromise = Promise.resolve().then(() =>
@@ -1357,13 +1386,40 @@ export class DefaultActionDockHost implements ActionDockHost {
       try {
         await prepPromise;
       } catch (err: any) {
-        const code =
-          (err instanceof ActionDockError ? err.code : undefined) ||
-          (context.signal.aborted ? ACTION_CANCELLED : undefined) ||
-          (this.closeController.signal.aborted ? SERVICE_CLOSED : undefined) ||
-          (err?.code && typeof err.code === "string" ? err.code : EXECUTION_FAILED);
+        if (prepTimeoutTimer !== undefined) {
+          clearTimeout(prepTimeoutTimer);
+          prepTimeoutTimer = undefined;
+        }
 
-        const message = err?.message || "Package preparation failed";
+        const errCode = (err as any)?.code;
+        const isClosed = this.closeController.signal.aborted;
+        const isExternalCancelled = context.signal.aborted;
+        const isTimeout =
+          timeoutController?.signal.aborted ||
+          errCode === ACTION_TIMEOUT ||
+          (err?.details && (err.details as any).code === ACTION_TIMEOUT);
+
+        let code: ErrorCode;
+        let message = err?.message || "Package preparation failed";
+        if (isTimeout) {
+          code = ACTION_TIMEOUT;
+          message = (err?.message && err.message.includes("exceeded timeout"))
+            ? err.message
+            : `Action exceeded timeout of ${initialTimeoutMs ?? context.timeoutMs}ms`;
+        } else if (err instanceof ActionDockError) {
+          code = err.code;
+        } else if (isClosed) {
+          code = SERVICE_CLOSED;
+          message = "ActionDockHost is closed: new tasks rejected";
+        } else if (isExternalCancelled) {
+          code = ACTION_CANCELLED;
+          message = "Action execution was cancelled";
+        } else if (err?.code && typeof err.code === "string") {
+          code = err.code as ErrorCode;
+        } else {
+          code = EXECUTION_FAILED;
+        }
+
         const hint = err?.details?.hint ?? (err as any)?.hint;
         const details = {
           ...(err?.details || {}),
@@ -1374,7 +1430,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         };
 
         const runId = context.runId;
-        const error = buildRuntimeError(code as ErrorCode, message, details);
+        const error = buildRuntimeError(code, message, details);
         return {
           runId,
           status: "failed",
@@ -1383,6 +1439,11 @@ export class DefaultActionDockHost implements ActionDockHost {
       } finally {
         this.activePreparations.delete(prepPromise);
       }
+    }
+
+    if (prepTimeoutTimer !== undefined) {
+      clearTimeout(prepTimeoutTimer);
+      prepTimeoutTimer = undefined;
     }
 
     // 准备后再次复核取消与 Host 关闭状态
@@ -1414,16 +1475,46 @@ export class DefaultActionDockHost implements ActionDockHost {
       };
     }
 
+    const remainingBudget = deadline !== undefined
+      ? Math.max(0, deadline - Date.now())
+      : context.timeoutMs;
+    if (deadline !== undefined && typeof remainingBudget === "number" && remainingBudget <= 0) {
+      const runId = context.runId;
+      const error = buildRuntimeError(
+        ACTION_TIMEOUT,
+        `Action exceeded timeout of ${initialTimeoutMs ?? context.timeoutMs}ms`,
+        { package: targetRuntime.packageId, action: targetActionId, phase: "post-preparation" }
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
+    }
+
     const effectiveContext: InvocationContext = {
       ...context,
       signal: mergedSignal,
+      initialTimeoutMs,
+      deadline,
+      timeoutMs: remainingBudget,
     };
 
-    return targetRuntime.startInvocation(
+    const ticket = await targetRuntime.startInvocation(
       targetActionId,
       input as JsonValue,
       effectiveContext
     );
+
+    if (ticket.result) {
+      ticket.result.finally(() => {
+        if (prepTimeoutTimer !== undefined) {
+          clearTimeout(prepTimeoutTimer);
+        }
+      });
+    }
+
+    return ticket;
   }
 
   async getRun(runId: string, signal?: AbortSignal): Promise<RunRecord | undefined> {

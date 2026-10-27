@@ -105,6 +105,8 @@ function findNpmCliInDirectory(targetDir: string): string | null {
     join(targetDir, "node_modules", "npm", "bin", "npm-cli.js"),
     join(targetDir, "..", "node_modules", "npm", "bin", "npm-cli.js"),
     join(targetDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    join(targetDir, "..", "npm", "bin", "npm-cli.js"),
+    join(targetDir, "npm", "bin", "npm-cli.js"),
   ];
 
   for (const candidate of candidates) {
