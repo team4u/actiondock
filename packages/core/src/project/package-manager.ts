@@ -76,14 +76,16 @@ function findMatchingExecutable(
   manager: string,
   ext: string
 ): string | null {
-  const directCandidate = join(dir, `${manager}${ext}`);
-  if (isFile(directCandidate)) {
-    return directCandidate;
+  // Windows 文件系统大小写不敏感：优先尝试小写拼写，使返回路径与磁盘上常见的小写文件名一致；
+  // 再回退 PATHEXT 原样与全大写拼写，仅影响返回路径的外现大小写，不改变命中顺序。
+  const lowerCandidate = join(dir, `${manager}${ext.toLowerCase()}`);
+  if (isFile(lowerCandidate)) {
+    return lowerCandidate;
   }
 
-  const lowerCandidate = join(dir, `${manager}${ext.toLowerCase()}`);
-  if (lowerCandidate !== directCandidate && isFile(lowerCandidate)) {
-    return lowerCandidate;
+  const directCandidate = join(dir, `${manager}${ext}`);
+  if (directCandidate !== lowerCandidate && isFile(directCandidate)) {
+    return directCandidate;
   }
 
   const upperCandidate = join(dir, `${manager}${ext.toUpperCase()}`);
