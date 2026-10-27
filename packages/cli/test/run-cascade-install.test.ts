@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, relative } from "node:path";
 import { describe, it } from "node:test";
 import { runCliAsync } from "./helpers/run-cli";
 
@@ -25,7 +24,7 @@ describe("CLI ad run - 级联依赖准备与边界控制", () => {
         scripts: { postinstall: 'node -e "process.exit(1)"' },
       }));
       writeFileSync(join(dir, "index.js"), `export const compute = value => ${JSON.stringify(prefix)} + value;\n`);
-      return pathToFileURL(dir).href;
+      return dir;
     }
 
     function createPackage(
@@ -46,8 +45,8 @@ describe("CLI ad run - 级联依赖准备与边界控制", () => {
     }
 
     // 安装脚本故意失败；真实安装成功可以证明默认禁用了生命周期脚本。
-    const libB = createLibrary("local-lib-b", "b:");
-    const libC = createLibrary("local-lib-c", "c:");
+    const libBDir = createLibrary("local-lib-b", "b:");
+    const libCDir = createLibrary("local-lib-c", "c:");
     const markerImport = `import { appendFileSync } from "node:fs";\n`;
     const mark = (value: string) => `appendFileSync(${JSON.stringify(markerFile)}, ${JSON.stringify(value + "\n")});`;
 
@@ -60,7 +59,7 @@ export default { run(input) {
   return { result: compute(input.value) };
 } };`,
       },
-    }, { "local-lib-c": libC });
+    }, { "local-lib-c": `file:${relative(join(rootDir, "pkg-c"), libCDir).replace(/\\/g, "/")}` });
 
     const dirB = createPackage("pkg-b", {
       "step-b": {
@@ -73,7 +72,7 @@ export default { async run(input, ctx) {
   return { result: compute(child.result) };
 } };`,
       },
-    }, { "local-lib-b": libB });
+    }, { "local-lib-b": `file:${relative(join(rootDir, "pkg-b"), libBDir).replace(/\\/g, "/")}` });
 
     const dirD = createPackage("pkg-d", {
       "step-d": { code: "export default { run() { return { ok: true }; } };\n" },
