@@ -16,6 +16,35 @@ export type { PackageIdentity };
 export type { RunOptions } from "../service/types";
 
 /**
+ * 本地包准备目标契约。
+ */
+export interface LocalPackagePreparationTarget {
+  /** 目标包物理与快照身份标识 */
+  readonly identity: PackageIdentity;
+  /** 目标包物理根路径 */
+  readonly packageRoot: string;
+}
+
+/**
+ * 本地包准备上下文契约。
+ */
+export interface LocalPackagePreparationContext {
+  /** 取消信号 */
+  readonly signal: AbortSignal;
+  /** 根运行标识（用于在途合并与调用链追踪） */
+  readonly rootRunId: string;
+}
+
+/**
+ * 本地包准备协调器回调契约。
+ * 在本地 Action 实际执行前触发调用，确保包运行环境与依赖就绪。
+ */
+export type LocalPackagePreparer = (
+  target: LocalPackagePreparationTarget,
+  context: LocalPackagePreparationContext
+) => Promise<void>;
+
+/**
  * 构造默认进程归属所有者（ProcessOwner）的单一事实源工厂。
  *
  * 兜底语义：租户与主体标识缺失时回退 "default"，包实例与代次标识缺失时回退

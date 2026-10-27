@@ -21,7 +21,7 @@ import type {
   CancelResult,
   ExecutionTicket,
 } from "../execution/types";
-import type { RunOptions } from "../invocation/types";
+import type { LocalPackagePreparer, RunOptions } from "../invocation/types";
 import type { Clock } from "../storage/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
@@ -87,8 +87,13 @@ export interface ActionDockHostOptions {
   eventSink?: EventSink;
   /** 是否开启配置与状态管理端口（默认 true） */
   enableManagement?: boolean;
-  /** 是否允许执行依赖自动安装（包括事务恢复中的依赖安装，默认依据 ACTIONDOCK_AUTO_INSTALL !== "false"） */
+  /**
+   * 是否允许执行依赖自动安装（主要控制启动与事务恢复中的依赖安装；
+   * 本地包运行期准备由 prepareLocalPackage 注入器根据自身配置决定，Host 不约束外部注入函数副作用）。
+   */
   allowInstall?: boolean;
+  /** 本地包准备协调器回调，在 Action 执行前准备本地包环境 */
+  prepareLocalPackage?: LocalPackagePreparer;
 }
 
 /**
@@ -100,7 +105,7 @@ export interface ActionDockHost extends ActionDockService {
   /** 宿主容器初始化配置项（只读） */
   readonly options?: ActionDockHostOptions;
 
-  /** 是否允许依赖安装 */
+  /** 是否允许依赖安装（主要控制启动与事务恢复） */
   readonly allowInstall?: boolean;
 
   /** 统一事件订阅端口（兼作原生订阅函数与事件服务端口） */

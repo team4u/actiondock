@@ -725,7 +725,7 @@ export async function ensureProjectDependencies(
     }
 
     if (procResult.status !== 0) {
-      if (procResult.status === 130 || procResult.signal === "SIGINT") {
+      if (procResult.status === 130 || procResult.signal === "SIGINT" || options.signal?.aborted) {
         throw new ActionDockError(
           ACTION_CANCELLED,
           `Dependency installation in '${installRoot}' was cancelled by signal.`,

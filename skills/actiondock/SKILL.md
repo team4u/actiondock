@@ -33,8 +33,9 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位：原�
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
-| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>]` | 规范调用语法；本地执行默认自动完成源码包缺失直接生产依赖冷首装，支持 `--no-install` 显式禁用 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>]` | 规范调用语法；本地执行默认对主动作及已有本地子包按实际调用准备依赖，支持 `--no-install` 显式禁用 | [cli.md](references/cli.md) |
 | **混合本地与远端依赖** | `ctx.actions.invoke(ref, input, { binding })` | 由调用方 `.actiondock/bindings.json` 选择执行目标；支持同一引用多绑定，`uses` 只声明逻辑权限，不自动降级 | [action-bindings.md](references/action-bindings.md) |
+| **编程式接入依赖准备** | `createActionDock({ prepareLocalPackage })` | SDK 默认不首装；显式注入准备器并统一事务恢复与首装策略 | [developer.md](references/developer.md#本地包执行前准备) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果；多条后台任务可用 `ad runs watch` 阻塞等待全部终态聚合退出，后台派工无 runId 时以 `--request-id` 反查等待 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
@@ -73,7 +74,7 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位：原�
 
 ### 作业流一：作为消费者使用 Action 与 Skill
 
-- 智能体技能装载与执行：通过 `npx skills add` 安装或放置于客户端技能目录；本地调用 `ad run` 默认自动完成源码包缺失直接生产依赖冷首装；若宿主环境缺失 `ad` 命令行工具，Agent 按需全局安装 `ad`；若调用显式使用了 `--no-install` 或环境变量禁用安装，应保持禁装策略并报告依赖缺失，禁止擅自安装绕过策略；仅当已有依赖损坏或使用者明确要求预装时，按实际使用的包管理器执行修复命令。
+- 智能体技能装载与执行：通过 `npx skills add` 安装或放置于客户端技能目录；本地调用 `ad run` 默认对主动作及宿主快照中已有的本地子动作在首次调用前按需准备依赖；若宿主环境缺失 `ad` 命令行工具，Agent 按需全局安装 `ad`；若调用显式使用了 `--no-install` 或环境变量禁用安装，整条调用链均禁止自动安装依赖，智能体应保持禁装策略并报告依赖未就绪，严禁擅自执行安装命令绕过策略；仅当已有依赖损坏或使用者明确要求预装时，按实际使用的包管理器执行修复命令。
 - 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 编码顾问） -> 确定性调用（`ad run <action> [control-options] -- <assignments...>` 或配合 `--input` / `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目依赖消费：需要本地实现的正式依赖通过 `ad add <package>` 安装并锁定；`ad link` 用于本地源码挂载与联调。纯远端依赖通过 `uses` 声明能力，并由命名绑定指向 Profile，无需安装远端源码；详见 [action-bindings.md](references/action-bindings.md)。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
@@ -153,7 +154,7 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位：原�
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
 - 脚手架命令原则：新增 Action 工具使用 `ad action create <id>`，命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程使用 `ad playbook create <id>`。
-- 依赖与权限边界：需要本地实现的正式工程依赖使用 `ad add`，`ad link` 仅处理本机源码挂载。跨包与跨目标调用均须声明 `uses`；纯远端依赖不因本地缺少源码就盲目安装，而应检查调用方命名绑定。
+- 依赖与权限边界：正式本地依赖使用 `ad add`，`ad link` 仅处理本机源码挂载。`uses` 仅授权，不作为安装清单；本地 `ad run` 按实际调用准备已有目标，远端子调用不触发本机同名包准备。禁装策略贯穿调用链，准备失败不重跑父动作或撤销既有副作用；已有 `node_modules` 缺包时只报错，不自动重建。建图前引导、工作区安装范围与 SDK 显式接入见 [developer.md](references/developer.md#本地包执行前准备)。
 - 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管。
 - 确定性动作测试红线：使用 `runtime.actions.register` 或 `registerOnce` 按引用与绑定精确模拟下游；保留真实 Runner、`uses` 授权与契约校验，不手工替换 `ctx`。未命中的具名模拟直接失败，不能访问真实远端；网络协议能力另用回环服务集成测试验证。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。

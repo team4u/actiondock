@@ -21,6 +21,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { ActionDockHostOptions } from "../host/types";
+import type { LocalPackagePreparer } from "../invocation/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
 import type { ActionBindings } from "../invocation/bindings";
@@ -363,8 +364,13 @@ export interface CreateActionDockOptions {
   recoverOrphans?: boolean;
   /** 是否开启管理端口（默认 true） */
   enableManagement?: boolean;
-  /** 是否允许执行依赖自动安装（包括事务恢复中的依赖安装） */
+  /**
+   * 是否允许执行依赖自动安装（主要控制启动与事务恢复中的依赖安装；
+   * 本地包运行期准备由 prepareLocalPackage 注入器根据自身配置决定）。
+   */
   allowInstall?: boolean;
+  /** 本地包准备协调器回调 */
+  prepareLocalPackage?: LocalPackagePreparer;
 }
 
 /**

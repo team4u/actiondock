@@ -8,6 +8,7 @@
 - [类型生成](#自动生成-typescript-类型声明)
 - [上下文接口](#运行时上下文-api-速查)
 - [级联调用与依赖](#动作级联调用与跨包依赖声明)
+- [本地包执行前准备](#本地包执行前准备)
 - [命名绑定与远端调用](#动作命名绑定与远端调用)
 - [受管进程](#受管进程与系统命令治理)
 - [规程编写](#playbook-任务规程编写规范)
@@ -253,6 +254,40 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
   - 传递依赖隔离原则：若目标包属于间接传递依赖，直接调用将被拦截，除非被直接依赖包可见的 Playbook 显式委托。
   - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
   - 环路死锁保护：系统内置环路检测与递归配额保护，当调用链成环时抛出 `ACTION_CALL_CYCLE`，派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
+
+---
+
+## 本地包执行前准备
+
+本地 `ad run` 为主动作与已发现的本地子动作启用执行前准备：目标授权、环路与配额检查通过后，在首次导入业务模块前检查依赖。`uses` 仅用于授权，未调用的包不会单独触发准备；一次安装仍按安装根的 `package.json` 与工作区配置执行。
+
+若当前工程声明了正式 Action 包依赖，CLI 会在创建宿主前准备建图所需的工程依赖。执行前准备不会改变已组装的宿主快照，安装过程中出现的新 Action 包不会自动注册。已有 `node_modules` 但缺少必需依赖时只报 `DEPENDENCIES_NOT_READY`，不会自动重建。
+
+SDK、`ad serve`、`ad mcp` 默认不新增执行前首装。编程式宿主需要该能力时，在保证建图所需包元数据已可读的前提下，显式传入 `prepareLocalPackage`：
+
+```ts
+import { createActionDock } from "@actiondock/core";
+import { createLocalPackagePreparer } from "@actiondock/core/project";
+
+const allowInstall = process.env.ACTIONDOCK_AUTO_INSTALL !== "false";
+const service = await createActionDock({
+  projectRoot: process.cwd(),
+  allowInstall,
+  prepareLocalPackage: createLocalPackagePreparer({ install: allowInstall }),
+});
+try {
+  const result = await service.execution.run("demo/greet", { name: "Alice" });
+  console.log(result);
+} finally {
+  await service.close();
+}
+```
+
+- `allowInstall` 控制事务恢复安装；准备器的 `install` 控制执行前首装，两者应使用同一个策略值。`install: false` 仍执行就绪检查。
+- 准备回调接收目标 `identity`、`packageRoot`，以及包含 `signal`、`rootRunId` 的上下文。无物理根目录的运行时与远端目标不会触发回调。
+- `createLocalPackagePreparer` 按包实例与快照缓存就绪结果，按根运行与真实安装目录合并在途任务。共享安装成功后，每个包仍须独立检查自己的依赖；共享失败会传给所有等待者，不自动重试或永久缓存失败。
+- 一个等待者取消不影响其他等待者；最后一个等待者取消时中止安装，等到底层清理完成才释放工程锁。自定义回调也必须响应 `signal` 并等待清理结束，宿主关闭会等待这些在途准备。
+- 子包准备失败不会重跑父动作，也不会撤销父动作此前的副作用。`--no-install` 与 `ACTIONDOCK_AUTO_INSTALL=false` 贯穿 CLI 本地调用链，智能体不得绕过禁装策略手动安装。
 
 ---
 

@@ -122,12 +122,17 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 安全边界：stdin 原始字节与最终入参序列化结果分别受默认 10MiB 上限约束。源字节超限报 `INPUT_LIMIT_EXCEEDED`，合并字段或 JSON 转义后总大小超限报 `FLAT_INPUT_LIMIT_EXCEEDED`；严格 UTF-8 校验失败报 `INPUT_FILE_READ_FAILED`，不是 JSON 解析失败。等待 stdin 时可通过取消信号退出；`--text-field` 是输出选择，可与本选项同时使用。
     - 管道非事务：普通 shell 管道不是事务，`pipefail` 只能反映失败不能阻止下游已写入；高风险导入、发评论、部署建议先完整生成并校验再写入。
   - 依赖按需准备与 `--no-install`：
-    - 仅本地 `ad run` 默认允许在当前工程或目标链接包尚未创建 `node_modules` 且必需直接生产依赖未物化时，自动执行首次依赖安装；
-    - 增加 `--no-install` 选项；命令行指定 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false` 时，禁止自动首装与事务恢复安装；
+    - 仅本地 `ad run` 默认按需准备依赖：主动作与宿主包图快照中已有的本地子动作均在授权后、实际首次执行调用前按需准备依赖；
+    - 若当前工程在 `actiondock.json.dependencies` 中声明了正式 Action 包依赖，CLI 会先按工程依赖完成建图所需的首次准备，再固定宿主快照；这一步同样遵守禁装策略。仅普通 npm 依赖缺失时，未知动作不会触发安装；
+    - 未注入准备回调时，SDK、`ad serve`、`ad mcp` 不新增按需首装行为；既有事务崩溃恢复安装仍受 `allowInstall` 及 `ACTIONDOCK_AUTO_INSTALL` 环境变量控制；
+    - 命令行指定 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false` 时，整条调用链均禁止自动首装与恢复安装，仍会检查依赖是否就绪，智能体严禁绕过；
+    - `uses` 仅为调用权限授权，不能作为安装清单；未被实际调用的已登记包不会单独触发准备。一次安装的范围仍由安装根的 `package.json` 与工作区配置决定；
+    - 远端子动作通过对应 Profile 在远端执行，绝不在本机执行依赖查找或安装（即使本机存在同名包）；
+    - 运行期不会动态扩大宿主包图快照，新 Action 包不会在运行期自动加入宿主；
+    - 子动作依赖准备失败不会撤销父动作此前已产生的副作用，框架也绝不自动重跑父动作；
     - 依赖判定以必需直接生产依赖元数据是否物化为依据，不执行业务代码，不承诺完整依赖健康检查，`optionalDependencies` 缺失不视为必须安装；
     - 若安装根已存在 `node_modules` 但必需生产依赖缺失或损坏，严禁自动重建，将抛出 `DEPENDENCIES_NOT_READY` 并提示手动修复；
-    - 若目标为远端服务，不在本机执行依赖查找或安装；
-    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动 Action 且不自动重试。
+    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动对应 Action 且不自动重试。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。

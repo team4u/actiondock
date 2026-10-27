@@ -10,6 +10,7 @@ export {
 } from "../invocation/bindings";
 export * from "./digest";
 export * from "./dependencies";
+export * from "./preparation";
 export * from "./package-manager";
 export * from "./init";
 export * from "./loader";

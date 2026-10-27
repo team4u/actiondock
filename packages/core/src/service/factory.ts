@@ -32,6 +32,7 @@ export async function createActionDock(
       recoverOrphans: options.recoverOrphans,
       enableManagement: options.enableManagement,
       allowInstall: options.allowInstall,
+      prepareLocalPackage: options.hostOptions?.prepareLocalPackage ?? options.prepareLocalPackage,
     });
     return host;
   }

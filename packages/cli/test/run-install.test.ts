@@ -161,8 +161,12 @@ export default defineAction({
     }
   });
 
-  it("当目标动作为未知动作时，前置解析容错并由正式管线返回标准 ACTION_NOT_FOUND", async () => {
-    const dir = createTestProject();
+  it("当前工程普通 npm 依赖缺失，运行 unknownAction 返回 ACTION_NOT_FOUND 且不创建 node_modules", async () => {
+    const dir = createTestProject({
+      dependencies: {
+        "uninstalled-dummy-npm-pkg": "^1.0.0",
+      },
+    });
 
     try {
       const res = await runCliAsync(["run", "unknownAction", "--json"], dir);
@@ -170,6 +174,8 @@ export default defineAction({
       const parsed = JSON.parse(res.stdout.toString());
       assert.strictEqual(parsed.ok, false);
       assert.strictEqual(parsed.error.code, "ACTION_NOT_FOUND");
+      // 普通 npm 依赖缺失但 actiondock.json 无 dependencies 时，不应提前安装
+      assert.strictEqual(existsSync(join(dir, "node_modules")), false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

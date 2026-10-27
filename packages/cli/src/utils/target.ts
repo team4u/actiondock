@@ -4,6 +4,7 @@ import {
   createNodePlatform,
   findProjectRoot,
   type ActionDockService,
+  type LocalPackagePreparer,
 } from "@actiondock/core";
 import {
   resolvePackageRoot,
@@ -122,6 +123,8 @@ export async function withService(
     requireRemote?: boolean;
     /** 是否允许执行依赖安装（包括事务恢复与按需首装） */
     allowInstall?: boolean;
+    /** 本地包按需准备拦截器（仅 local 分支使用，首次 import 前按需触发） */
+    prepareLocalPackage?: LocalPackagePreparer;
   }
 ): Promise<void> {
   const resolved = resolveTargetFromOptions(options, context);
@@ -165,6 +168,9 @@ export async function withService(
             : undefined),
           recoverOrphans,
           allowInstall: localOptions?.allowInstall,
+          ...(localOptions?.prepareLocalPackage !== undefined
+            ? { prepareLocalPackage: localOptions.prepareLocalPackage }
+            : undefined),
         });
 
   try {

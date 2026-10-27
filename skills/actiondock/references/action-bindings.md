@@ -80,6 +80,7 @@ await ctx.actions("pricing/quote", input, { binding: "primary" });
 - 显式指定的绑定不存在：直接抛出 `NOT_FOUND`，不会回退到 `default`、本地或其他远端。
 - 存在本地同名实现作为参照时：远端的 `inputSchema`、`outputSchema` 必须与本地深度一致，不一致时报 `INVALID_ARGUMENT`。契约一致不代表业务效果天然可互换。
 - 没有本地参照时：由远端服务校验其动作契约，不下载实现源码。
+- 级联依赖准备与权限边界：`uses` 仅用于声明权限与依赖拓扑，不作为安装清单；未实际调用的包不会单独触发准备。本地 `ad run` 为已有本地子动作启用执行前准备，远端子调用不触发本机同名包准备。`--no-install` 贯穿所有本地子调用；子包依赖失败不重跑父动作且保留其已有副作用。建图前引导、安装范围与 SDK 接入见 [developer.md](developer.md#本地包执行前准备)，CLI 选项见 [cli.md](cli.md)。
 
 ## 编程式装配与配置快照
 

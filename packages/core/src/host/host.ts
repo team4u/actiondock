@@ -30,6 +30,7 @@ import type {
 import {
   createRootInvocationContext,
   type InvocationContext,
+  type LocalPackagePreparer,
   type RunOptions,
 } from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
@@ -175,6 +176,10 @@ export class DefaultActionDockHost implements ActionDockHost {
   private maxSubRuns: number;
   private eventSink: EventSink;
   private isClosed = false;
+  private readonly prepareLocalPackage?: LocalPackagePreparer;
+  private readonly closeController = new AbortController();
+  private readonly activePreparations = new Set<Promise<void>>();
+  private closePromise?: Promise<void>;
   private dataDirLock?: DataDirLock;
   private failedLinkedPackages = new Map<string, { path: string; error: string }>();
   private failedAutoLoad?: { projectRoot: string; error: string };
@@ -220,6 +225,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.hostSessionId = randomUUID();
     this.options = options;
     this.allowInstall = options.allowInstall;
+    this.prepareLocalPackage = options.prepareLocalPackage;
     this.remoteInvoker = new RemoteInvocationExecutor({ logger: options.logger });
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
@@ -998,9 +1004,10 @@ export class DefaultActionDockHost implements ActionDockHost {
           origin: context.origin,
         };
 
-        const ticket = await targetRuntime!.startInvocation(
+        const ticket = await this.dispatchLocalInvocation(
+          targetRuntime!,
           targetActionId,
-          childInput as JsonValue,
+          childInput,
           subInvocationContext
         );
         if (!ticket.result) {
@@ -1282,11 +1289,140 @@ export class DefaultActionDockHost implements ActionDockHost {
       origin: effectiveOptions.origin,
     });
 
-    // 调度目标包执行服务
-    return targetRuntime.startInvocation(
+    // 调度目标包执行服务（经由本地分发中枢统一准备与复核）
+    return this.dispatchLocalInvocation(
+      targetRuntime,
       targetActionId,
       input,
       rootContext
+    );
+  }
+
+  /**
+   * 私有本地 Action 调度中枢。
+   * 统一处理本地已授权目标的准备（若已注入 prepareLocalPackage 且存在物理包根路径）、
+   * 中断与关闭复核，并分发至目标 Runtime 的 startInvocation。
+   */
+  private async dispatchLocalInvocation(
+    targetRuntime: PackageRuntime,
+    targetActionId: string,
+    input: unknown,
+    context: InvocationContext
+  ): Promise<ExecutionTicket> {
+    if (this.isClosed) {
+      const runId = context.runId;
+      const error = buildRuntimeError(
+        SERVICE_CLOSED,
+        "ActionDockHost is closed: new tasks rejected",
+        { package: targetRuntime.packageId, action: targetActionId, phase: "dispatch" }
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
+    }
+
+    if (context.signal.aborted) {
+      const runId = context.runId;
+      const error = buildRuntimeError(
+        ACTION_CANCELLED,
+        "Action execution was cancelled before starting",
+        { package: targetRuntime.packageId, action: targetActionId, phase: "dispatch" }
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
+    }
+
+    const mergedSignal = AbortSignal.any([context.signal, this.closeController.signal]);
+
+    if (this.prepareLocalPackage && targetRuntime.packageRoot) {
+      const prepPromise = Promise.resolve().then(() =>
+        this.prepareLocalPackage!(
+          {
+            identity: targetRuntime.identity,
+            packageRoot: targetRuntime.packageRoot!,
+          },
+          {
+            signal: mergedSignal,
+            rootRunId: context.rootRunId,
+          }
+        )
+      );
+
+      this.activePreparations.add(prepPromise);
+      try {
+        await prepPromise;
+      } catch (err: any) {
+        const code =
+          (err instanceof ActionDockError ? err.code : undefined) ||
+          (context.signal.aborted ? ACTION_CANCELLED : undefined) ||
+          (this.closeController.signal.aborted ? SERVICE_CLOSED : undefined) ||
+          (err?.code && typeof err.code === "string" ? err.code : EXECUTION_FAILED);
+
+        const message = err?.message || "Package preparation failed";
+        const hint = err?.details?.hint ?? (err as any)?.hint;
+        const details = {
+          ...(err?.details || {}),
+          package: targetRuntime.packageId,
+          action: targetActionId,
+          phase: "preparation",
+          ...(hint ? { hint } : {}),
+        };
+
+        const runId = context.runId;
+        const error = buildRuntimeError(code as ErrorCode, message, details);
+        return {
+          runId,
+          status: "failed",
+          result: Promise.resolve({ ok: false, runId, error }),
+        };
+      } finally {
+        this.activePreparations.delete(prepPromise);
+      }
+    }
+
+    // 准备后再次复核取消与 Host 关闭状态
+    if (this.isClosed || this.closeController.signal.aborted) {
+      const runId = context.runId;
+      const error = buildRuntimeError(
+        SERVICE_CLOSED,
+        "ActionDockHost is closed: new tasks rejected",
+        { package: targetRuntime.packageId, action: targetActionId, phase: "post-preparation" }
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
+    }
+
+    if (context.signal.aborted) {
+      const runId = context.runId;
+      const error = buildRuntimeError(
+        ACTION_CANCELLED,
+        "Action execution was cancelled after preparation",
+        { package: targetRuntime.packageId, action: targetActionId, phase: "post-preparation" }
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
+    }
+
+    const effectiveContext: InvocationContext = {
+      ...context,
+      signal: mergedSignal,
+    };
+
+    return targetRuntime.startInvocation(
+      targetActionId,
+      input as JsonValue,
+      effectiveContext
     );
   }
 
@@ -1883,38 +2019,50 @@ export class DefaultActionDockHost implements ActionDockHost {
    * 外部传入借用的 Runtime 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。
    */
   async close(options?: { timeoutMs?: number; graceMs?: number }): Promise<void> {
+    if (this.closePromise) return this.closePromise;
     if (this.isClosed) return;
-    this.isClosed = true;
-    const allRuntimes = Array.from(this.runtimes.values());
-    await Promise.all(
-      allRuntimes.map(async (runtime) => {
-        try {
-          await runtime.close(options);
-        } catch {
-          // 忽略 Runtime 关闭异常，确保全部安全释放
-        }
-      })
-    );
-    const invocationCloseErrors = await this.closeInvocationTargets();
-    this.runtimes.clear();
-    this.actionBindings.clear();
-    this.remoteTargets.clear();
-    await this.remoteInvoker.close();
 
-    try {
-      this.globalStorage?.close();
-    } catch {
-      // 忽略全局存储关闭异常
-    }
-    this.globalStorage = undefined;
+    this.closePromise = (async () => {
+      this.isClosed = true;
+      this.closeController.abort(new ActionDockError(SERVICE_CLOSED, "ActionDockHost is closing"));
 
-    try {
-      this.dataDirLock?.release();
-    } catch {
-      // 忽略目录排他锁释放异常
-    }
-    this.dataDirLock = undefined;
-    if (invocationCloseErrors.length) throw new AggregateError(invocationCloseErrors, "Invocation target cleanup failed");
+      if (this.activePreparations.size > 0) {
+        await Promise.allSettled(Array.from(this.activePreparations));
+      }
+
+      const allRuntimes = Array.from(this.runtimes.values());
+      await Promise.all(
+        allRuntimes.map(async (runtime) => {
+          try {
+            await runtime.close(options);
+          } catch {
+            // 忽略 Runtime 关闭异常，确保全部安全释放
+          }
+        })
+      );
+      const invocationCloseErrors = await this.closeInvocationTargets();
+      this.runtimes.clear();
+      this.actionBindings.clear();
+      this.remoteTargets.clear();
+      await this.remoteInvoker.close();
+
+      try {
+        this.globalStorage?.close();
+      } catch {
+        // 忽略全局存储关闭异常
+      }
+      this.globalStorage = undefined;
+
+      try {
+        this.dataDirLock?.release();
+      } catch {
+        // 忽略目录排他锁释放异常
+      }
+      this.dataDirLock = undefined;
+      if (invocationCloseErrors.length) throw new AggregateError(invocationCloseErrors, "Invocation target cleanup failed");
+    })();
+
+    return this.closePromise;
   }
 }
 

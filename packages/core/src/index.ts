@@ -62,6 +62,11 @@ export type {
 } from "./execution/types";
 
 export type { ActionBindings, ActionBindingTarget } from "./invocation/bindings";
+export type {
+  LocalPackagePreparationTarget,
+  LocalPackagePreparationContext,
+  LocalPackagePreparer,
+} from "./invocation/types";
 
 // 4. 动作与包描述模型
 export type {
