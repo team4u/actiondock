@@ -121,6 +121,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 组合规则：可与 `--` 后扁平赋值组合补充其他字段；与 `--input`、`--input-file`（含 `-`）严格互斥（`INPUT_CONFLICT`）；flat 重复赋值同名或嵌套子路径以 `INPUT_PATH_CONFLICT` 拒绝；非法字段名（空、含点分路径、危险属性）以 `INVALID_FLAT_ARGUMENT` 拒绝，均发生在读取与执行前。
     - 安全边界：stdin 原始字节与最终入参序列化结果分别受默认 10MiB 上限约束。源字节超限报 `INPUT_LIMIT_EXCEEDED`，合并字段或 JSON 转义后总大小超限报 `FLAT_INPUT_LIMIT_EXCEEDED`；严格 UTF-8 校验失败报 `INPUT_FILE_READ_FAILED`，不是 JSON 解析失败。等待 stdin 时可通过取消信号退出；`--text-field` 是输出选择，可与本选项同时使用。
     - 管道非事务：普通 shell 管道不是事务，`pipefail` 只能反映失败不能阻止下游已写入；高风险导入、发评论、部署建议先完整生成并校验再写入。
+  - 依赖按需准备与 `--no-install`：
+    - 仅本地 `ad run` 默认允许在当前工程或目标链接包尚未创建 `node_modules` 且必需直接生产依赖未物化时，自动执行首次依赖安装；
+    - 增加 `--no-install` 选项；命令行指定 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false` 时，禁止自动首装与事务恢复安装；
+    - 依赖判定以必需直接生产依赖元数据是否物化为依据，不执行业务代码，不承诺完整依赖健康检查，`optionalDependencies` 缺失不视为必须安装；
+    - 若安装根已存在 `node_modules` 但必需生产依赖缺失或损坏，严禁自动重建，将抛出 `DEPENDENCIES_NOT_READY` 并提示手动修复；
+    - 若目标为远端服务，不在本机执行依赖查找或安装；
+    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动 Action 且不自动重试。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。

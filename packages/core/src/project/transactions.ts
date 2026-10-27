@@ -397,7 +397,7 @@ export async function beginTransaction(
  */
 export async function recoverPendingTransactions(
   projectRoot: string,
-  options?: { frozenInstall?: boolean }
+  options?: { frozenInstall?: boolean; allowInstall?: boolean }
 ): Promise<string[]> {
   const txBaseDir = join(projectRoot, ".actiondock", "transactions");
   if (!existsSync(txBaseDir)) {
@@ -431,6 +431,16 @@ export async function recoverPendingTransactions(
       }
 
       if (meta.status === "pending") {
+        if (
+          options?.frozenInstall !== false &&
+          (options?.allowInstall === false || process.env.ACTIONDOCK_AUTO_INSTALL === "false")
+        ) {
+          throw new ActionDockError(
+            PROJECT_RECOVERY_REQUIRED,
+            `PROJECT_RECOVERY_REQUIRED: Project at '${projectRoot}' has pending transactions requiring recovery install, but installation is disabled (--no-install or ACTIONDOCK_AUTO_INSTALL=false).`
+          );
+        }
+
         const snapshotDir = join(txDir, "snapshot");
         for (const rec of meta.files) {
           const targetPath = join(projectRoot, rec.name);

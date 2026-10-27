@@ -1,7 +1,15 @@
 import {
   validateActionInputValue,
   mapInputValidationFailure,
+  ensureProjectDependencies,
 } from "@actiondock/core/project";
+import {
+  PackageDiscovery,
+  PackageGraphBuilder,
+  DefaultActionCatalog,
+  resolveAction,
+  type PackageGraph,
+} from "@actiondock/core/graph";
 import {
   resolveTarget,
 } from "@actiondock/core/profile";
@@ -11,6 +19,13 @@ import {
 import {
   ACTION_NOT_FOUND,
   NOT_FOUND,
+  PACKAGE_NOT_FOUND,
+  INVALID_ACTION_REF,
+  DEPENDENCIES_NOT_READY,
+  DEPENDENCY_INSTALL_FAILED,
+  PROJECT_BUSY,
+  PROJECT_RECOVERY_REQUIRED,
+  findProjectRoot,
   resolveExecutionHint,
 } from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
@@ -181,15 +196,82 @@ export async function executeAction(
       );
     }
 
-    // 目标拓扑解析（仅 local 分支需要包寻址）
-    const targetPackageRoot = resolveLocalPackageRoot(options.package);
-    if (options.package && !targetPackageRoot) {
-      throw packageNotFoundError(options.package);
-    }
-
     let targetRef = id;
     if (options.package && !id.includes("/")) {
       targetRef = `${options.package}/${id}`;
+    }
+
+    const allowInstall =
+      options.install !== false && process.env.ACTIONDOCK_AUTO_INSTALL !== "false";
+
+    let targetPackageRoot: string | undefined;
+
+    // 仅在 local 本地分支执行前置依赖准备与包寻址（remote 分支不进行本机包查找与环境准备）
+    if (resolvedTopology.type === "local") {
+      const resolvedRoot = resolveLocalPackageRoot(options.package);
+      if (options.package && !resolvedRoot) {
+        throw packageNotFoundError(options.package);
+      }
+      targetPackageRoot = resolvedRoot || undefined;
+
+      const currentRoot = targetPackageRoot || findProjectRoot() || undefined;
+      if (currentRoot) {
+        await ensureProjectDependencies(currentRoot, {
+          install: allowInstall,
+          signal: effectiveSignal,
+          onProgress: (msg) => writeStderr(msg, context),
+        });
+      }
+
+      // 若目标 Action 位于其他链接包，解析并准备目标工程依赖
+      let targetLinkedRootToPrepare: string | undefined;
+      try {
+        let preGraph: PackageGraph;
+        if (currentRoot) {
+          preGraph = new PackageGraphBuilder({
+            projectRoot: currentRoot,
+            allowDevLinks: true,
+            customHome: context?.customHome,
+          }).buildSync();
+        } else {
+          const discovery = new PackageDiscovery({
+            customHome: context?.customHome,
+            scanLinkedPackages: true,
+          });
+          const discovered = discovery.discoverSync();
+          preGraph = new PackageGraphBuilder({
+            packages: discovered,
+          }).buildSync();
+        }
+
+        const preCatalog = new DefaultActionCatalog(preGraph);
+        const resolved = resolveAction(targetRef, {
+          graph: preGraph,
+          catalog: preCatalog,
+          caller: preGraph.rootPackageId,
+        });
+        const targetNode = preGraph.packages.get(resolved.package.id);
+        if (targetNode?.root && targetNode.root !== currentRoot) {
+          targetLinkedRootToPrepare = targetNode.root;
+        }
+      } catch (err: any) {
+        const isExpectedResolutionError =
+          err?.code === ACTION_NOT_FOUND ||
+          err?.code === PACKAGE_NOT_FOUND ||
+          err?.code === INVALID_ACTION_REF ||
+          err?.code === NOT_FOUND;
+        if (!isExpectedResolutionError) {
+          throw err;
+        }
+      }
+
+      if (targetLinkedRootToPrepare) {
+        await ensureProjectDependencies(targetLinkedRootToPrepare, {
+          install: allowInstall,
+          signal: effectiveSignal,
+          onProgress: (msg) => writeStderr(msg, context),
+        });
+      }
     }
 
     // 通过 Service 统一执行
@@ -275,7 +357,7 @@ export async function executeAction(
           }
         }
       },
-      { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true, ownDataDir: true }
+      { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true, ownDataDir: true, allowInstall }
     );
   } catch (err: any) {
     // sigint 取消源、中断链路特征错误码或 SigintError 本身，均统一归并为 SigintError
@@ -346,7 +428,8 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("-i, --input <json>", "Action input as inline JSON")
     .option("-f, --input-file <path>", "Action input from JSON file, or '-' for stdin")
     .option("-c, --config <key=value|key:=json...>", "Temporary config override (repeatable)")
-    .option("--stdin-field <field>", "Bind raw stdin text to a top-level action input field");
+    .option("--stdin-field <field>", "Bind raw stdin text to a top-level action input field")
+    .option("--no-install", "Disable automatic installation of missing dependencies");
 
   (cmd as any).unknownOption = function (this: Command, flag: string) {
     this.error(

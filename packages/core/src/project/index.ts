@@ -9,6 +9,7 @@ export {
   type ActionBindingTarget,
 } from "../invocation/bindings";
 export * from "./digest";
+export * from "./dependencies";
 export * from "./init";
 export * from "./loader";
 export * from "./lockfile";

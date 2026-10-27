@@ -107,13 +107,14 @@ describe("技能说明轻量化", () => {
     assert.ok(!md.includes("--json -- ASSIGNMENT"));
     assert.ok(!md.includes("--json --input-file"));
 
-    // 标准初始化流程：先安装依赖再 link
+    // 源码型标准流程：先 link，默认 ad run 首装，手动预装为可选说明
     assert.ok(md.includes("npm install --omit=dev"));
     assert.ok(md.includes("ad link"));
     const idxInstall = md.indexOf("npm install --omit=dev");
     const idxLink = md.indexOf("ad link");
     assert.ok(idxInstall > 0);
-    assert.ok(idxLink > idxInstall);
+    assert.ok(idxLink > 0);
+    assert.ok(idxInstall > idxLink);
   });
 
   it("独立运行型模板不展开完整 Schema", () => {

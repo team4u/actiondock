@@ -363,6 +363,8 @@ export interface CreateActionDockOptions {
   recoverOrphans?: boolean;
   /** 是否开启管理端口（默认 true） */
   enableManagement?: boolean;
+  /** 是否允许执行依赖自动安装（包括事务恢复中的依赖安装） */
+  allowInstall?: boolean;
 }
 
 /**

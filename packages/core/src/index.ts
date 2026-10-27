@@ -92,6 +92,13 @@ export {
   loadProjectConfig,
   findProjectRoot,
 } from "./project/loader";
+export {
+  ensureProjectDependencies,
+} from "./project/dependencies";
+export type {
+  EnsureProjectDependenciesOptions,
+  EnsureProjectDependenciesResult,
+} from "./project/dependencies";
 export type {
   ProjectConfig,
 } from "./project/types";
@@ -134,6 +141,8 @@ export {
   CAPABILITY_UNAVAILABLE,
   STATE_KEY_NOT_FOUND,
   STORAGE_BUSY,
+  DEPENDENCIES_NOT_READY,
+  DEPENDENCY_INSTALL_FAILED,
   PROJECT_BUSY,
   PROJECT_RECOVERY_REQUIRED,
   EVENT_BACKPRESSURE_LIMIT,

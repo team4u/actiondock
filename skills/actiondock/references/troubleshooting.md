@@ -69,6 +69,8 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `ACTION_TIMEOUT` | Action 执行时间超过了设定的超时阈值。 | 优化底层耗时操作，或在调用时添加 `--timeout 60s` 增大超时时间。 |
 | `ACTION_LOAD_FAILED` | Action 源码入口模块加载失败（语法错误或依赖缺失）。 | 检查入口文件物理路径与 TypeScript 语法，并在包目录下执行依赖安装。 |
 | `UNMET_LOCAL_DEPENDENCY` | Action 源码引用了未在 files 字段中声明的本地代码模块。 | 在 `actiondock.json` 中配置 `"files": ["<dir>"]`（例如 `"files": ["src"]`）。 |
+| `DEPENDENCIES_NOT_READY` | 必需直接生产依赖未物化且禁止自动首装，或已有 node_modules 存在损坏。 | 若显式使用了 `--no-install` 或环境变量禁用，说明调用明确禁止安装，报告依赖未就绪，禁止擅自执行安装绕过策略；使用者明确要求预装或已有依赖损坏时，按对应管理器（npm 或 bun）在安装根目录执行安装修复。 |
+| `DEPENDENCY_INSTALL_FAILED` | 自动依赖安装进程启动失败、超时或退出码异常。 | 检查安装根目录对应包管理器配置、网络或锁文件冲突，按实际使用的包管理器排查具体错误输出。 |
 
 ---
 

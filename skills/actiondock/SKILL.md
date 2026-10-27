@@ -32,7 +32,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
-| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>] [--json]` | 规范调用语法，支持扁平参数与 `--input` / `--input-file` 互斥输入；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>]` | 规范调用语法；本地执行默认自动完成源码包缺失直接生产依赖冷首装，支持 `--no-install` 显式禁用 | [cli.md](references/cli.md) |
 | **混合本地与远端依赖** | `ctx.actions.invoke(ref, input, { binding })` | 由调用方 `.actiondock/bindings.json` 选择执行目标；支持同一引用多绑定，`uses` 只声明逻辑权限，不自动降级 | [action-bindings.md](references/action-bindings.md) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果；多条后台任务可用 `ad runs watch` 阻塞等待全部终态聚合退出，后台派工无 runId 时以 `--request-id` 反查等待 | [cli.md](references/cli.md) |
@@ -47,7 +47,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出源码型、Node 目录型或复合套件技能（配合 --vendor-deps 物化依赖） | [build-and-export.md](references/build-and-export.md) |
 | **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](references/build-and-export.md) |
 | **安装与装载 Skill** | `npx skills add <repo>` 或放置于客户端目录 | 智能体技能获取、安装与主流客户端装载路径配置 | [consumer.md](references/consumer.md) |
-| **环境与依赖按需自举** | `npm install --omit=dev && ad link .` | 首次运行报错缺依赖时，Agent 执行环境自举与本地挂载 | [consumer.md](references/consumer.md) |
+| **环境与依赖按需自举** | 见排查指引 | 宿主缺少 ad 命令行或已有依赖损坏时按指引自愈 | [consumer.md](references/consumer.md) |
 | **调度已装载技能** | 意图匹配 -> 规程决议 -> 查验契约 -> 执行调用 | 引导智能体调度底层能力的标准化全生命周期流 | [consumer.md](references/consumer.md) |
 | **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](references/cli.md) |
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
@@ -72,7 +72,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 ### 作业流一：作为消费者使用 Action 与 Skill
 
-- 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
+- 智能体技能装载与执行：通过 `npx skills add` 安装或放置于客户端技能目录；本地调用 `ad run` 默认自动完成源码包缺失直接生产依赖冷首装；若宿主环境缺失 `ad` 命令行工具，Agent 按需全局安装 `ad`；若调用显式使用了 `--no-install` 或环境变量禁用安装，应保持禁装策略并报告依赖缺失，禁止擅自安装绕过策略；仅当已有依赖损坏或使用者明确要求预装时，按实际使用的包管理器执行修复命令。
 - 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 编码顾问） -> 确定性调用（`ad run <action> [control-options] -- <assignments...>` 或配合 `--input` / `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目依赖消费：需要本地实现的正式依赖通过 `ad add <package>` 安装并锁定；`ad link` 用于本地源码挂载与联调。纯远端依赖通过 `uses` 声明能力，并由命名绑定指向 Profile，无需安装远端源码；详见 [action-bindings.md](references/action-bindings.md)。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。

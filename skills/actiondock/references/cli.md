@@ -119,6 +119,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
     - 可与 `--` 后扁平赋值组合；与 `--input`、`--input-file`（含 `-`）互斥；flat 重复占用同名或子路径报 `INPUT_PATH_CONFLICT`；非法字段名报 `INVALID_FLAT_ARGUMENT`，均在读取与执行前。
     - stdin 源字节与最终入参序列化结果各自受默认 10MiB 上限约束；分别超限报 `INPUT_LIMIT_EXCEEDED` 与 `FLAT_INPUT_LIMIT_EXCEEDED`，合并字段及 JSON 转义放大也计入最终大小。非法 UTF-8 报读取失败而非 JSON 解析失败；等待 stdin 时 Ctrl-C 可退出。
     - 管道非事务：`pipefail` 只能反映失败不能阻止下游已写入；高风险写入建议先完整生成并校验再执行。
+  - 依赖按需准备与 `--no-install`：
+    - 仅本地 `ad run` 默认允许在当前工程或目标链接包尚未创建 `node_modules` 且必需直接生产依赖未物化时，自动执行首次依赖安装；
+    - 增加 `--no-install` 选项；命令行指定 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false` 时，禁止自动首装与事务恢复安装；
+    - 依赖判定以必需直接生产依赖元数据是否物化为依据，不执行业务代码，不承诺完整依赖健康检查，`optionalDependencies` 缺失不视为必须安装；
+    - 若安装根已存在 `node_modules` 但必需生产依赖缺失或损坏，严禁自动重建，将抛出 `DEPENDENCIES_NOT_READY` 并提示手动修复；
+    - 若目标为远端服务，不在本机执行依赖查找或安装；
+    - 依赖安装进度输出至 stderr，机器输出 stdout 保持协议完整；安装失败、超时或被取消时不启动 Action 且不自动重试。
   - 机器输出模式：仅在需要结构化提取时使用 `--json`，输出标准 JSON 结果信封并忽略默认正文注解；当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
   - 纯文本输出模式：
     - 默认模式：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。

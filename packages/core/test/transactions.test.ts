@@ -302,4 +302,29 @@ rl.on("line", (cmd) => {
     assert.strictEqual(caughtErr?.code, "ENOTDIR");
   });
 
+  it("当 allowInstall 为 false 且存在待恢复事务时，recoverPendingTransactions 拒绝安装并抛出 PROJECT_RECOVERY_REQUIRED，保留原始文件不变", async () => {
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "tx-test", version: "1.0.0" }));
+    const tx = await beginTransaction(tempDir, "recovery blocked test");
+
+    // 模拟破坏性修改
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "tx-test", version: "modified-in-tx" }));
+    tx.releaseLock();
+
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+
+    let caughtErr: any;
+    try {
+      await recoverPendingTransactions(tempDir, { frozenInstall: true, allowInstall: false });
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    assert.notStrictEqual(caughtErr, undefined);
+    assert.strictEqual(caughtErr?.code, "PROJECT_RECOVERY_REQUIRED");
+    // 事务状态仍应保持 pending，不被篡改
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+    // 文件内容保留为未篡改状态（由于拦截在恢复前，文件保持原样）
+    const current = JSON.parse(readFileSync(join(tempDir, "package.json"), "utf-8"));
+    assert.strictEqual(current.version, "modified-in-tx");
+  });
 });

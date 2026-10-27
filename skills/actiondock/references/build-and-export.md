@@ -40,11 +40,11 @@ ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skil
 
 - 浅模式导出轻量定位：`ad export skill` 默认采用源码浅模式导出，仅包含当前包的源码、`actiondock.json` 与 `SKILL.md`，其下游跨包依赖以纯逻辑 `uses` 声明保留，不携带庞大冗余的外部依赖副本。
 - 消费端全局注册共享：
-  - 产物部署至宿主环境后，标准流程为先在技能根目录下安装生产依赖：
+  - 产物部署至宿主环境后，可直接在技能根目录下执行链接命令登记至本机全局路由表（`~/.actiondock/registry.json`），本地首次通过 `ad run` 调用时默认自动完成缺失直接生产依赖的首次安装；亦可按需手动执行预先安装：
     ```bash
     npm install --omit=dev
     ```
-  - 依赖安装完成后，执行链接命令登记至本机全局路由表（`~/.actiondock/registry.json`）：
+  - 注册链接命令：
     ```bash
     ad link .
     ```

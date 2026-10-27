@@ -31,6 +31,7 @@ export async function createActionDock(
       logger: options.runtimeOptions.logger,
       recoverOrphans: options.recoverOrphans,
       enableManagement: options.enableManagement,
+      allowInstall: options.allowInstall,
     });
     return host;
   }
@@ -40,6 +41,7 @@ export async function createActionDock(
     ...options,
     recoverOrphans: options.recoverOrphans ?? true,
     enableManagement: options.enableManagement,
+    allowInstall: options.allowInstall,
     ...(options.hostOptions || {}),
   });
   return host;

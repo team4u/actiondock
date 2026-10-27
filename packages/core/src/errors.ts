@@ -104,6 +104,12 @@ export const STATE_KEY_NOT_FOUND = "STATE_KEY_NOT_FOUND";
 /** SQLite 数据库忙或锁定 */
 export const STORAGE_BUSY = "STORAGE_BUSY";
 
+/** 所需生产依赖未就绪且当前环境不允许或不满足自动首装条件 */
+export const DEPENDENCIES_NOT_READY = "DEPENDENCIES_NOT_READY";
+
+/** 自动依赖安装进程启动失败、超时或非零退出 */
+export const DEPENDENCY_INSTALL_FAILED = "DEPENDENCY_INSTALL_FAILED";
+
 /** 工程事务锁被其他活跃进程持有 */
 export const PROJECT_BUSY = "PROJECT_BUSY";
 
@@ -565,6 +571,12 @@ export function resolveExecutionHint(
   if (error.code === ACTION_TIMEOUT) {
     return "Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.";
   }
+  if (error.code === DEPENDENCIES_NOT_READY) {
+    return error.hint || (error.details as any)?.hint || "Tip: Install missing dependencies using 'npm install' or 'bun install'.";
+  }
+  if (error.code === DEPENDENCY_INSTALL_FAILED) {
+    return error.hint || (error.details as any)?.hint || "Tip: Check error output above and try running the package manager manually.";
+  }
   if (error.hint && typeof error.hint === "string") {
     return error.hint;
   }
@@ -615,6 +627,8 @@ export type ErrorCode =
   | typeof CAPABILITY_UNAVAILABLE
   | typeof STATE_KEY_NOT_FOUND
   | typeof STORAGE_BUSY
+  | typeof DEPENDENCIES_NOT_READY
+  | typeof DEPENDENCY_INSTALL_FAILED
   | typeof PROJECT_BUSY
   | typeof PROJECT_RECOVERY_REQUIRED
   | typeof EVENT_BACKPRESSURE_LIMIT

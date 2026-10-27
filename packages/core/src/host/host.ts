@@ -165,6 +165,7 @@ function withAbortSignal<T>(op: () => Promise<T>, signal?: AbortSignal): Promise
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
+  public readonly allowInstall?: boolean;
   private runtimes = new Map<string, PackageRuntime>();
   private extraRuntimes = new Set<PackageRuntime>();
   private extraRuntimeScopes = new Map<PackageRuntime, string>();
@@ -218,6 +219,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     this.hostSessionId = randomUUID();
     this.options = options;
+    this.allowInstall = options.allowInstall;
     this.remoteInvoker = new RemoteInvocationExecutor({ logger: options.logger });
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
@@ -671,7 +673,13 @@ export class DefaultActionDockHost implements ActionDockHost {
           `PROJECT_RECOVERY_REQUIRED: Project at '${root}' has pending transactions requiring recovery. Run an owner command (e.g. 'ad add' or 'ad run') to complete recovery before querying.`
         );
       }
-      await recoverPendingTransactions(root, { frozenInstall: true });
+      if (this.allowInstall === false || process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
+        throw new ActionDockError(
+          PROJECT_RECOVERY_REQUIRED,
+          `PROJECT_RECOVERY_REQUIRED: Project at '${root}' has pending transactions requiring recovery install, but installation is disabled (--no-install or ACTIONDOCK_AUTO_INSTALL=false).`
+        );
+      }
+      await recoverPendingTransactions(root, { frozenInstall: true, allowInstall: this.allowInstall });
     }
 
     try {

@@ -51,6 +51,8 @@ export interface TargetResolutionOptions {
   insecure?: boolean;
   /** 是否允许向非回环地址发送明文 HTTP 请求（对应 --allow-insecure-http） */
   allowInsecureHttp?: boolean;
+  /** 是否允许自动安装依赖（对应 --no-install 反向开关） */
+  install?: boolean;
 }
 
 /**
@@ -118,6 +120,8 @@ export async function withService(
      * 替代原 withRemoteService 的专用实现。
      */
     requireRemote?: boolean;
+    /** 是否允许执行依赖安装（包括事务恢复与按需首装） */
+    allowInstall?: boolean;
   }
 ): Promise<void> {
   const resolved = resolveTargetFromOptions(options, context);
@@ -160,6 +164,7 @@ export async function withService(
             ? { scanLinkedPackages: localOptions.scanLinkedPackages }
             : undefined),
           recoverOrphans,
+          allowInstall: localOptions?.allowInstall,
         });
 
   try {

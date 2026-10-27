@@ -43,18 +43,23 @@ npx skills remove <skill-name>
 
 ---
 
-## Agent 按需自举工序（首次运行失败或缺依赖时）
+## Agent 按需自举工序（环境未就绪或缺依赖时）
 
-用户获取或安装技能后，智能体直接调用即可。若首次执行遇到命令不存在（如 `ad: command not found`）或模块缺失报错，智能体在目标环境中按以下步骤自主完成环境自举：
+用户获取或安装技能后，智能体直接调用即可。本地 `ad run` 默认支持在无 `node_modules` 时自动完成源码包缺失直接生产依赖冷首装。若遇到命令不存在（如 `ad: command not found`）或依赖损坏报错，智能体在目标环境中按以下步骤排查自愈：
 
 - **确认运行时底座**：确保目标机器具备 Node.js 运行环境（建议版本大于等于 24.12.0）。
-- **安装命令行工具链**：在终端执行 `npm install -g @actiondock/cli`。若受限无全局权限，亦可通过 `npx @actiondock/cli` 执行。
-- **安装技能源码依赖**：进入技能根目录，物化本地生产依赖：
+- **安装命令行工具链**：若终端提示 `ad: command not found`，执行 `npm install -g @actiondock/cli`。若受限无全局权限，亦可通过 `npx @actiondock/cli` 执行。
+- **禁止安装策略遵守**：若调用显式指定了 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false`，代表当前调用明确禁止安装依赖，智能体必须严格遵守该策略并报告依赖未就绪，严禁擅自执行安装命令绕过策略。
+- **修复已有损坏依赖或显式预装**：若已有 `node_modules` 存在缺失损坏，或使用者明确要求预先准备环境，进入技能根目录，按项目实际使用的包管理器执行安装：
   ```bash
+  # npm 项目
   npm install --omit=dev
+
+  # bun 项目
+  bun install --production
   ```
   > 多包复合套件技能在聚合根目录下执行一次安装即可物化所有子包依赖。
-- **全局注册挂载**：在技能根目录执行注册命令：
+- **全局注册挂载**：若未全局注册，在技能根目录执行注册命令：
   ```bash
   ad link .
   ```
@@ -63,7 +68,7 @@ npx skills remove <skill-name>
   ```bash
   # 查验 Action 接口契约（编码顾问）
   ad describe <package-id>/<action-id>
-  # 试运行调用（扁平参数规范传参）
+  # 试运行调用（扁平参数规范传参，默认自动首装生产依赖）
   ad run <package-id>/<action-id> -- key=value
   ```
 

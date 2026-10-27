@@ -87,6 +87,8 @@ export interface ActionDockHostOptions {
   eventSink?: EventSink;
   /** 是否开启配置与状态管理端口（默认 true） */
   enableManagement?: boolean;
+  /** 是否允许执行依赖自动安装（包括事务恢复中的依赖安装，默认依据 ACTIONDOCK_AUTO_INSTALL !== "false"） */
+  allowInstall?: boolean;
 }
 
 /**
@@ -97,6 +99,9 @@ export interface ActionDockHostOptions {
 export interface ActionDockHost extends ActionDockService {
   /** 宿主容器初始化配置项（只读） */
   readonly options?: ActionDockHostOptions;
+
+  /** 是否允许依赖安装 */
+  readonly allowInstall?: boolean;
 
   /** 统一事件订阅端口（兼作原生订阅函数与事件服务端口） */
   readonly events: HostEventsPort;
