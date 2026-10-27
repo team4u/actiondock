@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter as pathDelimiter, join } from "node:path";
 import { beginTransaction, hasPendingTransactions } from "@actiondock/core/project";
 import { runCliAsync } from "../helpers/run-cli";
 
@@ -18,6 +18,51 @@ describe("CLI ad run - 事务崩溃恢复与前置超时控制", () => {
   let tempDir: string;
   let fakeBinDir: string;
   let spawnedPids: number[] = [];
+
+  /**
+   * 写入跨平台 npm 替身：POSIX 为 shebang 垫片，Windows 为 npm.cmd 加标准 npm-cli.js 布局，
+   * 行为由 FAKE_NPM_MODE 环境变量统一控制（materialize 物化依赖 / hang 挂起等待终止）。
+   */
+  function writeFakeNpm(): void {
+    const impl = `
+const fs = require("node:fs");
+const path = require("node:path");
+const mode = process.env.FAKE_NPM_MODE;
+if (mode === "hang") {
+  if (process.env.FAKE_NPM_PID_FILE) {
+    fs.writeFileSync(process.env.FAKE_NPM_PID_FILE, String(process.pid));
+  }
+  setInterval(() => {}, 1000);
+} else if (mode === "materialize") {
+  const dep = process.env.FAKE_NPM_DEP_NAME;
+  const dir = path.join(process.cwd(), "node_modules", dep);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: dep, version: "1.0.0" }));
+  fs.writeFileSync(path.join(dir, "actiondock.json"), JSON.stringify({ id: dep, name: dep, version: "1.0.0" }));
+}
+if (mode !== "hang") process.exit(0);
+`;
+    writeFileSync(join(fakeBinDir, "npm-impl.cjs"), impl, "utf-8");
+    if (process.platform === "win32") {
+      // Windows 解析器命中 npm.cmd 后必须能定位标准 npm-cli.js，直接由 Node 运行时加载
+      writeFileSync(join(fakeBinDir, "npm.cmd"), '@node "%~dp0npm-impl.cjs" %*\r\n', "utf-8");
+      mkdirSync(join(fakeBinDir, "npm", "bin"), { recursive: true });
+      writeFileSync(join(fakeBinDir, "npm", "bin", "npm-cli.js"), impl, "utf-8");
+    } else {
+      const shim = join(fakeBinDir, "npm");
+      writeFileSync(shim, '#!/bin/sh\nexec node "$(dirname "$0")/npm-impl.cjs" "$@"\n', {
+        mode: 0o755,
+      });
+      chmodSync(shim, 0o755);
+    }
+  }
+
+  function fakeNpmEnv(extra?: Record<string, string>): Record<string, string> {
+    return {
+      PATH: `${fakeBinDir}${pathDelimiter}${process.env.PATH}`,
+      ...extra,
+    };
+  }
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-run-recovery-timeout-"));
@@ -95,18 +140,7 @@ export default defineAction({
     });
 
     // 创建成功执行的 npm 替身，在恢复时物化依赖
-    const fakeNpm = join(fakeBinDir, "npm");
-    writeFileSync(
-      fakeNpm,
-      `#!/bin/sh
-mkdir -p node_modules/helper-action-dep
-echo '{"name":"helper-action-dep","version":"1.0.0"}' > node_modules/helper-action-dep/package.json
-echo '{"id":"helper-action-dep","name":"helper-action-dep","version":"1.0.0"}' > node_modules/helper-action-dep/actiondock.json
-exit 0
-`,
-      { mode: 0o755 }
-    );
-    chmodSync(fakeNpm, 0o755);
+    writeFakeNpm();
 
     // 开启事务并在崩溃前损坏 manifest
     const tx = await beginTransaction(dir, "simulated crash before run");
@@ -118,7 +152,7 @@ exit 0
     const res = await runCliAsync(
       ["run", "greet", "--json", "--", "name=Alice"],
       dir,
-      { PATH: `${fakeBinDir}:${process.env.PATH}` }
+      fakeNpmEnv({ FAKE_NPM_MODE: "materialize", FAKE_NPM_DEP_NAME: "helper-action-dep" })
     );
 
     assert.strictEqual(res.exitCode, 0);
@@ -194,23 +228,12 @@ export default defineAction({
     });
 
     const pidFile = join(fakeBinDir, "npm.pid");
-    const fakeNpm = join(fakeBinDir, "npm");
-    writeFileSync(
-      fakeNpm,
-      `#!/bin/sh
-echo $$ > "${pidFile}"
-while true; do
-  sleep 1
-done
-`,
-      { mode: 0o755 }
-    );
-    chmodSync(fakeNpm, 0o755);
+    writeFakeNpm();
 
     const res = await runCliAsync(
       ["run", "greet", "--timeout", "50ms", "--json"],
       dir,
-      { PATH: `${fakeBinDir}:${process.env.PATH}` }
+      fakeNpmEnv({ FAKE_NPM_MODE: "hang", FAKE_NPM_PID_FILE: pidFile })
     );
 
     assert.strictEqual(res.exitCode, 1);
