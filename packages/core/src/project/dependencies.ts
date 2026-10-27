@@ -1,8 +1,6 @@
-import { spawn } from "node:child_process";
 import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { findPackageJSON } from "node:module";
 import { dirname, join, matchesGlob, relative, resolve } from "node:path";
-import { StringDecoder } from "node:string_decoder";
 import { pathToFileURL } from "node:url";
 import {
   ActionDockError,
@@ -11,7 +9,11 @@ import {
   DEPENDENCY_INSTALL_FAILED,
   PROJECT_RECOVERY_REQUIRED,
 } from "../errors";
-import { killProcessGroup } from "../process/process-driver";
+import type { ProcessDriver } from "../process/driver";
+import type { CommandExecutionResult } from "../process/command-executor";
+import {
+  runPackageManager,
+} from "./package-manager";
 import { acquireProjectLock, hasPendingTransactions } from "./transactions";
 
 export interface EnsureProjectDependenciesOptions {
@@ -23,14 +25,8 @@ export interface EnsureProjectDependenciesOptions {
   onProgress?: (message: string) => void;
   /** 自定义安装超时（毫秒），默认 5 分钟 (300,000 ms) */
   timeoutMs?: number;
-  /** 用于测试注入的自定义包管理器执行器（可选） */
-  customInstaller?: (params: {
-    command: string;
-    args: string[];
-    cwd: string;
-    signal?: AbortSignal;
-    onProgress?: (message: string) => void;
-  }) => Promise<{ status: number | null; stdout: string; stderr: string }>;
+  /** 可选注入的底层进程驱动（用于确定性测试） */
+  processDriver?: ProcessDriver;
 }
 
 export interface EnsureProjectDependenciesResult {
@@ -394,312 +390,6 @@ export function checkDependenciesMaterialized(packageRoot: string): {
 }
 
 /**
- * 执行包管理器安装子进程。
- *
- * 运维规范：
- * - 异步非阻塞执行；
- * - 所有输出日志流向 stderr 或 onProgress 回调，杜绝污染 stdout；
- * - 默认禁用生命周期脚本；
- * - 支持取消信号与独立超时上限；取消或超时时通过 killProcessGroup 级联终止子进程组，并在安装父进程及孙进程完全收敛退出后再释放锁与决议异常。
- */
-async function runInstallSubprocess(params: {
-  command: string;
-  args: string[];
-  cwd: string;
-  timeoutMs: number;
-  signal?: AbortSignal;
-  onProgress?: (message: string) => void;
-  customInstaller?: EnsureProjectDependenciesOptions["customInstaller"];
-}): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  if (params.signal?.aborted) {
-    throw new ActionDockError(
-      ACTION_CANCELLED,
-      "Dependency installation was cancelled before starting."
-    );
-  }
-
-  if (params.customInstaller) {
-    const controller = new AbortController();
-    let failure: ActionDockError | undefined;
-    const cancel = (error: ActionDockError) => {
-      if (failure) return;
-      failure = error;
-      controller.abort(error);
-    };
-    const onAbort = () => cancel(new ActionDockError(
-      ACTION_CANCELLED,
-      `Dependency installation in '${params.cwd}' was cancelled by signal.`,
-      { stage: "install", manager: params.command, cwd: params.cwd }
-    ));
-    params.signal?.addEventListener("abort", onAbort, { once: true });
-    if (params.signal?.aborted) onAbort();
-    const timer = params.timeoutMs > 0 ? setTimeout(() => cancel(new ActionDockError(
-      DEPENDENCY_INSTALL_FAILED,
-      `Dependency installation timed out after ${params.timeoutMs}ms in '${params.cwd}'.`,
-      { stage: "install", manager: params.command, cwd: params.cwd, timeoutMs: params.timeoutMs }
-    )), params.timeoutMs) : undefined;
-    try {
-      if (failure) throw failure;
-      // 执行器须响应 signal 并在清理完成后结算；结算前不释放工程锁。
-      const result = await params.customInstaller({
-        command: params.command,
-        args: params.args,
-        cwd: params.cwd,
-        signal: controller.signal,
-        onProgress: params.onProgress,
-      });
-      if (failure) throw failure;
-      return result;
-    } catch (error) {
-      throw failure ?? error;
-    } finally {
-      if (timer) clearTimeout(timer);
-      params.signal?.removeEventListener("abort", onAbort);
-    }
-  }
-
-  const env = {
-    ...process.env,
-    npm_config_allow_scripts: "",
-    NPM_CONFIG_ALLOW_SCRIPTS: "",
-    npm_config_ignore_scripts: "true",
-    NPM_CONFIG_IGNORE_SCRIPTS: "true",
-  };
-
-  return new Promise<{ status: number | null; stdout: string; stderr: string }>(
-    (resolvePromise, rejectPromise) => {
-      let proc: ReturnType<typeof spawn>;
-      try {
-        proc = spawn(params.command, params.args, {
-          cwd: params.cwd,
-          stdio: ["ignore", "pipe", "pipe"],
-          shell: process.platform === "win32",
-          detached: process.platform !== "win32",
-          env,
-        });
-      } catch (err: any) {
-        rejectPromise(
-          new ActionDockError(
-            DEPENDENCY_INSTALL_FAILED,
-            `Failed to spawn package manager '${params.command}': ${err?.message || String(err)}`,
-            { stage: "spawn", command: params.command, cwd: params.cwd, cause: err }
-          )
-        );
-        return;
-      }
-
-      const processClosed = new Promise<void>((resolveClose) => {
-        proc.once("close", () => resolveClose());
-      });
-      const maxBufferSize = 512 * 1024;
-      let stdoutBuffer = "";
-      let stderrBuffer = "";
-      const stdoutDecoder = new StringDecoder("utf-8");
-      const stderrDecoder = new StringDecoder("utf-8");
-
-      let settled = false;
-      let isTerminating = false;
-      let terminationReason: "timeout" | "abort" | "progress" | null = null;
-      let progressFailure: ActionDockError | undefined;
-      let timeoutTimer: NodeJS.Timeout | undefined;
-      let forceKillTimer: NodeJS.Timeout | undefined;
-      let fallbackCloseTimer: NodeJS.Timeout | undefined;
-
-      const safeProgress = (text: string) => {
-        if (isTerminating || !text) return;
-        try {
-          if (params.onProgress) {
-            params.onProgress(text);
-          } else {
-            process.stderr.write(text);
-          }
-        } catch (error: any) {
-          progressFailure = new ActionDockError(
-            DEPENDENCY_INSTALL_FAILED,
-            `Cannot report dependency installation progress: ${error?.message || String(error)}`,
-            { stage: "progress", manager: params.command, cwd: params.cwd, cause: error }
-          );
-          void terminateProcess("progress");
-        }
-      };
-
-      const cleanupTimersAndListeners = () => {
-        if (timeoutTimer) {
-          clearTimeout(timeoutTimer);
-          timeoutTimer = undefined;
-        }
-        if (forceKillTimer) {
-          clearTimeout(forceKillTimer);
-          forceKillTimer = undefined;
-        }
-        if (fallbackCloseTimer) {
-          clearTimeout(fallbackCloseTimer);
-          fallbackCloseTimer = undefined;
-        }
-        if (params.signal && abortHandler) {
-          params.signal.removeEventListener("abort", abortHandler);
-        }
-      };
-
-      const isGroupAlive = (pid: number): boolean => {
-        if (process.platform === "win32") return false;
-        try {
-          process.kill(-pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      };
-
-      const terminateProcess = async (reason: "timeout" | "abort" | "progress") => {
-        if (isTerminating || settled) return;
-        isTerminating = true;
-        terminationReason = reason;
-
-        if (timeoutTimer) {
-          clearTimeout(timeoutTimer);
-          timeoutTimer = undefined;
-        }
-
-        if (proc.pid) {
-          try {
-            await killProcessGroup(proc.pid, "SIGTERM");
-          } catch {
-            // 忽略已退出状态
-          }
-
-          forceKillTimer = setTimeout(async () => {
-            if (!settled && proc.pid) {
-              try {
-                await killProcessGroup(proc.pid, "SIGKILL");
-              } catch {
-                // 忽略已退出状态
-              }
-            }
-          }, 1500);
-
-          fallbackCloseTimer = setTimeout(() => {
-            if (!settled) {
-              finalizeTermination();
-            }
-          }, 3000);
-        }
-      };
-
-      const finalizeTermination = async () => {
-        if (settled) return;
-        settled = true;
-        cleanupTimersAndListeners();
-
-        if (proc.pid && isGroupAlive(proc.pid)) {
-          try {
-            await killProcessGroup(proc.pid, "SIGKILL");
-            await new Promise((r) => setTimeout(r, 50));
-          } catch {
-            // 忽略终止异常
-          }
-        }
-
-        await processClosed;
-        stdoutBuffer += stdoutDecoder.end();
-        stderrBuffer += stderrDecoder.end();
-
-        if (progressFailure) {
-          rejectPromise(progressFailure);
-        } else if (terminationReason === "abort") {
-          rejectPromise(
-            new ActionDockError(
-              ACTION_CANCELLED,
-              `Dependency installation in '${params.cwd}' was cancelled by signal.`,
-              { stage: "install", manager: params.command, cwd: params.cwd }
-            )
-          );
-        } else {
-          rejectPromise(
-            new ActionDockError(
-              DEPENDENCY_INSTALL_FAILED,
-              `Dependency installation timed out after ${params.timeoutMs}ms in '${params.cwd}'.`,
-              { stage: "install", manager: params.command, cwd: params.cwd, timeoutMs: params.timeoutMs }
-            )
-          );
-        }
-      };
-
-      const abortHandler = () => {
-        terminateProcess("abort");
-      };
-
-      if (params.signal) {
-        params.signal.addEventListener("abort", abortHandler, { once: true });
-        if (params.signal.aborted) {
-          abortHandler();
-        }
-      }
-
-      if (params.timeoutMs > 0) {
-        timeoutTimer = setTimeout(() => {
-          terminateProcess("timeout");
-        }, params.timeoutMs);
-      }
-
-      if (proc.stdout) {
-        proc.stdout.on("data", (chunk: Buffer) => {
-          const text = stdoutDecoder.write(chunk);
-          if (stdoutBuffer.length < maxBufferSize) {
-            stdoutBuffer += text.slice(0, maxBufferSize - stdoutBuffer.length);
-          }
-          safeProgress(text);
-        });
-      }
-
-      if (proc.stderr) {
-        proc.stderr.on("data", (chunk: Buffer) => {
-          const text = stderrDecoder.write(chunk);
-          if (stderrBuffer.length < maxBufferSize) {
-            stderrBuffer += text.slice(0, maxBufferSize - stderrBuffer.length);
-          }
-          safeProgress(text);
-        });
-      }
-
-      proc.on("error", (err: any) => {
-        if (settled) return;
-        if (terminationReason) {
-          finalizeTermination();
-          return;
-        }
-        settled = true;
-        cleanupTimersAndListeners();
-        rejectPromise(
-          new ActionDockError(
-            DEPENDENCY_INSTALL_FAILED,
-            `Dependency installation process error: ${err.message}`,
-            { stage: "install", manager: params.command, cwd: params.cwd, cause: err }
-          )
-        );
-      });
-
-      proc.on("close", (status) => {
-        if (settled) return;
-        if (terminationReason) {
-          finalizeTermination();
-          return;
-        }
-        settled = true;
-        cleanupTimersAndListeners();
-        stdoutBuffer += stdoutDecoder.end();
-        stderrBuffer += stderrDecoder.end();
-        resolvePromise({
-          status,
-          stdout: stdoutBuffer,
-          stderr: stderrBuffer,
-        });
-      });
-    }
-  );
-}
-
-/**
  * 确保项目所需生产依赖处于就绪状态。
  *
  * 核心设计原则：
@@ -989,17 +679,59 @@ export async function ensureProjectDependencies(
     );
 
     const timeoutMs = options.timeoutMs ?? 300_000;
-    const procResult = await runInstallSubprocess({
-      command: pm,
-      args,
-      cwd: installRoot,
-      timeoutMs,
-      signal: options.signal,
-      onProgress: options.onProgress,
-      customInstaller: options.customInstaller,
-    });
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      npm_config_allow_scripts: "",
+      NPM_CONFIG_ALLOW_SCRIPTS: "",
+      npm_config_ignore_scripts: "true",
+      NPM_CONFIG_IGNORE_SCRIPTS: "true",
+    };
+
+    let procResult: CommandExecutionResult;
+    try {
+      procResult = await runPackageManager(pm, args, {
+        cwd: installRoot,
+        env,
+        timeoutMs,
+        signal: options.signal,
+        driver: options.processDriver,
+        onOutput: (_stream, text) => {
+          reportProgress(text);
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === "PROCESS_CANCELLED" || err?.name === "AbortError" || options.signal?.aborted) {
+        throw new ActionDockError(
+          ACTION_CANCELLED,
+          `Dependency installation in '${installRoot}' was cancelled by signal.`,
+          { stage: "install", manager: pm, cwd: installRoot, cause: err }
+        );
+      }
+      if (err?.code === "PROCESS_TIMEOUT") {
+        throw new ActionDockError(
+          DEPENDENCY_INSTALL_FAILED,
+          `Dependency installation timed out after ${timeoutMs}ms in '${installRoot}'.`,
+          { stage: "install", manager: pm, cwd: installRoot, timeoutMs, cause: err }
+        );
+      }
+      if (err instanceof ActionDockError && err.code === DEPENDENCY_INSTALL_FAILED) {
+        throw err;
+      }
+      throw new ActionDockError(
+        DEPENDENCY_INSTALL_FAILED,
+        `Dependency installation failed in '${installRoot}': ${err?.message || String(err)}`,
+        { stage: "install", manager: pm, cwd: installRoot, cause: err }
+      );
+    }
 
     if (procResult.status !== 0) {
+      if (procResult.status === 130 || procResult.signal === "SIGINT") {
+        throw new ActionDockError(
+          ACTION_CANCELLED,
+          `Dependency installation in '${installRoot}' was cancelled by signal.`,
+          { stage: "install", manager: pm, cwd: installRoot, status: procResult.status, signal: procResult.signal }
+        );
+      }
       const errMsg = (procResult.stderr || procResult.stdout || `Exit code ${procResult.status}`).trim();
       throw new ActionDockError(
         DEPENDENCY_INSTALL_FAILED,
@@ -1010,6 +742,7 @@ export async function ensureProjectDependencies(
           manager: pm,
           status: procResult.status,
           stderr: procResult.stderr,
+          stdout: procResult.stdout,
         }
       );
     }

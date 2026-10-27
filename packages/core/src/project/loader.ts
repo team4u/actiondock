@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
@@ -17,6 +16,7 @@ import {
 } from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import { assertValidConfigDeclarations } from "./config-declarations";
+import { runPackageManager } from "./package-manager";
 import type {
   ActionDockManifest,
   PlaybookDefinition,
@@ -118,35 +118,20 @@ export const ALLOWED_INSTALLERS = new Set(["npm", "bun"]);
 /**
  * 异步探测包管理器可用性（通过执行 --version 并检查退出码）。
  *
- * 异步化取舍说明：
- * - 替换同步阻塞子进程调用，避免阻塞 Node.js 事件循环；
- * - Windows 兼容性保留：npm 在 Windows 上是 .cmd 批处理脚本，在 shell 开启下执行以避免直接调用报错；
- * - 探测命令限制于白名单内部候选，杜绝外部输入注入风险。
+ * 运维规范：
+ * - 复用统一包管理器启动解析与驱动底座，以 shell: false 执行；
+ * - 短超时限制，避免探测阻滞事件循环；
+ * - 仅在未明确指定包管理器时进行回退探测，选择后的执行失败不盲目换工具。
  */
-function probePackageManager(command: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      const proc = spawn(command, ["--version"], {
-        stdio: "pipe",
-        shell: process.platform === "win32",
-      });
-      let settled = false;
-      proc.on("error", () => {
-        if (!settled) {
-          settled = true;
-          resolve(false);
-        }
-      });
-      proc.on("close", (code) => {
-        if (!settled) {
-          settled = true;
-          resolve(code === 0);
-        }
-      });
-    } catch {
-      resolve(false);
-    }
-  });
+async function probePackageManager(command: "npm" | "bun"): Promise<boolean> {
+  try {
+    const result = await runPackageManager(command, ["--version"], {
+      timeoutMs: 3000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -181,7 +166,7 @@ export async function getInstallCommand(projectRoot?: string): Promise<string[]>
     }
   }
 
-  const candidates: [string, string][] = [
+  const candidates: ["npm" | "bun", string][] = [
     ["npm", "install"],
     ["bun", "install"],
   ];

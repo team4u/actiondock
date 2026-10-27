@@ -187,3 +187,10 @@ export {
   createErrorEnvelope,
   resolveExecutionHint,
 } from "./errors";
+
+// 一次性工程命令执行工具
+export { executeCommand } from "./process/command-executor";
+export type {
+  ExecuteCommandOptions,
+  CommandExecutionResult,
+} from "./process/command-executor";

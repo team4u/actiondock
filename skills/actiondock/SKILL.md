@@ -17,6 +17,7 @@ ActionDock 2.x 是面向 AI 智能体 Action 与 Skill 的工程化开发、测�
 ActionDock 默认运行于 Node.js 24（要求版本大于等于 24.12.0），基于 Node 原生类型擦除与 NodeNext 模块解析。
 ActionDock 采用 `actiondock.json`（规范版本号为 2）作为元数据唯一事实源，配套 `actiondock.lock.json`（规范版本号为 1）作为跨包依赖锁定事实源。
 ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出标准的 Agent Skill 资产。
+Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位：原生程序直接执行，`npm.cmd` / `npm.bat` 仅支持可定位 `npm-cli.js` 的标准安装布局，不回退到 Shell 或借用无关的 `npm_execpath`。遇到非标准包装脚本时按诊断调整工具路径；Action 业务仍使用 `ctx.process`，环境变量白名单保持不变。
 
 ---
 

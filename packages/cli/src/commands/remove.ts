@@ -2,6 +2,7 @@ import {
   beginTransaction,
   getInstallCommand,
   loadLockfile,
+  runPackageManager,
   saveLockfile,
   saveManifest,
 } from "@actiondock/core/project";
@@ -14,7 +15,6 @@ import {
   getEffectiveOptions,
   requireProjectManifestRoot,
   rollbackAndRethrow,
-  spawnAsync,
 } from "../utils";
 
 /**
@@ -116,15 +116,14 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
           saveLockfile(root, lockfile);
         }
 
-        // 调用包管理器执行卸载（说明符白名单校验，消除 win32 shell 拼接注入面）
+        // 调用包管理器执行卸载（说明符白名单校验）
         assertSafePackageSpec(npmPackageName);
         const installCmd = await getInstallCommand(root);
-        const pm = installCmd[0];
+        const pm = installCmd[0] as "npm" | "bun";
         const args = pm === "bun" ? ["remove", npmPackageName] : ["uninstall", npmPackageName, "--ignore-scripts"];
 
-        const uninstallProc = await spawnAsync(pm, args, {
+        const uninstallProc = await runPackageManager(pm, args, {
           cwd: root,
-          stdio: "pipe",
         });
         // 卸载失败不阻断事务提交，但必须可见：非零退出码输出 WARN 并在结果中标记
         const uninstallFailed = uninstallProc.status !== 0;

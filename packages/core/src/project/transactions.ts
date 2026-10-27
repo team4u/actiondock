@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   copyFileSync,
@@ -20,6 +19,7 @@ import { isProcessAlive } from "../utils";
 import { ActionDockError, PROJECT_BUSY, PROJECT_RECOVERY_REQUIRED } from "../errors";
 import { LOCKFILE_NAME } from "./lockfile";
 import { MANIFEST_FILE_NAME } from "./manifest";
+import { runPackageManager } from "./package-manager";
 
 export const SNAPSHOT_TRACKED_FILES = [
   "package.json",
@@ -132,70 +132,6 @@ export function acquireProjectLock(
   };
 }
 
-interface SpawnExecutionResult {
-  status: number | null;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * 异步执行子进程并收集退出状态与输出流。
- *
- * 异步化取舍说明：
- * - 避免在事务回滚与恢复链路中执行同步阻塞调用导致事件循环停顿；
- * - Windows 兼容性保留：npm 在 Windows 上是 .cmd 批处理脚本，启用 shell 以防直接调用抛错；
- * - 命令与参数由系统内部锁文件逻辑决定，不接受外部未受控入参。
- */
-function execSubprocessAsync(
-  command: string,
-  args: string[],
-  options?: {
-    cwd?: string;
-    env?: NodeJS.ProcessEnv;
-  }
-): Promise<SpawnExecutionResult> {
-  return new Promise((resolve, reject) => {
-    try {
-      const proc = spawn(command, args, {
-        cwd: options?.cwd,
-        stdio: "pipe",
-        shell: process.platform === "win32",
-        env: options?.env,
-      });
-
-      let stdout = "";
-      let stderr = "";
-
-      if (proc.stdout) {
-        proc.stdout.on("data", (chunk: Buffer) => {
-          stdout += chunk.toString();
-        });
-      }
-      if (proc.stderr) {
-        proc.stderr.on("data", (chunk: Buffer) => {
-          stderr += chunk.toString();
-        });
-      }
-
-      let settled = false;
-      proc.on("error", (err) => {
-        if (!settled) {
-          settled = true;
-          reject(err);
-        }
-      });
-      proc.on("close", (status) => {
-        if (!settled) {
-          settled = true;
-          resolve({ status, stdout, stderr });
-        }
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
-}
-
 /**
  * 依据恢复后的锁文件异步执行禁用安装脚本的冻结安装，使 node_modules 与声明重新一致。
  */
@@ -212,51 +148,46 @@ export async function runFrozenInstall(projectRoot: string): Promise<void> {
   const hasBunLock = existsSync(join(projectRoot, "bun.lock")) || existsSync(join(projectRoot, "bun.lockb"));
   const hasNpmLock = existsSync(join(projectRoot, "package-lock.json")) || existsSync(join(projectRoot, "npm-shrinkwrap.json"));
 
-  let cmd = "npm";
-  let args = ["install", "--ignore-scripts"];
+  let pm: "npm" | "bun" = "npm";
+  let args: string[] = ["install", "--ignore-scripts"];
 
   if (hasBunLock) {
-    cmd = "bun";
+    pm = "bun";
     args = ["install", "--frozen-lockfile", "--ignore-scripts"];
   } else if (hasNpmLock) {
-    cmd = "npm";
+    pm = "npm";
     args = ["ci", "--ignore-scripts"];
   }
 
-  try {
-    const check = await execSubprocessAsync(cmd, ["--version"]);
-    if (check.status !== 0) {
-      cmd = "npm";
-      args = ["install", "--ignore-scripts"];
-    }
-  } catch {
-    cmd = "npm";
-    args = ["install", "--ignore-scripts"];
-  }
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    npm_config_allow_scripts: "",
+    NPM_CONFIG_ALLOW_SCRIPTS: "",
+    npm_config_ignore_scripts: "true",
+    NPM_CONFIG_IGNORE_SCRIPTS: "true",
+  };
 
-  let proc: SpawnExecutionResult;
+  let proc;
   try {
-    proc = await execSubprocessAsync(cmd, args, {
+    proc = await runPackageManager(pm, args, {
       cwd: projectRoot,
-      env: {
-        ...process.env,
-        npm_config_allow_scripts: "",
-        NPM_CONFIG_ALLOW_SCRIPTS: "",
-      },
+      env,
     });
   } catch (err: any) {
     const errorMsg = err?.message || "Unknown error";
     throw new ActionDockError(
       PROJECT_RECOVERY_REQUIRED,
-      `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`
+      `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`,
+      { stage: "recovery-install", projectRoot, manager: pm, cause: err }
     );
   }
 
   if (proc.status !== 0) {
-    const errorMsg = proc.stderr || proc.stdout || "Unknown error";
+    const errorMsg = (proc.stderr || proc.stdout || "Unknown error").trim();
     throw new ActionDockError(
       PROJECT_RECOVERY_REQUIRED,
-      `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`
+      `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`,
+      { stage: "recovery-install", projectRoot, manager: pm, status: proc.status, stderr: proc.stderr, stdout: proc.stdout }
     );
   }
 }

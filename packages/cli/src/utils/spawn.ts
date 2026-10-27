@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import {
+  resolvePackageManagerInvocation,
+  runPackageManager,
+} from "@actiondock/core/project";
 import { ArgumentError } from "../errors";
 
 /**
@@ -11,13 +15,13 @@ import { ArgumentError } from "../errors";
  * - `+`（semver build 元数据）
  *
  * 显式拒绝全部 shell 元字符（空格、引号、`$`、反引号、`&`、`|`、`<`、`>`、`(`、`)` 等），
- * 从源头消除 win32 shell 拼接模式下的命令注入面。
+ * 保障参数安全边界。
  */
 const PACKAGE_SPEC_PATTERN = /^[a-zA-Z0-9@/:\-_.+]+$/;
 
 /**
  * 校验包管理器依赖说明符仅包含白名单字符。
- * 非法字符直接抛出参数错误，不进入子进程拼接链路。
+ * 非法字符直接抛出参数错误，不进入子进程执行链路。
  *
  * @param spec 待校验的包说明符（如 `@scope/pkg@^1.2.3`）
  */
@@ -44,30 +48,64 @@ export interface SpawnAsyncResult {
 }
 
 /**
- * 异步执行子进程（Promise 化 spawn），保留 win32 shell 处理与退出码透传。
+ * 异步执行子进程薄兼容入口。
  *
- * 与 spawnSync 语义对齐：stdio 默认 pipe，进程结束（而非继承输出）后返回聚合结果。
- *
- * win32 shell 取舍说明：npm 在 Windows 上是 `.cmd` 批处理脚本，Node 20.12+
- * 针对 CVE-2024-27980 的缓解措施使 `shell:false` 直接 spawn `.cmd` 抛出 EINVAL，
- * 因此 win32 保留 shell 拼接模式；命令注入面由调用方的
- * assertSafePackageSpec 白名单前置校验关闭（包说明符仅允许
- * 字母数字与 `@/:/-_/.+`，全部 shell 元字符被拒绝）。
+ * 契约规范：
+ * - 针对 npm 与 bun 包管理器调用，统一复用 resolvePackageManagerInvocation 进行平台定位与参数边界解析，
+ *   以 shell: false 执行，彻底消除 DEP0190 警告与命令注入隐患；
+ * - pipe 模式优先经由统一包管理器驱动执行；
+ * - inherit 模式保留真实的 stdin/stdout/stderr 继承与 TTY 交互语义；
+ * - 内部包管理器调用严禁设置 shell: true。
  *
  * @param command 可执行文件名
  * @param args 参数列表
- * @param options 附加选项（cwd 与 shell 策略）
+ * @param options 附加选项（cwd、shell、stdio 与 env）
  */
-export function spawnAsync(
+export async function spawnAsync(
   command: string,
   args: string[],
-  options?: { cwd?: string; shell?: boolean; stdio?: "pipe" | "inherit" }
+  options?: { cwd?: string; shell?: boolean; stdio?: "pipe" | "inherit"; env?: NodeJS.ProcessEnv }
 ): Promise<SpawnAsyncResult> {
+  if (command === "npm" || command === "bun") {
+    if (options?.stdio !== "inherit") {
+      const result = await runPackageManager(command, args, {
+        cwd: options?.cwd,
+        env: options?.env as Record<string, string | undefined> | undefined,
+      });
+      return {
+        status: result.status,
+        signal: result.signal,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    }
+
+    const invocation = resolvePackageManagerInvocation(command, args, {
+      cwd: options?.cwd,
+      env: options?.env as Record<string, string | undefined> | undefined,
+    });
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(invocation.executable, invocation.args, {
+        cwd: options?.cwd,
+        stdio: "inherit",
+        shell: false,
+        env: options?.env,
+      });
+
+      proc.on("error", reject);
+      proc.on("close", (status, signal) => {
+        resolve({ status, signal: signal ?? null, stdout: "", stderr: "" });
+      });
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options?.cwd,
       stdio: options?.stdio ?? "pipe",
-      shell: options?.shell ?? process.platform === "win32",
+      shell: options?.shell ?? false,
+      env: options?.env,
     });
 
     let stdout = "";

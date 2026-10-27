@@ -1,46 +1,44 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { runPackageManager } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 
 /**
  * 在暂存目录调用带有 --ignore-scripts 的 npm pack 生成标准 npm 压缩包（.tgz）。
  * 优先解析 --json 结构化输出，失败时回退到尾部行文件名解析。
- * Windows 兼容：npm 是 .cmd 脚本，无 shell 直接 spawn 会 ENOENT/EINVAL。
+ * 复用统一包管理器启动解析与驱动底座，以 shell: false 执行，完整保留路径参数与特殊字符边界。
  */
 export async function runNpmPack(
   stagingPkgDir: string,
   packDestination: string,
   fallbackName: string
 ): Promise<string> {
-  const { stdout } = await new Promise<{ stdout: string; stderr: string }>(
-    (resolvePromise, rejectPromise) => {
-      const child = spawn(
-        "npm",
-        ["pack", "--ignore-scripts", "--json", "--pack-destination", packDestination],
-        {
-          cwd: stagingPkgDir,
-          shell: process.platform === "win32",
-        }
-      );
-      let stdoutBuf = "";
-      let stderrBuf = "";
-      child.stdout.on("data", (chunk) => (stdoutBuf += chunk));
-      child.stderr.on("data", (chunk) => (stderrBuf += chunk));
-      child.on("error", rejectPromise);
-      child.on("close", (code) => {
-        if (code === 0) {
-          resolvePromise({ stdout: stdoutBuf, stderr: stderrBuf });
-        } else {
-          rejectPromise(
-            new BuilderError(
-              `npm pack exited with code ${code}. Output:\n${stdoutBuf}\n${stderrBuf}`
-            )
-          );
-        }
-      });
-    }
-  );
+  const args = [
+    "pack",
+    "--ignore-scripts",
+    "--json",
+    "--pack-destination",
+    packDestination,
+  ];
+
+  let procResult;
+  try {
+    procResult = await runPackageManager("npm", args, {
+      cwd: stagingPkgDir,
+    });
+  } catch (err: any) {
+    throw new BuilderError(
+      `npm pack failed to execute: ${err?.message || String(err)}`
+    );
+  }
+
+  if (procResult.status !== 0) {
+    throw new BuilderError(
+      `npm pack exited with code ${procResult.status}. Output:\n${procResult.stdout}\n${procResult.stderr}`
+    );
+  }
+
+  const stdout = procResult.stdout;
 
   // 优先解析 --json 结构化输出中的压缩包文件名
   let generatedName: string | undefined;

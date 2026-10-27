@@ -10,6 +10,7 @@ import {
   loadLockfile,
   MANIFEST_FILE_NAME,
   parseJsonWithoutDuplicates,
+  runPackageManager,
   saveLockfile,
   saveManifest,
   type ActionDockLockfile,
@@ -23,7 +24,6 @@ import {
   getEffectiveOptions,
   requireProjectManifestRoot,
   rollbackAndRethrow,
-  spawnAsync,
 } from "../utils";
 
 /**
@@ -60,7 +60,7 @@ export function registerAddCommand(program: Command, context?: CliContext): void
       const options = getEffectiveOptions(rawOptions, cmd);
       const { root, manifest } = requireProjectManifestRoot(options.package);
 
-      // 包说明符白名单前置校验：拒绝 shell 元字符，消除 win32 shell 拼接注入面
+      // 包说明符白名单前置校验：拒绝 shell 元字符
       assertSafePackageSpec(packageSpec);
 
       const npmPackageName = extractNpmPackageName(packageSpec);
@@ -71,7 +71,7 @@ export function registerAddCommand(program: Command, context?: CliContext): void
       try {
         // 调用包管理器执行安装（默认禁用生命周期安装脚本）
         const installCmd = await getInstallCommand(root);
-        const pm = installCmd[0];
+        const pm = installCmd[0] as "npm" | "bun";
         const args: string[] = [];
 
         if (pm === "bun") {
@@ -92,13 +92,23 @@ export function registerAddCommand(program: Command, context?: CliContext): void
           }
         }
 
-        const installProc = await spawnAsync(pm, args, {
+        const env: Record<string, string | undefined> = {
+          ...process.env,
+        };
+        if (!options.allowInstallScripts) {
+          env.npm_config_allow_scripts = "";
+          env.NPM_CONFIG_ALLOW_SCRIPTS = "";
+          env.npm_config_ignore_scripts = "true";
+          env.NPM_CONFIG_IGNORE_SCRIPTS = "true";
+        }
+
+        const installProc = await runPackageManager(pm, args, {
           cwd: root,
-          stdio: "pipe",
+          env,
         });
 
         if (installProc.status !== 0) {
-          const errMsg = installProc.stderr?.toString() || installProc.stdout?.toString() || "Unknown error";
+          const errMsg = installProc.stderr || installProc.stdout || "Unknown error";
           throw new Error(`Failed to install '${packageSpec}' using ${pm}: ${errMsg}`);
         }
 

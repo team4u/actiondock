@@ -5,6 +5,7 @@ import {
   ActionDockError,
   INPUT_CLOSED,
   PROCESS_NOT_FOUND,
+  PROCESS_TIMEOUT,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
 } from "../errors";
@@ -20,6 +21,28 @@ import {
 
 export { DEFAULT_ENV_ALLOWLIST, resolveProcessEnv };
 export type { ProcessDriver, ProcessObserver, ProcessHandle, ProcessDriverCallbacks, ProcessDriverHandle };
+
+/**
+ * 跨平台探测进程组是否在操作系统中仍然存活。
+ *
+ * - 在 POSIX 环境下驱动创建了独立进程组，仅向负数进程标识 (-pid) 发送探测信号 0；
+ *   若返回 EPERM 视为仍存活；若返回 ESRCH 则表示进程组已彻底消亡；其他错误不静默当作消亡；
+ *   绝不对正 pid 探测，杜绝命中操作系统已重用 PID 的其他进程。
+ * - 在 Windows 环境下通过 process.kill(pid, 0) 探测父进程存活性。
+ *
+ * @param pid 目标进程标识
+ */
+export function isProcessGroupAlive(pid: number): boolean {
+  if (pid <= 0 || !Number.isInteger(pid)) return false;
+  try {
+    process.kill(process.platform === "win32" ? pid : -pid, 0);
+    return true;
+  } catch (error: any) {
+    if (error?.code === "EPERM") return true;
+    if (error?.code === "ESRCH") return false;
+    throw error;
+  }
+}
 
 /**
  * 跨平台终止进程组，确保不会遗留孤儿进程。
@@ -125,10 +148,14 @@ interface InternalProcessInstance {
   exitResult?: { code: number | null; signal: string | null };
   drainTimer?: NodeJS.Timeout;
   exitListeners: Array<() => void>;
+  closedListeners: Array<() => void>;
   onExit(callback: () => void): void;
+  onClosed(callback: () => void): void;
   cleanup(): void;
   /** 终态收敛（exit 且输出关闭）后从受管表自移除 */
   selfRelease(): void;
+  /** 活跃终止 Promise，用于合并并发 terminate 调用 */
+  terminationPromise?: Promise<void>;
 }
 
 /**
@@ -309,6 +336,7 @@ export class NodeProcessDriver implements ProcessDriver {
     }
 
     const exitListeners: Array<() => void> = [];
+    const closedListeners: Array<() => void> = [];
     const instance: InternalProcessInstance = {
       id: handleId,
       pid: ptyProcess.pid,
@@ -319,11 +347,19 @@ export class NodeProcessDriver implements ProcessDriver {
       exited: false,
       outputClosed: false,
       exitListeners,
+      closedListeners,
       onExit(cb) {
         if (instance.exited) {
           cb();
         } else {
           exitListeners.push(cb);
+        }
+      },
+      onClosed(cb) {
+        if (instance.outputClosed) {
+          cb();
+        } else {
+          closedListeners.push(cb);
         }
       },
       cleanup() {
@@ -332,9 +368,14 @@ export class NodeProcessDriver implements ProcessDriver {
           instance.drainTimer = undefined;
         }
         exitListeners.length = 0;
+        closedListeners.length = 0;
       },
       selfRelease: () => {
         // 终态收敛后自移除：按实例身份判断，dispose 先行移除或表内已换新实例时不重复删除
+        // 活跃 terminate 过程中不能因为父 close 提前自移除而绕过清理
+        if (instance.terminationPromise) {
+          return;
+        }
         if (this.instances.get(handleId) === instance) {
           this.instances.delete(handleId);
         }
@@ -360,8 +401,13 @@ export class NodeProcessDriver implements ProcessDriver {
       if (!instance.outputClosed) {
         instance.outputClosed = true;
         observer.outputClosed(reason);
+        for (const listener of closedListeners) {
+          listener();
+        }
       }
-      instance.selfRelease();
+      if (!instance.terminationPromise) {
+        instance.selfRelease();
+      }
     };
 
     // 绑定 PTY 数据输出
@@ -409,6 +455,7 @@ export class NodeProcessDriver implements ProcessDriver {
     }
 
     const exitListeners: Array<() => void> = [];
+    const closedListeners: Array<() => void> = [];
     const instance: InternalProcessInstance = {
       id: handleId,
       pid: child.pid,
@@ -418,11 +465,19 @@ export class NodeProcessDriver implements ProcessDriver {
       exited: false,
       outputClosed: false,
       exitListeners,
+      closedListeners,
       onExit(cb) {
         if (instance.exited) {
           cb();
         } else {
           exitListeners.push(cb);
+        }
+      },
+      onClosed(cb) {
+        if (instance.outputClosed) {
+          cb();
+        } else {
+          closedListeners.push(cb);
         }
       },
       cleanup() {
@@ -431,9 +486,14 @@ export class NodeProcessDriver implements ProcessDriver {
           instance.drainTimer = undefined;
         }
         exitListeners.length = 0;
+        closedListeners.length = 0;
       },
       selfRelease: () => {
         // 终态收敛后自移除：按实例身份判断，dispose 先行移除或表内已换新实例时不重复删除
+        // 活跃 terminate 过程中不能因为父 close 提前自移除而绕过清理
+        if (instance.terminationPromise) {
+          return;
+        }
         if (this.instances.get(handleId) === instance) {
           this.instances.delete(handleId);
         }
@@ -459,8 +519,13 @@ export class NodeProcessDriver implements ProcessDriver {
       if (!instance.outputClosed) {
         instance.outputClosed = true;
         observer.outputClosed(reason);
+        for (const listener of closedListeners) {
+          listener();
+        }
       }
-      instance.selfRelease();
+      if (!instance.terminationPromise) {
+        instance.selfRelease();
+      }
     };
 
     // 同步完成 stdout/stderr 监听绑定，防止产生数据丢失竞态
@@ -666,8 +731,9 @@ export class NodeProcessDriver implements ProcessDriver {
   }
 
   /**
-   * 优雅终止进程，超时未退出则发送 SIGKILL 强杀兜底。
-   * 终态自清理（selfRelease）或 dispose 先行移除实例时视为已终止，直接无害返回。
+   * 优雅终止进程整棵进程树，超时未退出则发送 SIGKILL 强杀兜底。
+   * 修复父进程先退出导致的短路，确保整组存活成员（包括忽略 SIGTERM 的孙进程及未闭合输出的活实例）被彻底终止，
+   * 并等待父进程与输出收敛。
    */
   async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
     const instance = this.instances.get(handle.id);
@@ -677,77 +743,144 @@ export class NodeProcessDriver implements ProcessDriver {
     }
 
     const pid = instance.pid;
-    if (!pid || instance.exited) {
+    if (!pid) {
       return;
     }
 
-    await killProcessGroup(pid, "SIGTERM", this.spawnFn);
+    // 若当前实例已有正在进行的活跃 terminate 流程，直接复用合并，杜绝并发竞争
+    if (instance.terminationPromise) {
+      return instance.terminationPromise;
+    }
 
-    if (graceMs <= 0) {
-      if (!instance.exited) {
-        await killProcessGroup(pid, "SIGKILL", this.spawnFn);
-      }
+    // 若父进程已退出且输出已关闭，且进程树已无存活成员，直接无害返回（防止对历史 PID 发信号导致 PID 重用风险）
+    if (instance.exited && instance.outputClosed && !isProcessGroupAlive(pid)) {
       return;
     }
 
-    if (instance.exited) {
-      return;
-    }
+    const terminationPromise = Promise.resolve().then(async () => {
+      try {
+        const isSettled = () => instance.exited && instance.outputClosed;
 
-    await new Promise<void>((resolve) => {
-      let timer: NodeJS.Timeout | undefined;
-      let settled = false;
-      let exitFinish: (() => void) | undefined;
+        await killProcessGroup(pid, "SIGTERM", this.spawnFn);
 
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        // 完成后自注销本次注册的 exit 监听器，避免同一实例反复 terminate 时累积监听器
-        if (exitFinish) {
-          const idx = instance.exitListeners.indexOf(exitFinish);
-          if (idx >= 0) {
-            instance.exitListeners.splice(idx, 1);
-          }
-        }
-        if (timer) clearTimeout(timer);
-        resolve();
-      };
-
-      exitFinish = finish;
-      instance.onExit(finish);
-
-      timer = setTimeout(async () => {
-        if (!instance.exited) {
-          try {
+        if (graceMs <= 0) {
+          if (!isSettled() || isProcessGroupAlive(pid)) {
             await killProcessGroup(pid, "SIGKILL", this.spawnFn);
-          } catch {
-            // 忽略终止失败异常
+          }
+        } else {
+          if (!isSettled() || isProcessGroupAlive(pid)) {
+            await new Promise<void>((resolve) => {
+              let timer: NodeJS.Timeout | undefined;
+              let pollTimer: NodeJS.Timeout | undefined;
+              let settled = false;
+              let exitListener: (() => void) | undefined;
+              let closeListener: (() => void) | undefined;
+
+              const cleanup = () => {
+                if (settled) {
+                  return;
+                }
+                settled = true;
+                if (exitListener) {
+                  const idx = instance.exitListeners.indexOf(exitListener);
+                  if (idx >= 0) {
+                    instance.exitListeners.splice(idx, 1);
+                  }
+                }
+                if (closeListener) {
+                  const idx = instance.closedListeners.indexOf(closeListener);
+                  if (idx >= 0) {
+                    instance.closedListeners.splice(idx, 1);
+                  }
+                }
+                if (timer) clearTimeout(timer);
+                if (pollTimer) clearInterval(pollTimer);
+                resolve();
+              };
+
+              const check = () => {
+                if (isSettled() && !isProcessGroupAlive(pid)) {
+                  cleanup();
+                }
+              };
+
+              exitListener = check;
+              closeListener = check;
+              pollTimer = setInterval(check, 20);
+              timer = setTimeout(cleanup, graceMs);
+              instance.onExit(exitListener);
+              instance.onClosed(closeListener);
+            });
+
+            if (!isSettled() || isProcessGroupAlive(pid)) {
+              await killProcessGroup(pid, "SIGKILL", this.spawnFn);
+            }
           }
         }
-        finish();
-      }, graceMs);
-      timer.unref?.();
+
+        // 第二阶段：强杀后等待父进程退出与输出收敛
+        if (!isSettled()) {
+          await new Promise<void>((resolve, reject) => {
+            let timer: NodeJS.Timeout | undefined;
+            let settled = false;
+            let closeListener: (() => void) | undefined;
+
+            const cleanup = () => {
+              if (settled) return;
+              settled = true;
+              if (closeListener) {
+                const idx = instance.closedListeners.indexOf(closeListener);
+                if (idx >= 0) {
+                  instance.closedListeners.splice(idx, 1);
+                }
+              }
+              if (timer) clearTimeout(timer);
+            };
+
+            closeListener = () => {
+              if (isSettled()) {
+                cleanup();
+                resolve();
+              }
+            };
+            timer = setTimeout(() => {
+              cleanup();
+              if (!isSettled()) {
+                reject(
+                  new ProcessError(
+                    PROCESS_TIMEOUT,
+                    `Process failed to exit and close output within ${this.drainDeadlineMs}ms after termination: handle id ${instance.id}`
+                  )
+                );
+              } else {
+                resolve();
+              }
+            }, this.drainDeadlineMs);
+            instance.onClosed(closeListener);
+          });
+        }
+      } finally {
+        instance.terminationPromise = undefined;
+        if (instance.outputClosed) {
+          instance.selfRelease();
+        }
+      }
     });
+
+    instance.terminationPromise = terminationPromise;
+    return terminationPromise;
   }
 
   /**
    * 销毁进程句柄并清理相关资源。
-   * 对仍在运行的实例先执行 terminate(0) 兜底（SIGTERM 后立即 SIGKILL），
-   * 绝不从受管表移除仍存活的子进程而遗留孤儿；已退出实例直接清理。
-   * 终态自清理（selfRelease）与 dispose 可能并发到达，二者均按实例身份判断，
-   * 后到方对已删除条目为无害空操作。
+   * 对仍在运行或进程树存活或输出未闭合的实例先执行 terminate(0) 兜底（SIGTERM 后立即 SIGKILL），
+   * 绝不从受管表移除仍存活的子进程而遗留孤儿；已退出且输出闭合实例直接清理。
    */
   async dispose(handle: ProcessHandle): Promise<void> {
     const instance = this.instances.get(handle.id);
     if (instance) {
-      if (!instance.exited) {
-        try {
-          await this.terminate(handle, 0);
-        } catch {
-          // 兜底终止失败不阻断句柄清理，退出事件仍会经监听链路上报
-        }
+      if (!instance.exited || !instance.outputClosed || isProcessGroupAlive(instance.pid ?? 0)) {
+        await this.terminate(handle, 0);
       }
       instance.cleanup();
       if (this.instances.get(handle.id) === instance) {

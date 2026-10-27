@@ -10,4 +10,5 @@ export * from "./input-dispatcher";
 export * from "./process-manager";
 export * from "./context-process";
 export * from "./process-driver";
+export * from "./command-executor";
 export * from "./converters";

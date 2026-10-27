@@ -6,9 +6,9 @@ import {
   INPUT_CLOSED,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
-} from "../src/errors";
-import { NodeProcessDriver } from "../src/process/process-driver";
-import { resolveProcessEnv } from "../src/process/driver";
+} from "../src/errors.ts";
+import { NodeProcessDriver, isProcessGroupAlive } from "../src/process/process-driver.ts";
+import { resolveProcessEnv } from "../src/process/driver.ts";
 
 /** 读取驱动内部实例的 exit 监听器数量，用于验证 terminate 自清理；
  * 终态自清理后实例已从表中移除时返回 -1，语义上等同于监听器已清空 */
@@ -487,6 +487,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     await writePromise;
 
     assert.strictEqual(writeCount, 1);
+    mockChild.emit("exit", 0, null);
+    mockChild.emit("close", 0, null);
     await driver.dispose(handle);
   });
 
@@ -595,6 +597,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       { output() {}, exited() {}, outputClosed() {} }
     );
     assert.notStrictEqual(handleAgain.id, undefined);
+    mockChild.emit("exit", 0, null);
+    mockChild.emit("close", 0, null);
 
     await driver.dispose(handle);
     await driver.dispose(handleAgain);
@@ -689,5 +693,87 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     await closePromise;
 
     assert.strictEqual(instances.size, 0);
+  });
+
+  it("父进程退出后忽略 SIGTERM 的孙进程仍能被 terminate 强杀收敛", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("POSIX 进程组隔离与树终止特定测试");
+      return;
+    }
+
+    const driver = new NodeProcessDriver();
+    let resolveClose: () => void;
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve;
+    });
+
+    let resolveExit: () => void;
+    const exitPromise = new Promise<void>((resolve) => {
+      resolveExit = resolve;
+    });
+
+    let exitCode: number | null = null;
+    let parentReady = false;
+
+    // 父进程使用 process.execPath 派生忽略 SIGTERM 且持有 stdout 的孙进程，父进程自身在确认就绪后 exit 0
+    const parentScript = `
+      const { spawn } = require("node:child_process");
+      const grandChild = spawn(
+        process.execPath,
+        ["-e", "process.on('SIGTERM', () => {}); process.send('ready'); setInterval(() => {}, 1000);"],
+        { stdio: ["ignore", "inherit", "ignore", "ipc"] }
+      );
+      grandChild.once("message", () => { process.stdout.write("READY\\n"); process.exit(0); });
+    `;
+
+    const handle = await driver.spawn(
+      {
+        executable: process.execPath,
+        args: ["-e", parentScript],
+        io: { mode: "pipe" },
+      },
+      {
+        output(stream, data) {
+          const text = new TextDecoder().decode(data);
+          if (text.includes("READY")) {
+            parentReady = true;
+          }
+        },
+        exited(res) {
+          exitCode = res.code;
+          resolveExit();
+        },
+        outputClosed() {
+          resolveClose();
+        },
+      }
+    );
+
+    const pid = handle.pid!;
+    assert.ok(pid > 0);
+
+    try {
+      // 明确等待父进程退出事件完成同步
+      await exitPromise;
+      assert.strictEqual(parentReady, true);
+      assert.strictEqual(exitCode, 0);
+
+      // 父进程已退出，但孙进程仍活着并持有管道
+      assert.strictEqual(isProcessGroupAlive(pid), true);
+
+      // 此时调用 terminate，应当向整组发信号并在优雅期过后强杀孙进程
+      await driver.terminate(handle, 100);
+      await closePromise;
+
+      // 孙进程持续持有继承的输出管道；输出关闭表明它已退出，未回收的僵尸进程不影响此断言。
+    } finally {
+      // 保证测试退出时整组进程彻底清理
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        // 忽略已退出
+      }
+      await driver.dispose(handle);
+    }
   });
 });

@@ -15,6 +15,7 @@ import {
   resolveInstallRoot,
 } from "../src/project/dependencies.ts";
 import { acquireProjectLock } from "../src/project/transactions.ts";
+import { FakeProcessDriver } from "@actiondock/testing";
 
 describe("依赖准备边界与安全约束体系", () => {
   let tempDir: string;
@@ -407,14 +408,16 @@ describe("依赖准备边界与安全约束体系", () => {
     const controller = new AbortController();
     controller.abort();
 
+    const fakeDriver = new FakeProcessDriver();
     let customCalled = false;
+    fakeDriver.onSpawn = () => {
+      customCalled = true;
+    };
+
     await assert.rejects(
       ensureProjectDependencies(cancelledDir, {
         signal: controller.signal,
-        customInstaller: async () => {
-          customCalled = true;
-          return { status: 0, stdout: "", stderr: "" };
-        },
+        processDriver: fakeDriver,
       }),
       (err: any) =>
         err instanceof ActionDockError &&
@@ -440,18 +443,35 @@ describe("依赖准备边界与安全约束体系", () => {
 
     // 取消之后，执行器清理完成之前仍须持有工程锁。
     const abortCtrl = new AbortController();
-    let finishInstaller!: () => void;
+    let terminateCalledResolve!: () => void;
+    const terminateCalled = new Promise<void>((r) => {
+      terminateCalledResolve = r;
+    });
+    let finishTerminate!: () => void;
+    const fakeDriver = new FakeProcessDriver();
+    const originalTerminate = fakeDriver.terminate.bind(fakeDriver);
+    fakeDriver.terminate = async (handle, graceMs) => {
+      const waitPromise = new Promise<void>((resolve) => {
+        finishTerminate = resolve;
+      });
+      terminateCalledResolve();
+      await waitPromise;
+      return originalTerminate(handle, graceMs);
+    };
+
     const abortPromise = ensureProjectDependencies(lockTestDir, {
       signal: abortCtrl.signal,
-      customInstaller: async () => {
-        await new Promise<void>((resolve) => { finishInstaller = resolve; });
-        return { status: 0, stdout: "", stderr: "" };
-      },
+      processDriver: fakeDriver,
     });
     const rejection = assert.rejects(abortPromise, { code: ACTION_CANCELLED });
+    // 等待启动后中止
+    await new Promise((r) => setTimeout(r, 10));
     abortCtrl.abort();
+    // 等待 terminate 已被调度执行但尚未完成
+    await terminateCalled;
+    // 在 terminate 结算完成之前，工程锁仍被占用
     assert.throws(() => acquireProjectLock(lockTestDir), { code: "PROJECT_BUSY" });
-    finishInstaller();
+    finishTerminate();
     await rejection;
 
     // 确认工程锁已释放，可以立即重新加锁
@@ -459,12 +479,10 @@ describe("依赖准备边界与安全约束体系", () => {
     releaseAfterAbort();
 
     // 2. 超时触发，工程锁被释放
+    const timeoutDriver = new FakeProcessDriver();
     const timeoutPromise = ensureProjectDependencies(lockTestDir, {
       timeoutMs: 30,
-      customInstaller: async () => {
-        await new Promise((r) => setTimeout(r, 300));
-        return { status: 0, stdout: "", stderr: "" };
-      },
+      processDriver: timeoutDriver,
     });
 
     await assert.rejects(
@@ -478,16 +496,21 @@ describe("依赖准备边界与安全约束体系", () => {
     const releaseAfterTimeout = acquireProjectLock(lockTestDir);
     releaseAfterTimeout();
 
-    // 3. customInstaller 假装成功且写入依赖元数据，安装后检验顺利通过
+    // 3. fakeDriver 假装成功且写入依赖元数据，安装后检验顺利通过
+    const successDriver = new FakeProcessDriver();
+    successDriver.onSpawn = (_handle, _spec, observer) => {
+      mkdirSync(join(lockTestDir, "node_modules", "my-test-dep"), { recursive: true });
+      writeFileSync(
+        join(lockTestDir, "node_modules", "my-test-dep", "package.json"),
+        JSON.stringify({ name: "my-test-dep", version: "1.0.0" })
+      );
+      observer.output("stdout", new TextEncoder().encode("installed successfully\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
     const successResult = await ensureProjectDependencies(lockTestDir, {
-      customInstaller: async () => {
-        mkdirSync(join(lockTestDir, "node_modules", "my-test-dep"), { recursive: true });
-        writeFileSync(
-          join(lockTestDir, "node_modules", "my-test-dep", "package.json"),
-          JSON.stringify({ name: "my-test-dep", version: "1.0.0" })
-        );
-        return { status: 0, stdout: "installed successfully", stderr: "" };
-      },
+      processDriver: successDriver,
     });
 
     assert.strictEqual(successResult.installed, true);
@@ -510,12 +533,17 @@ describe("依赖准备边界与安全约束体系", () => {
       })
     );
 
+    const failVerifyDriver = new FakeProcessDriver();
+    failVerifyDriver.onSpawn = (_handle, _spec, observer) => {
+      // 返回 0 但故意不写入依赖 package.json
+      observer.output("stdout", new TextEncoder().encode("mock ok\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
     await assert.rejects(
       ensureProjectDependencies(postVerifyDir, {
-        customInstaller: async () => {
-          // 返回 0 但故意不写入依赖 package.json
-          return { status: 0, stdout: "mock ok", stderr: "" };
-        },
+        processDriver: failVerifyDriver,
       }),
       (err: any) =>
         err instanceof ActionDockError &&
