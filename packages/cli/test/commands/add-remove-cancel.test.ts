@@ -95,9 +95,11 @@ describe("CLI 依赖命令取消链路 (ad add / ad remove SIGINT)", () => {
       child.stdout!.resume();
 
       await runUntilInstallerStarts(child, marker, stderr);
+      const childPid = child.pid;
+      assert.notStrictEqual(childPid, undefined, "CLI 子进程必须具有 PID");
 
       // 单次 SIGINT：CLI 归并为取消并以 130 退出，安装进程被终止
-      process.kill(-child.pid, "SIGINT");
+      process.kill(-childPid!, "SIGINT");
       const [exitCode] = await once(child, "exit");
 
       assert.equal(exitCode, 130, `期望退出码 130，实际 ${exitCode}；stderr: ${stderr}`);
@@ -114,7 +116,7 @@ describe("CLI 依赖命令取消链路 (ad add / ad remove SIGINT)", () => {
       const txStatus = readPendingTransactionStatus(root);
       assert.equal(txStatus, "pending", `取消后事务必须保留 pending 供恢复，实际 ${txStatus}`);
     } finally {
-      if (child && child.exitCode === null) {
+      if (child && child.exitCode === null && child.pid !== undefined) {
         try { process.kill(-child.pid, "SIGKILL"); } catch {}
       }
       try {
