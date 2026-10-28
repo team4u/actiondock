@@ -24,6 +24,15 @@ import { CONFIG_ENCRYPTION_ERROR } from "../src/errors";
 
 const ENV_KEY_NAME = "ACTIONDOCK_ENCRYPTION_KEY";
 
+/**
+ * 与生产 security/config-key.ts 的 IS_POSIX 平台边界保持一致：
+ * Windows 不存在 POSIX 权限位语义，权限断言仅在 POSIX 平台生效。
+ */
+const IS_POSIX = process.platform !== "win32";
+
+/** 纯 POSIX 权限拒绝用例在 Windows 上整体跳过并给出原因；chmod 无法在 Windows 构造出受控的不安全权限位 */
+const POSIX_PERMISSION_ONLY_SKIP = IS_POSIX ? false : "Windows 无 POSIX 权限位语义，生产端权限强制校验仅 POSIX 生效";
+
 function expectCode(fn: () => unknown, code: string): { code: string; message: string; details?: any } {
   try {
     fn();
@@ -111,8 +120,10 @@ describe("createConfigKeyProvider 环境变量密钥", () => {
       const material = createConfigKeyProvider({ dataDir: dir, env: { [ENV_KEY_NAME]: hexKey(bytes) } })(true);
       assert.equal(existsSync(keyPath), false);
       assert.equal(readFileSync(markerPath, "utf8").trim(), material.id);
-      assert.equal(lstatSync(keyDir).mode & 0o777, 0o700);
-      assert.equal(lstatSync(markerPath).mode & 0o777, 0o600);
+      if (IS_POSIX) {
+        assert.equal(lstatSync(keyDir).mode & 0o777, 0o700);
+        assert.equal(lstatSync(markerPath).mode & 0o777, 0o600);
+      }
     });
   });
 
@@ -169,7 +180,7 @@ describe("createConfigKeyProvider 环境变量密钥", () => {
     });
   });
 
-  it("环境来源不因缺少本地密钥文件而绕过目录与标记安全校验", async () => {
+  it("环境来源不因缺少本地密钥文件而绕过目录与标记安全校验", { skip: POSIX_PERMISSION_ONLY_SKIP }, async () => {
     await withTempDir(async (dir) => {
       const { keyDir, markerPath } = keyPaths(dir);
       const bytes = randomBytes(32);
@@ -278,12 +289,16 @@ describe("createConfigKeyProvider 本地密钥", () => {
     await withTempDir(async (dir) => {
       const { keyDir, keyPath, markerPath } = keyPaths(dir);
       const material = fileProvider({ dataDir: dir })(true);
-      assert.equal(lstatSync(keyDir).mode & 0o777, 0o700);
-      assert.equal(lstatSync(keyPath).mode & 0o777, 0o600);
+      if (IS_POSIX) {
+        assert.equal(lstatSync(keyDir).mode & 0o777, 0o700);
+        assert.equal(lstatSync(keyPath).mode & 0o777, 0o600);
+      }
       assert.equal(lstatSync(keyPath).isFile(), true);
       assert.equal(readFileSync(keyPath).byteLength, 32);
       assert.equal(readFileSync(markerPath, "utf8").trim(), material.id);
-      assert.equal(lstatSync(markerPath).mode & 0o777, 0o600);
+      if (IS_POSIX) {
+        assert.equal(lstatSync(markerPath).mode & 0o777, 0o600);
+      }
     });
   });
 
@@ -414,7 +429,7 @@ describe("createConfigKeyProvider 文件安全校验", () => {
     });
   });
 
-  it("拒绝不安全权限的密钥文件、标记与目录", async () => {
+  it("拒绝不安全权限的密钥文件、标记与目录", { skip: POSIX_PERMISSION_ONLY_SKIP }, async () => {
     await withTempDir(async (dir) => {
       const { keyDir, keyPath, markerPath } = keyPaths(dir);
       fileProvider({ dataDir: dir })(true);
@@ -507,7 +522,9 @@ try {
 
       assert.deepEqual(readdirSync(keyDir).sort(), ["config.key", "config.key.id"]);
       assert.equal(readFileSync(keyPath).byteLength, 32);
-      assert.equal(lstatSync(keyPath).mode & 0o777, 0o600);
+      if (IS_POSIX) {
+        assert.equal(lstatSync(keyPath).mode & 0o777, 0o600);
+      }
       assert.equal(readFileSync(markerPath, "utf8").trim(), [...ids][0]);
     });
   });
