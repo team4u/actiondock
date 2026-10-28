@@ -3,12 +3,15 @@ import {
   loadProjectConfig,
 } from "@actiondock/core";
 import {
+  hasPendingTransactions,
   loadManifest,
+  recoverPendingTransactions,
   type ActionDockManifest,
   type ProjectTransaction,
 } from "@actiondock/core/project";
 import { resolve } from "node:path";
 import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError, wrapAsExecutionError } from "../errors";
+import type { CliContext } from "../types";
 import { resolveLocalPackageRoot } from "./target";
 
 /**
@@ -196,6 +199,30 @@ export function requirePackageRoot(
     : { root };
 }
 
+function resolveProjectManifestDirectory(packageOption: string | undefined): string {
+  const root = packageOption ? resolve(packageOption) : findProjectRoot();
+  if (!root) {
+    throw notInProjectError(
+      "Please specify -P, --package <path> or cd into a project directory."
+    );
+  }
+  return root;
+}
+
+/** 在读取清单和创建新事务前恢复依赖操作，取消信号贯穿恢复流程。 */
+export async function prepareProjectManifestRoot(
+  packageOption: string | undefined,
+  context?: CliContext
+): Promise<{ root: string; manifest: ActionDockManifest }> {
+  const root = resolveProjectManifestDirectory(packageOption);
+  context?.control?.signal?.throwIfAborted();
+  if (hasPendingTransactions(root)) {
+    await recoverPendingTransactions(root, { signal: context?.control?.signal });
+  }
+  context?.control?.signal?.throwIfAborted();
+  return requireProjectManifestRoot(root);
+}
+
 /**
  * 依赖类命令（ad add / ad remove）的工程根目录与清单解析脚手架（单一事实源）。
  *
@@ -209,14 +236,7 @@ export function requireProjectManifestRoot(packageOption: string | undefined): {
   root: string;
   manifest: ActionDockManifest;
 } {
-  const root = packageOption ? resolve(packageOption) : findProjectRoot();
-
-  if (!root) {
-    throw notInProjectError(
-      "Please specify -P, --package <path> or cd into a project directory."
-    );
-  }
-
+  const root = resolveProjectManifestDirectory(packageOption);
   const manifest = loadManifest(root);
   if (!manifest) {
     throw new ArgumentError(`actiondock.json not found in ${root}`);

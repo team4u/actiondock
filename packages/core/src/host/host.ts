@@ -164,6 +164,14 @@ function withAbortSignal<T>(op: () => Promise<T>, signal?: AbortSignal): Promise
   });
 }
 
+function isActionTimeoutReason(reason: unknown): boolean {
+  if (!reason) return false;
+  const code = (reason as any)?.code;
+  if (code === ACTION_TIMEOUT) return true;
+  if ((reason as any)?.details?.code === ACTION_TIMEOUT) return true;
+  return false;
+}
+
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
@@ -1324,11 +1332,18 @@ export class DefaultActionDockHost implements ActionDockHost {
       };
     }
 
+    const isRootCall = !context.caller;
+    const initialTimeoutMs = context.initialTimeoutMs ?? (typeof context.timeoutMs === "number" && context.timeoutMs > 0 ? context.timeoutMs : undefined);
+    const deadline = context.deadline ?? (initialTimeoutMs !== undefined ? Date.now() + initialTimeoutMs : undefined);
+
     if (context.signal.aborted) {
       const runId = context.runId;
+      const isTimeout = isActionTimeoutReason(context.signal.reason);
       const error = buildRuntimeError(
-        ACTION_CANCELLED,
-        "Action execution was cancelled before starting",
+        isTimeout ? ACTION_TIMEOUT : ACTION_CANCELLED,
+        isTimeout
+          ? `Action exceeded timeout of ${initialTimeoutMs ?? context.timeoutMs}ms`
+          : "Action execution was cancelled before starting",
         { package: targetRuntime.packageId, action: targetActionId, phase: "dispatch" }
       );
       return {
@@ -1337,10 +1352,6 @@ export class DefaultActionDockHost implements ActionDockHost {
         result: Promise.resolve({ ok: false, runId, error }),
       };
     }
-
-    const isRootCall = !context.caller;
-    const initialTimeoutMs = context.initialTimeoutMs ?? (typeof context.timeoutMs === "number" && context.timeoutMs > 0 ? context.timeoutMs : undefined);
-    const deadline = context.deadline ?? (initialTimeoutMs !== undefined ? Date.now() + initialTimeoutMs : undefined);
 
     let timeoutController: AbortController | undefined;
     let prepTimeoutTimer: NodeJS.Timeout | undefined;
@@ -1396,6 +1407,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         const isExternalCancelled = context.signal.aborted;
         const isTimeout =
           timeoutController?.signal.aborted ||
+          isActionTimeoutReason(context.signal.reason) ||
           errCode === ACTION_TIMEOUT ||
           (err?.details && (err.details as any).code === ACTION_TIMEOUT);
 
@@ -1463,9 +1475,12 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     if (context.signal.aborted) {
       const runId = context.runId;
+      const isTimeout = isActionTimeoutReason(context.signal.reason);
       const error = buildRuntimeError(
-        ACTION_CANCELLED,
-        "Action execution was cancelled after preparation",
+        isTimeout ? ACTION_TIMEOUT : ACTION_CANCELLED,
+        isTimeout
+          ? `Action exceeded timeout of ${initialTimeoutMs ?? context.timeoutMs}ms`
+          : "Action execution was cancelled after preparation",
         { package: targetRuntime.packageId, action: targetActionId, phase: "post-preparation" }
       );
       return {

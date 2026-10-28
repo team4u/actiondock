@@ -13,6 +13,7 @@ import {
   runPackageManager,
 } from "../src/project/package-manager";
 import { MemoryProcessDriver } from "../src/process/driver";
+import { FakeProcessDriver } from "@actiondock/testing";
 import { executeCommand } from "../src/process/command-executor";
 import type { LaunchSpec } from "@actiondock/sdk";
 
@@ -586,5 +587,179 @@ describe("统一包管理器启动解析器 (resolvePackageManagerInvocation)", 
 
     assert.strictEqual(probeResult.status, 0, `探针进程退出码应为0，stderr: ${probeResult.stderr}`);
     assert.match(probeResult.stdout.trim(), /^\d+\.\d+\.\d+/, "探针进程应输出有效的npm版本号");
+  });
+
+  it("Windows平台环境变量多大小写键按Node字典序去重且与插入顺序无关", () => {
+    const dirA = join(tempDir, "old-dir");
+    const dirB = join(tempDir, "requested-dir");
+    mkdirSync(dirA, { recursive: true });
+    mkdirSync(dirB, { recursive: true });
+
+    const npmExeA = join(dirA, "npm.exe");
+    const npmExeB = join(dirB, "npm.exe");
+    writeFileSync(npmExeA, "old npm");
+    writeFileSync(npmExeB, "requested npm");
+
+    const fakeNode = join(tempDir, "node.exe");
+
+    // - 字典序中 'PATH' < 'Path'：即便以 { Path: dirA, PATH: dirB } 顺序插入，首选键仍必须是 PATH (dirB)
+    const res1 = resolvePackageManagerInvocation("npm", ["test"], {
+      platform: "win32",
+      execPath: fakeNode,
+      env: {
+        Path: dirA,
+        PATH: dirB,
+      },
+    });
+    assert.strictEqual(res1.executable, npmExeB);
+
+    // - 无论键插入顺序为 { PATH: dirB, Path: dirA }，结果保持确定性一致
+    const res2 = resolvePackageManagerInvocation("npm", ["test"], {
+      platform: "win32",
+      execPath: fakeNode,
+      env: {
+        PATH: dirB,
+        Path: dirA,
+      },
+    });
+    assert.strictEqual(res2.executable, npmExeB);
+
+    // - 当更优先的字典序键显式赋值 undefined 时（如 PATH: undefined, Path: dirA），
+    // 依 Node.js Windows child_process 语义，该环境变量被去重遮蔽且不透传，解析器必须视同未设置而报错
+    assert.throws(
+      () =>
+        resolvePackageManagerInvocation("npm", ["test"], {
+          platform: "win32",
+          execPath: fakeNode,
+          env: {
+            Path: dirA,
+            PATH: undefined,
+          },
+        }),
+      (err: any) =>
+        err instanceof ActionDockError &&
+        err.code === DEPENDENCY_INSTALL_FAILED &&
+        err.message.includes("Cannot locate npm on Windows")
+    );
+
+    // - 反之，若次优键为 undefined（如 Path: undefined, PATH: dirB），优先键有效时应正常使用优先键
+    const res4 = resolvePackageManagerInvocation("npm", ["test"], {
+      platform: "win32",
+      execPath: fakeNode,
+      env: {
+        Path: undefined,
+        PATH: dirB,
+      },
+    });
+    assert.strictEqual(res4.executable, npmExeB);
+
+    // - PATHEXT 同样遵循 Node.js 字典序去重规则（'PATHEXT' < 'Pathext'）
+    const npmBatA = join(dirA, "npm.bat");
+    writeFileSync(npmBatA, "@ECHO OFF\r\n");
+    mkdirSync(join(dirA, "node_modules", "npm", "bin"), { recursive: true });
+    writeFileSync(join(dirA, "node_modules", "npm", "bin", "npm-cli.js"), "// cli");
+
+    // PATHEXT 优先为 .BAT;.CMD，而 Pathext 为 .EXE；'PATHEXT' < 'Pathext'，选用 .BAT
+    const res5 = resolvePackageManagerInvocation("npm", ["test"], {
+      platform: "win32",
+      execPath: fakeNode,
+      env: {
+        PATH: dirA,
+        Pathext: ".EXE",
+        PATHEXT: ".BAT;.CMD",
+      },
+    });
+    assert.strictEqual(res5.executable, fakeNode);
+    assert.strictEqual(res5.args[0], join(dirA, "node_modules", "npm", "bin", "npm-cli.js"));
+  });
+
+  it("Windows平台runPackageManager统一规范化环境并保证选择与LaunchSpec传入一致", async () => {
+    const dirA = join(tempDir, "driver-old-dir");
+    const dirB = join(tempDir, "driver-requested-dir");
+    mkdirSync(dirA, { recursive: true });
+    mkdirSync(dirB, { recursive: true });
+
+    const npmExeA = join(dirA, "npm.exe");
+    const npmExeB = join(dirB, "npm.exe");
+    writeFileSync(npmExeA, "old npm");
+    writeFileSync(npmExeB, "requested npm");
+
+    const fakeNode = join(tempDir, "node.exe");
+
+    // - 覆盖场景一：同时存在 Path 与 PATH 时，按 Node.js 字典序去重选取 PATH，且 LaunchSpec.env.set 仅透传获胜键 PATH
+    const fakeDriver1 = new FakeProcessDriver();
+    fakeDriver1.onSpawn = (_handle, _spec, observer) => {
+      observer.output("stdout", new TextEncoder().encode("run ok\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
+    const res1 = await runPackageManager("npm", ["install"], {
+      platform: "win32",
+      execPath: fakeNode,
+      driver: fakeDriver1,
+      env: {
+        Path: dirA,
+        PATH: dirB,
+        Pathext: ".CMD",
+        PATHEXT: ".EXE;.BAT",
+      },
+    });
+
+    assert.strictEqual(res1.status, 0);
+    const spec1 = fakeDriver1.spawnCalls[0]?.spec;
+    assert.ok(spec1);
+    assert.strictEqual(spec1.executable, npmExeB);
+    assert.strictEqual(spec1.env?.set?.PATH, dirB);
+    assert.strictEqual(spec1.env?.set?.Path, undefined);
+    assert.strictEqual(spec1.env?.set?.PATHEXT, ".EXE;.BAT");
+    assert.strictEqual(spec1.env?.set?.Pathext, undefined);
+
+    // - 覆盖场景二：优先字典序键赋值 undefined（PATH: undefined, Path: dirA）时，
+    // 解析器与执行环境均视同未设置 PATH，无法定位包管理器并显式拒绝，不向底层驱动下发命令
+    const fakeDriver2 = new FakeProcessDriver();
+    await assert.rejects(
+      async () =>
+        runPackageManager("npm", ["install"], {
+          platform: "win32",
+          execPath: fakeNode,
+          driver: fakeDriver2,
+          env: {
+            Path: dirA,
+            PATH: undefined,
+          },
+        }),
+      (err: any) =>
+        err instanceof ActionDockError &&
+        err.code === DEPENDENCY_INSTALL_FAILED &&
+        err.message.includes("Cannot locate npm on Windows")
+    );
+    assert.strictEqual(fakeDriver2.spawnCalls.length, 0);
+
+    // - 覆盖场景三：次优字典序键为 undefined（Path: undefined, PATH: dirB）时，
+    // 优先键生效，LaunchSpec.env.set 正确接收 PATH 且不残留已剔除的 Path
+    const fakeDriver3 = new FakeProcessDriver();
+    fakeDriver3.onSpawn = (_handle, _spec, observer) => {
+      observer.output("stdout", new TextEncoder().encode("ok\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
+    const res3 = await runPackageManager("npm", ["install"], {
+      platform: "win32",
+      execPath: fakeNode,
+      driver: fakeDriver3,
+      env: {
+        Path: undefined,
+        PATH: dirB,
+      },
+    });
+
+    assert.strictEqual(res3.status, 0);
+    const spec3 = fakeDriver3.spawnCalls[0]?.spec;
+    assert.ok(spec3);
+    assert.strictEqual(spec3.executable, npmExeB);
+    assert.strictEqual(spec3.env?.set?.PATH, dirB);
+    assert.strictEqual(spec3.env?.set?.Path, undefined);
   });
 });

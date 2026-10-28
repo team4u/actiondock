@@ -857,7 +857,7 @@ export class DefaultExecutionService implements ExecutionService {
     const digestPayload = {
       input,
       config: context.config,
-      timeoutMs: context.timeoutMs,
+      timeoutMs: context.initialTimeoutMs ?? context.timeoutMs,
     };
     const inputDigest = computeDigest(digestPayload);
     const provisionalRunId = crypto.randomUUID();

@@ -101,7 +101,9 @@ export async function executeCommand(
     }
   }
 
-  const driver = options?.driver ?? new NodeProcessDriver();
+  const driver =
+    options?.driver ??
+    new NodeProcessDriver({ waitForOutputClose: true });
 
   // 若信号在启动前已触发中止，直接以 PROCESS_CANCELLED 拒绝
   if (options?.signal?.aborted) {
@@ -152,7 +154,14 @@ export async function executeCommand(
   const stdoutDecoder = options?.onOutput ? new TextDecoder("utf-8") : undefined;
   const stderrDecoder = options?.onOutput ? new TextDecoder("utf-8") : undefined;
 
-  let abortReason: "cancelled" | "timeout" | "output-error" | "fault" | null = null;
+  let abortReason:
+    | "cancelled"
+    | "timeout"
+    | "drain-timeout"
+    | "host-lost"
+    | "output-error"
+    | "fault"
+    | null = null;
   let abortCause: unknown = null;
 
   let resolveAbort: () => void;
@@ -160,7 +169,16 @@ export async function executeCommand(
     resolveAbort = r;
   });
 
-  const triggerAbort = (reason: "cancelled" | "timeout" | "output-error" | "fault", cause?: unknown) => {
+  const triggerAbort = (
+    reason:
+      | "cancelled"
+      | "timeout"
+      | "drain-timeout"
+      | "host-lost"
+      | "output-error"
+      | "fault",
+    cause?: unknown
+  ) => {
     if (abortReason) return;
     abortReason = reason;
     abortCause = cause;
@@ -168,7 +186,7 @@ export async function executeCommand(
   };
 
   const dispatchOutput = (stream: "stdout" | "stderr", text: string) => {
-    if (abortReason === "output-error" || !options?.onOutput) return;
+    if (state.closed || abortReason !== null || !options?.onOutput) return;
     try {
       options.onOutput(stream, text);
     } catch (err) {
@@ -205,6 +223,9 @@ export async function executeCommand(
   // 在 spawn 之前创建 observer 与关联 promise，杜绝同步驱动或测试桩发出的生命周期事件丢失
   const observer: ProcessObserver = {
     output(stream, data) {
+      if (state.closed || abortReason !== null) {
+        return;
+      }
       if (stream === "stdout") {
         const remaining = maxBytes - stdoutBytes;
         if (remaining > 0) {
@@ -250,10 +271,34 @@ export async function executeCommand(
     exited(result) {
       state.exitResult = result;
     },
-    outputClosed() {
+    outputClosed(reason: "natural" | "drain-timeout" | "host-lost" = "natural") {
       if (state.closed) return;
+      if (reason === "natural") {
+        flushDecoders();
+        state.closed = true;
+        resolveOutputClosed();
+        return;
+      }
       state.closed = true;
-      flushDecoders();
+      if (reason === "drain-timeout") {
+        triggerAbort(
+          "drain-timeout",
+          new ProcessError(
+            PROCESS_TIMEOUT,
+            `Process output drain timed out before completion: ${executable}`,
+            { executable, args: [...args] }
+          )
+        );
+      } else {
+        triggerAbort(
+          "host-lost",
+          new ProcessError(
+            PROCESS_SPAWN_ERROR,
+            `Process host connection was lost: ${executable}`,
+            { executable, args: [...args] }
+          )
+        );
+      }
       resolveOutputClosed();
     },
     fault(err) {
@@ -299,6 +344,26 @@ export async function executeCommand(
         PROCESS_SPAWN_ERROR,
         `Process reported fault: ${state.faultError?.message ?? String(abortCause)}`,
         { cause: abortCause, executable }
+      );
+    }
+    if (abortReason === "drain-timeout") {
+      if (abortCause instanceof Error) {
+        throw abortCause;
+      }
+      throw new ProcessError(
+        PROCESS_TIMEOUT,
+        `Process output drain timed out before completion: ${executable}`,
+        { executable, args: [...args] }
+      );
+    }
+    if (abortReason === "host-lost") {
+      if (abortCause instanceof Error) {
+        throw abortCause;
+      }
+      throw new ProcessError(
+        PROCESS_SPAWN_ERROR,
+        `Process host connection was lost: ${executable}`,
+        { executable, args: [...args] }
       );
     }
     if (abortReason === "timeout") {

@@ -12,6 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter as pathDelimiter, join } from "node:path";
 import { beginTransaction, hasPendingTransactions } from "@actiondock/core/project";
+import { ACTION_TIMEOUT, ActionDockError } from "@actiondock/core";
+import { executeAction } from "../../src/commands/run";
+import type { CliContext } from "../../src/types";
 import { runCliAsync } from "../helpers/run-cli";
 
 describe("CLI ad run - 事务崩溃恢复与前置超时控制", () => {
@@ -204,7 +207,7 @@ export default defineAction({
     assert.strictEqual(hasPendingTransactions(dir), true);
   });
 
-  it("--timeout 50ms + 卡住安装（npm 替身挂起，PATH 注入）时返回 ACTION_TIMEOUT 且 handler 未执行、替身进程被终止", async () => {
+  it("--timeout 50ms + 卡住安装（npm 替身挂起，PATH 注入）时返回 ACTION_TIMEOUT 且 handler 未执行", async () => {
     const counterFile = join(tempDir, "exec-counter.txt");
     writeFileSync(counterFile, "", "utf-8");
 
@@ -246,21 +249,170 @@ export default defineAction({
     const counterContent = readFileSync(counterFile, "utf-8");
     assert.strictEqual(counterContent, "");
 
-    // 验证替身进程已被终止
-    assert.strictEqual(existsSync(pidFile), true);
-    const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
-    spawnedPids.push(pid);
-
-    let isAlive = true;
-    for (let i = 0; i < 20; i++) {
-      try {
-        process.kill(pid, 0);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      } catch {
-        isAlive = false;
-        break;
+    // 若并发环境下替身已生成 PID，则纳入测试后的清理兜底
+    if (existsSync(pidFile)) {
+      const rawPid = readFileSync(pidFile, "utf-8").trim();
+      if (rawPid) {
+        const pid = parseInt(rawPid, 10);
+        if (!Number.isNaN(pid)) spawnedPids.push(pid);
       }
     }
-    assert.strictEqual(isAlive, false, "npm substitute process should be terminated");
+  });
+
+  it("已启动的挂起安装替身进程在超时中止后被确定性收尾终止", async () => {
+    const counterFile = join(tempDir, "exec-counter-cleanup.txt");
+    writeFileSync(counterFile, "", "utf-8");
+
+    const dir = createProjectWithAction({
+      actionDependencies: {
+        "hanging-dep": "^1.0.0",
+      },
+      npmDependencies: {
+        "hanging-dep": "^1.0.0",
+      },
+      actionCode: `
+import { appendFileSync } from "node:fs";
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  run() {
+    appendFileSync(${JSON.stringify(counterFile)}, "handler-executed\\n");
+    return { ok: true };
+  }
+});
+`,
+    });
+
+    const pidFile = join(fakeBinDir, "npm-cleanup.pid");
+    writeFakeNpm();
+
+    const origCwd = process.cwd();
+    const origEnv = { ...process.env };
+    const abortController = new AbortController();
+    const context: CliContext = {
+      control: {
+        signal: abortController.signal,
+        cancellationSource: "external",
+      },
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    try {
+      process.chdir(dir);
+      Object.assign(
+        process.env,
+        fakeNpmEnv({ FAKE_NPM_MODE: "hang", FAKE_NPM_PID_FILE: pidFile })
+      );
+
+      const actionPromise = executeAction(
+        "greet",
+        { json: true, install: true },
+        context,
+        undefined,
+        context.control
+      );
+
+      // 启动握手：轮询直到替身子进程实际启动并写出 PID
+      let pid = 0;
+      for (let i = 0; i < 150; i++) {
+        if (existsSync(pidFile)) {
+          const raw = readFileSync(pidFile, "utf-8").trim();
+          if (raw) {
+            pid = parseInt(raw, 10);
+            if (!Number.isNaN(pid)) break;
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.ok(pid > 0, "npm substitute process should have started and written its PID");
+      spawnedPids.push(pid);
+
+      // 握手确认替身进程存活中
+      let isRunningBeforeAbort = true;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        isRunningBeforeAbort = false;
+      }
+      assert.strictEqual(isRunningBeforeAbort, true, "npm substitute process should be running");
+
+      // 触发超时中止
+      abortController.abort(
+        new ActionDockError(ACTION_TIMEOUT, "Action execution timed out after 50ms.")
+      );
+
+      await assert.rejects(actionPromise, (err: any) => {
+        return err?.code === "ACTION_TIMEOUT";
+      });
+
+      // handler 绝对未执行
+      const counterContent = readFileSync(counterFile, "utf-8");
+      assert.strictEqual(counterContent, "");
+
+      // 验证替身进程已被终止
+      let isAlive = true;
+      for (let i = 0; i < 30; i++) {
+        try {
+          process.kill(pid, 0);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        } catch {
+          isAlive = false;
+          break;
+        }
+      }
+      assert.strictEqual(isAlive, false, "npm substitute process should be terminated after timeout");
+    } finally {
+      process.chdir(origCwd);
+      for (const k of Object.keys(process.env)) {
+        if (!(k in origEnv)) {
+          delete process.env[k];
+        }
+      }
+      Object.assign(process.env, origEnv);
+    }
+  });
+
+  it("建图前预检抛错（--no-install + 未结事务）异常退出时，最外层统一清理 timer 绝不泄漏", async () => {
+    const dir = createProjectWithAction({
+      actionDependencies: { "some-dep": "^1.0.0" },
+    });
+    // 创建未结事务
+    const tx = await beginTransaction(dir, "recovery-test-pending");
+    tx.releaseLock();
+
+    let timerCreated: any = undefined;
+    let timerCleared: any = undefined;
+    const origSetTimeout = global.setTimeout;
+    const origClearTimeout = global.clearTimeout;
+
+    try {
+      (global as any).setTimeout = (...args: any[]) => {
+        const handle = origSetTimeout(...(args as [any, any]));
+        if (args[1] === 30000) {
+          timerCreated = handle;
+        }
+        return handle;
+      };
+      (global as any).clearTimeout = (handle: any) => {
+        if (handle === timerCreated) {
+          timerCleared = handle;
+        }
+        return origClearTimeout(handle);
+      };
+
+      const res = await runCliAsync(
+        ["run", "greet", "--no-install", "--timeout", "30s", "--json"],
+        dir
+      );
+      assert.strictEqual(res.exitCode, 1);
+      const parsed = JSON.parse(res.stdout.toString());
+      assert.strictEqual(parsed.error.code, "PROJECT_RECOVERY_REQUIRED");
+
+      assert.ok(timerCreated !== undefined, "应当在进入 local 分支时注册 30s 总预算定时器");
+      assert.strictEqual(timerCleared, timerCreated, "前置抛错退出时最外层 finally 必须清理该定时器");
+    } finally {
+      global.setTimeout = origSetTimeout;
+      global.clearTimeout = origClearTimeout;
+    }
   });
 });

@@ -217,4 +217,55 @@ describe("npm pack 运行器 (runNpmPack)", () => {
           err.message.includes("expected .tgz filename"))
     );
   });
+
+  it("POSIX 包装脚本派生后台 worker 执行并在 5s 后写入输出时，默认驱动自然等待完成且打包成功", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("POSIX 包装脚本特定测试");
+      return;
+    }
+
+    const pkgDir = join(tempDir, "delayed-pack-pkg");
+    const outDir = join(tempDir, "out");
+    const fakeBinDir = join(tempDir, "fake-bin");
+    mkdirSync(pkgDir, { recursive: true });
+    mkdirSync(outDir, { recursive: true });
+    mkdirSync(fakeBinDir, { recursive: true });
+
+    writeFileSync(
+      join(pkgDir, "package.json"),
+      JSON.stringify({ name: "delayed-pack-pkg", version: "1.0.0" }, null, 2),
+      "utf-8"
+    );
+
+    const expectedTarballName = "delayed-pack-pkg-1.0.0.tgz";
+
+    // 构造模拟 POSIX 包装脚本：父脚本派生 worker 并在 5200ms（突破 5000ms 默认排空时限）后写入 tarball 文件与 stdout
+    const workerScript = `
+      const fs = require('node:fs');
+      const path = require('node:path');
+      setTimeout(() => {
+        const destDir = process.argv[process.argv.indexOf('--pack-destination') + 1];
+        fs.writeFileSync(path.join(destDir, ${JSON.stringify(expectedTarballName)}), 'tarball-content');
+        process.stdout.write(${JSON.stringify(expectedTarballName)} + '\\n');
+        process.exit(0);
+      }, 5200);
+    `;
+    const wrapperNpm = `#!${process.execPath}\nconst c = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(workerScript)}, ...process.argv.slice(2)], { stdio: ['ignore', 'inherit', 'inherit'] }); c.unref(); process.exit(0);\n`;
+
+    const fakeNpmPath = join(fakeBinDir, "npm");
+    writeFileSync(fakeNpmPath, wrapperNpm, { mode: 0o755 });
+
+    const start = Date.now();
+    const result = await runNpmPack(pkgDir, outDir, "fallback.tgz", {
+      env: {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    const elapsed = Date.now() - start;
+    assert.strictEqual(result, join(outDir, expectedTarballName));
+    assert.strictEqual(existsSync(result), true);
+    assert.ok(elapsed >= 5000, `耗时必须大于 5000ms（实际耗时 ${elapsed}ms）以验证穿透默认排空期限`);
+  });
 });

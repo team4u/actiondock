@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeProcessDriver } from "@actiondock/testing";
@@ -520,5 +520,123 @@ describe("本地包准备协调器测试 (local-package-preparation)", () => {
       assert.ok(err.details?.hint || err.hint);
       return true;
     });
+  });
+
+  it("node_modules中符号链接指向外部源码时，preparer安全跳过且不触发安装与禁装误报", async () => {
+    const consumerDir = join(tempDir, "consumer");
+    const sourceDir = join(tempDir, "linked-source");
+    mkdirSync(join(consumerDir, "node_modules"), { recursive: true });
+    mkdirSync(sourceDir, { recursive: true });
+
+    writeFileSync(
+      join(sourceDir, "package.json"),
+      JSON.stringify({
+        name: "linked-source",
+        version: "1.0.0",
+        dependencies: { "missing-child-dep": "1.0.0" },
+      })
+    );
+
+    const linkPath = join(consumerDir, "node_modules", "linked-source");
+    symlinkSync(sourceDir, linkPath, process.platform === "win32" ? "junction" : "dir");
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = () => {
+      spawnCount++;
+    };
+
+    // 同时测试 install: false 模式，确保跳过不会误报依赖未物化
+    const preparer = createLocalPackagePreparer({
+      install: false,
+      processDriver: fakeDriver,
+    });
+    const target = {
+      identity: createPackageIdentity("linked-source", "inst-link", "gen-1"),
+      packageRoot: linkPath,
+    };
+    const context = { signal: new AbortController().signal, rootRunId: "run-root-link" };
+
+    await preparer(target, context);
+
+    assert.strictEqual(spawnCount, 0, "preparer遇node_modules内链接包不得调用安装器");
+  });
+
+  it("外部符号链接指向node_modules内部包时，preparer安全跳过且不触发安装与禁装误报", async () => {
+    const internalDir = join(tempDir, "app", "node_modules", "internal-pkg");
+    mkdirSync(internalDir, { recursive: true });
+    writeFileSync(
+      join(internalDir, "package.json"),
+      JSON.stringify({
+        name: "internal-pkg",
+        version: "1.0.0",
+        dependencies: { "unmet-dep": "1.0.0" },
+      })
+    );
+
+    const extLink = join(tempDir, "external-link-to-nm");
+    symlinkSync(internalDir, extLink, process.platform === "win32" ? "junction" : "dir");
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = () => {
+      spawnCount++;
+    };
+
+    const preparer = createLocalPackagePreparer({
+      install: false,
+      processDriver: fakeDriver,
+    });
+    const target = {
+      identity: createPackageIdentity("internal-pkg", "inst-ext", "gen-1"),
+      packageRoot: extLink,
+    };
+    const context = { signal: new AbortController().signal, rootRunId: "run-root-ext" };
+
+    await preparer(target, context);
+
+    assert.strictEqual(spawnCount, 0, "preparer遇指向node_modules的符号链接不得调用安装器");
+  });
+
+  it("普通独立源码首次准备时正确协调并完成首装", async () => {
+    const standaloneDir = join(tempDir, "standalone-app");
+    mkdirSync(standaloneDir, { recursive: true });
+    writeFileSync(
+      join(standaloneDir, "package.json"),
+      JSON.stringify({
+        name: "standalone-app",
+        version: "1.0.0",
+        dependencies: { "needed-dep": "1.0.0" },
+      })
+    );
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = (_handle, _spec, observer) => {
+      spawnCount++;
+      const depDir = join(standaloneDir, "node_modules", "needed-dep");
+      mkdirSync(depDir, { recursive: true });
+      writeFileSync(
+        join(depDir, "package.json"),
+        JSON.stringify({ name: "needed-dep", version: "1.0.0" })
+      );
+      observer.output("stdout", new TextEncoder().encode("installed\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
+    const preparer = createLocalPackagePreparer({ processDriver: fakeDriver });
+    const target = {
+      identity: createPackageIdentity("standalone-app", "inst-sa", "gen-1"),
+      packageRoot: standaloneDir,
+    };
+    const context = { signal: new AbortController().signal, rootRunId: "run-root-sa" };
+
+    await preparer(target, context);
+    assert.strictEqual(spawnCount, 1, "普通独立源码首装时应触发一次安装");
+
+    // 再次调用命中缓存
+    await preparer(target, context);
+    assert.strictEqual(spawnCount, 1, "命中准备缓存后不应再次触发安装");
   });
 });

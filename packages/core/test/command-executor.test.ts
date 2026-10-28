@@ -603,4 +603,228 @@ describe("executeCommand 工程命令执行器测试", () => {
 
     assert.strictEqual(readySeen, true);
   });
+
+  it("outputClosed 为 drain-timeout 时明确以 PROCESS_TIMEOUT 失败并触发 terminate 清理且不成功返回", async () => {
+    let terminated = false;
+    let terminateGraceMs: number | undefined;
+    const driver = new BarrierTestDriver();
+    let observerRef!: ProcessObserver;
+
+    driver.onSpawn = (_spec, observer) => {
+      observerRef = observer;
+      return { id: "drain-timeout-handle", pid: 99111 };
+    };
+
+    driver.onTerminate = async (_handle, graceMs) => {
+      terminated = true;
+      terminateGraceMs = graceMs;
+    };
+
+    const cmdPromise = executeCommand("dummy", ["arg"], { driver });
+
+    await Promise.resolve();
+    observerRef.exited({ code: 0, signal: null });
+    observerRef.output("stdout", new TextEncoder().encode("partial-output-before-timeout"));
+    observerRef.outputClosed("drain-timeout");
+
+    await assert.rejects(
+      cmdPromise,
+      (err: any) => {
+        assert.ok(err instanceof ProcessError);
+        assert.strictEqual(err.code, PROCESS_TIMEOUT);
+        assert.ok(err.message.includes("drain timed out"));
+        assert.strictEqual(err.details?.executable, "dummy");
+        return true;
+      }
+    );
+
+    assert.strictEqual(terminated, true);
+    assert.strictEqual(terminateGraceMs, 200);
+  });
+
+  it("outputClosed 为 host-lost 时明确以 PROCESS_SPAWN_ERROR 失败并触发 terminate 清理", async () => {
+    let terminated = false;
+    const driver = new BarrierTestDriver();
+    let observerRef!: ProcessObserver;
+
+    driver.onSpawn = (_spec, observer) => {
+      observerRef = observer;
+      return { id: "host-lost-handle", pid: 99112 };
+    };
+
+    driver.onTerminate = async () => {
+      terminated = true;
+    };
+
+    const cmdPromise = executeCommand("dummy", ["arg"], { driver });
+    await Promise.resolve();
+    observerRef.outputClosed("host-lost");
+
+    await assert.rejects(
+      cmdPromise,
+      (err: any) => {
+        assert.ok(err instanceof ProcessError);
+        assert.strictEqual(err.code, PROCESS_SPAWN_ERROR);
+        assert.ok(err.message.includes("host connection was lost"));
+        assert.strictEqual(err.details?.executable, "dummy");
+        return true;
+      }
+    );
+
+    assert.strictEqual(terminated, true);
+  });
+
+  it("输出关闭或触发中止后迟到的 output 事件不得继续派发给 onOutput 回调或追加缓冲", async () => {
+    const driver = new BarrierTestDriver();
+    let observerRef!: ProcessObserver;
+    const outputEvents: string[] = [];
+
+    driver.onSpawn = (_spec, observer) => {
+      observerRef = observer;
+      return { id: "late-output-handle" };
+    };
+
+    const cmdPromise = executeCommand("dummy", [], {
+      driver,
+      onOutput(_stream, text) {
+        outputEvents.push(text);
+      },
+    });
+
+    await Promise.resolve();
+    observerRef.output("stdout", new TextEncoder().encode("valid-output\n"));
+    observerRef.exited({ code: 0, signal: null });
+    observerRef.outputClosed("natural");
+
+    const result = await cmdPromise;
+    assert.strictEqual(result.stdout, "valid-output\n");
+    assert.deepStrictEqual(outputEvents, ["valid-output\n"]);
+
+    // 在 closed 后注入延迟输出，必须被观察者静默丢弃，不得触发回调或污染结果
+    observerRef.output("stdout", new TextEncoder().encode("late-garbage\n"));
+    assert.strictEqual(result.stdout, "valid-output\n");
+    assert.deepStrictEqual(outputEvents, ["valid-output\n"]);
+  });
+
+  it("外部 signal 取消时保持调用 terminate 清理并抛出 PROCESS_CANCELLED，不会被误包装为其他错误", async () => {
+    let terminated = false;
+    const controller = new AbortController();
+    const driver = new BarrierTestDriver();
+    let observerRef!: ProcessObserver;
+
+    driver.onSpawn = (_spec, observer) => {
+      observerRef = observer;
+      return { id: "cancel-clean-handle" };
+    };
+
+    driver.onTerminate = async () => {
+      terminated = true;
+      observerRef.outputClosed("natural");
+    };
+
+    const cmdPromise = executeCommand("dummy", [], {
+      driver,
+      signal: controller.signal,
+    });
+
+    await Promise.resolve();
+    controller.abort("user aborted intentionally");
+
+    await assert.rejects(cmdPromise, (err: any) => {
+      assert.ok(err instanceof ProcessError);
+      assert.strictEqual(err.code, PROCESS_CANCELLED);
+      return true;
+    });
+
+    assert.strictEqual(terminated, true);
+  });
+
+  it("父进程先退出但后台后代持续执行并在 5s 默认排空期限后自然写入完成时，默认执行器完整捕获输出并成功返回", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("POSIX 包装脚本特定测试");
+      return;
+    }
+
+    // 模拟类似 npm 包装脚本模式：父脚本派生孙进程并立即退出，
+    // 孙进程在 5200ms（超过 NodeProcessDriver 默认 5000ms 排空时限）后写入完成标记并正常退出。
+    // 在 waitForOutputClose: true 驱动下，执行器必须保持等待管道自然关闭，完整捕获输出并返回 status 0。
+    const parentScript = `
+      const { spawn } = require("node:child_process");
+      const grandChild = spawn(
+        process.execPath,
+        ["-e", "setTimeout(() => { process.stdout.write('npm-delayed-success\\\\n'); process.exit(0); }, 5200);"],
+        { stdio: ["ignore", "inherit", "inherit"] }
+      );
+      grandChild.unref();
+      process.exit(0);
+    `;
+
+    const start = Date.now();
+    const result = await executeCommand(process.execPath, ["-e", parentScript], {
+      timeoutMs: 15000,
+    });
+
+    const elapsed = Date.now() - start;
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.stdout.includes("npm-delayed-success"));
+    assert.ok(elapsed >= 5000, `耗时必须大于 5000ms（实际耗时 ${elapsed}ms）以验证穿透默认排空期限`);
+  });
+
+  it("外部驱动触发 drain-timeout 时必须执行 terminate 强杀孤儿进程树，错误抛出后后台后代彻底消亡", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("POSIX 进程组树特定测试");
+      return;
+    }
+
+    const driver = new NodeProcessDriver({ drainDeadlineMs: 300 });
+    let grandPid: number | undefined;
+    let returned = false;
+    let lateCallbacks = 0;
+
+    const grandCode = `
+      process.on("SIGTERM", () => {});
+      process.stdout.write("GRAND_PID=" + process.pid + "\\n");
+      setInterval(() => process.stdout.write("tick\\n"), 100);
+    `;
+    const parentCode = `
+      const { spawn } = require("node:child_process");
+      const c = spawn(process.execPath, ["-e", ${JSON.stringify(grandCode)}], { stdio: ["ignore", "inherit", "inherit"] });
+      c.unref();
+      process.exit(0);
+    `;
+
+    let caughtError: any;
+    try {
+      await executeCommand(process.execPath, ["-e", parentCode], {
+        driver,
+        onOutput(_stream, text) {
+          if (returned) {
+            lateCallbacks++;
+          }
+          const match = text.match(/GRAND_PID=(\d+)/);
+          if (match) grandPid = Number(match[1]);
+        },
+      });
+    } catch (err) {
+      returned = true;
+      caughtError = err;
+    }
+
+    assert.ok(caughtError instanceof ProcessError);
+    assert.strictEqual(caughtError.code, PROCESS_TIMEOUT);
+    assert.ok(caughtError.message.includes("drain timed out"));
+    assert.ok(grandPid !== undefined, "必须成功捕获孙进程 PID");
+
+    // 等待 200ms 确认终止收敛：孙进程必须已被 SIGKILL 清理，且终态后绝不再收到 onOutput 回调
+    await new Promise((r) => setTimeout(r, 200));
+    assert.strictEqual(lateCallbacks, 0, "终态到达后绝不再触发 onOutput 回调");
+
+    let alive = false;
+    try {
+      process.kill(grandPid!, 0);
+      alive = true;
+      process.kill(grandPid!, "SIGKILL");
+    } catch {}
+    assert.strictEqual(alive, false, "孙进程必须在 drain-timeout 发生后被彻底强杀清理，绝不得后台遗留");
+  });
 });

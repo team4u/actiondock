@@ -13,7 +13,7 @@ import type { CliContext } from "../types";
 import {
   assertSafePackageSpec,
   getEffectiveOptions,
-  requireProjectManifestRoot,
+  prepareProjectManifestRoot,
   rollbackAndRethrow,
 } from "../utils";
 
@@ -29,7 +29,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
     .option("--json", "Output as JSON")
     .action(async (packageIdentifier: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const { root, manifest } = requireProjectManifestRoot(options.package);
+      const { root, manifest } = await prepareProjectManifestRoot(options.package, context);
 
       // 寻址逻辑包标识
       let targetPackageId: string | null = null;

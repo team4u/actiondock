@@ -174,6 +174,10 @@ export async function executeAction(
     }
   }
 
+  let timer: NodeJS.Timeout | undefined;
+  let timeoutController: AbortController | undefined;
+  let executionSignal: AbortSignal | undefined = effectiveSignal;
+
   try {
     // 异步执行仅支持远端目标，本地模式直接拒绝
     const resolvedTopology = resolveTarget(
@@ -201,16 +205,17 @@ export async function executeAction(
 
     let targetPackageRoot: string | undefined;
     let prepareLocalPackage: LocalPackagePreparer | undefined;
-    let effectiveExecutionTimeoutMs = timeoutMs;
 
     // 仅在 local 本地分支执行当前工程依赖准备与包寻址（remote 分支不进行本机包查找与环境准备）
     if (resolvedTopology.type === "local") {
-      const deadline = timeoutMs !== undefined ? Date.now() + timeoutMs : undefined;
-      const timeoutController = timeoutMs !== undefined ? new AbortController() : undefined;
-      let timer: NodeJS.Timeout | undefined;
       if (timeoutMs !== undefined) {
+        timeoutController = new AbortController();
+        const timeoutReason = new ActionDockError(
+          ACTION_TIMEOUT,
+          `Action execution timed out after ${timeoutMs}ms.`
+        );
         timer = setTimeout(() => {
-          timeoutController?.abort();
+          timeoutController?.abort(timeoutReason);
         }, timeoutMs);
         timer.unref?.();
       }
@@ -218,7 +223,7 @@ export async function executeAction(
       const signals: AbortSignal[] = [];
       if (effectiveSignal) signals.push(effectiveSignal);
       if (timeoutController) signals.push(timeoutController.signal);
-      const compositeSignal = signals.length > 1
+      executionSignal = signals.length > 1
         ? AbortSignal.any(signals)
         : signals.length === 1
           ? signals[0]
@@ -246,7 +251,7 @@ export async function executeAction(
             await recoverPendingTransactions(currentRoot, {
               frozenInstall: true,
               allowInstall,
-              signal: compositeSignal,
+              signal: executionSignal,
             });
           }
 
@@ -255,7 +260,7 @@ export async function executeAction(
           if (hasActionDependencies) {
             await ensureProjectDependencies(currentRoot, {
               install: allowInstall,
-              signal: compositeSignal,
+              signal: executionSignal,
               onProgress: (msg) => writeStderr(msg, context),
             });
           }
@@ -266,15 +271,8 @@ export async function executeAction(
           onProgress: (msg) => writeStderr(msg, context),
         });
 
-        if (deadline !== undefined) {
-          const remainingTimeoutMs = Math.max(0, deadline - Date.now());
-          if (remainingTimeoutMs === 0 || timeoutController?.signal.aborted) {
-            throw new ActionDockError(
-              ACTION_TIMEOUT,
-              `Action execution timed out after ${timeoutMs}ms.`
-            );
-          }
-          effectiveExecutionTimeoutMs = remainingTimeoutMs;
+        if (timeoutController?.signal.aborted) {
+          throw timeoutController.signal.reason;
         }
       } catch (err: any) {
         const isSigint =
@@ -284,18 +282,14 @@ export async function executeAction(
         if (isSigint) {
           throw new SigintError();
         }
-        if (timeoutController?.signal.aborted) {
-          throw new ActionDockError(
-            ACTION_TIMEOUT,
-            `Action execution timed out after ${timeoutMs}ms.`
-          );
+        const signalReason = executionSignal?.reason;
+        if (
+          (signalReason as any)?.code === ACTION_TIMEOUT ||
+          (signalReason as any)?.details?.code === ACTION_TIMEOUT
+        ) {
+          throw signalReason;
         }
         throw err;
-      } finally {
-        if (timer) {
-          clearTimeout(timer);
-          timer = undefined;
-        }
       }
     }
 
@@ -308,7 +302,7 @@ export async function executeAction(
 
         if (options.async) {
           const ticket = await service.execution.start(targetRef, input as JsonValue, {
-            signal: effectiveSignal,
+            signal: executionSignal,
             timeoutMs,
             config: configOverrides,
             requestId: options.requestId,
@@ -349,15 +343,15 @@ export async function executeAction(
           }
 
           const result = await service.execution.run(targetRef, input as JsonValue, {
-            signal: effectiveSignal,
-            timeoutMs: effectiveExecutionTimeoutMs,
+            signal: executionSignal,
+            timeoutMs,
             config: configOverrides,
             requestId: options.requestId,
           });
 
           if (
             effectiveControl?.cancellationSource === "sigint" &&
-            (effectiveSignal?.aborted || (!result.ok && result.error?.code === "ACTION_CANCELLED"))
+            (executionSignal?.aborted || (!result.ok && result.error?.code === "ACTION_CANCELLED"))
           ) {
             throw new SigintError();
           }
@@ -396,6 +390,11 @@ export async function executeAction(
       throw new SigintError();
     }
     throw err;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
   }
 }
 

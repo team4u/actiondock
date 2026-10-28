@@ -369,4 +369,30 @@ rl.on("line", (cmd) => {
     const current = JSON.parse(readFileSync(join(tempDir, "package.json"), "utf-8"));
     assert.strictEqual(current.version, "broken-after-tx");
   });
+
+  it("当存在挂起 pending 事务时，beginTransaction 拒绝开启新事务并抛出 PROJECT_RECOVERY_REQUIRED，同时释放锁", async () => {
+    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "tx-pending-guard", version: "1.0.0" }));
+    const tx1 = await beginTransaction(tempDir, "first pending tx");
+    tx1.releaseLock();
+
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+
+    let caughtErr: any;
+    try {
+      await beginTransaction(tempDir, "second tx should fail");
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    assert.notStrictEqual(caughtErr, undefined);
+    assert.strictEqual(caughtErr?.code, "PROJECT_RECOVERY_REQUIRED");
+    assert.ok(caughtErr?.message.includes("pending transaction exists"));
+
+    // 验证锁已被安全释放，而不是被泄漏占用
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    assert.strictEqual(existsSync(lockDir), false);
+
+    // 既有 pending 状态不受影响
+    assert.strictEqual(hasPendingTransactions(tempDir), true);
+  });
 });

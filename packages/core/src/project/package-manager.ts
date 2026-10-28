@@ -45,14 +45,49 @@ function isFile(filePath: string): boolean {
   }
 }
 
-function getEnvValue(
-  env: Record<string, string | undefined> | undefined,
+/**
+ * 规范化 Windows 环境变量字典。
+ *
+ * 核心契约：
+ * - 保持与 Node.js Windows child_process 相同的字典序排序与大小写去重语义；
+ * - 先由字典序首位键决定该大小写分组的最终获胜键；
+ * - 若获胜键的值为 undefined，则该变量视为未设置（同组后续键不可顶替）；
+ * - 仅保留值非 undefined 的有效键值对，杜绝后续执行器剔除 undefined 时残留失效同名键。
+ */
+function normalizeWindowsEnvironment(
+  env: Record<string, string | undefined>
+): Record<string, string> {
+  const keys: string[] = [];
+  for (const key in env) {
+    keys.push(key);
+  }
+  keys.sort();
+
+  const seenUpper = new Set<string>();
+  const normalized: Record<string, string> = {};
+
+  for (const key of keys) {
+    const upper = key.toUpperCase();
+    if (seenUpper.has(upper)) {
+      continue;
+    }
+    seenUpper.add(upper);
+    const value = env[key];
+    if (value !== undefined) {
+      normalized[key] = value;
+    }
+  }
+
+  return normalized;
+}
+
+function getNormalizedEnvValue(
+  env: Record<string, string>,
   targetKey: string
 ): string | undefined {
-  if (!env) return undefined;
-  const targetLower = targetKey.toLowerCase();
+  const targetUpper = targetKey.toUpperCase();
   for (const [key, value] of Object.entries(env)) {
-    if (key.toLowerCase() === targetLower) {
+    if (key.toUpperCase() === targetUpper) {
       return value;
     }
   }
@@ -147,8 +182,9 @@ export function resolvePackageManagerInvocation(
   }
 
   const envSource = options?.env !== undefined ? options.env : process.env;
-  const rawPath = getEnvValue(envSource, "PATH") ?? "";
-  const rawPathExt = getEnvValue(envSource, "PATHEXT");
+  const effectiveEnv = normalizeWindowsEnvironment(envSource);
+  const rawPath = getNormalizedEnvValue(effectiveEnv, "PATH") ?? "";
+  const rawPathExt = getNormalizedEnvValue(effectiveEnv, "PATHEXT");
   const pathExtList = resolvePathExt(rawPathExt);
 
   const cwd = options?.cwd ?? process.cwd();
@@ -263,16 +299,22 @@ export async function runPackageManager(
   args: readonly string[],
   options?: RunPackageManagerOptions
 ): Promise<CommandExecutionResult> {
+  const platform = options?.platform ?? process.platform;
+  const normalizedEnv =
+    platform === "win32" && options?.env !== undefined
+      ? normalizeWindowsEnvironment(options.env)
+      : options?.env;
+
   const invocation = resolvePackageManagerInvocation(manager, args, {
     cwd: options?.cwd,
-    env: options?.env,
+    env: normalizedEnv,
     platform: options?.platform,
     execPath: options?.execPath,
   });
 
   return executeCommand(invocation.executable, invocation.args, {
     cwd: options?.cwd,
-    env: options?.env,
+    env: normalizedEnv,
     signal: options?.signal,
     timeoutMs: options?.timeoutMs,
     maxOutputBytes: options?.maxOutputBytes,

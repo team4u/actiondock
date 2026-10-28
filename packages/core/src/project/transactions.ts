@@ -244,6 +244,13 @@ export async function beginTransaction(
 ): Promise<ProjectTransaction> {
   const releaseLock = acquireProjectLock(projectRoot);
   try {
+    if (hasPendingTransactions(projectRoot)) {
+      throw new ActionDockError(
+        PROJECT_RECOVERY_REQUIRED,
+        `PROJECT_RECOVERY_REQUIRED: Cannot begin transaction in '${projectRoot}': pending transaction exists. Recovery is required.`
+      );
+    }
+
     const txId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const txDir = join(projectRoot, ".actiondock", "transactions", txId);
     const snapshotDir = join(txDir, "snapshot");

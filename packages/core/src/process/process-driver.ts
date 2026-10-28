@@ -131,6 +131,8 @@ export interface NodeProcessDriverOptions {
   drainDeadlineMs?: number;
   /** 进程派生函数，默认为 childProcess.spawn */
   spawnFn?: typeof spawn;
+  /** 是否在自然 exit 后等待输出流真实 close（默认 false） */
+  waitForOutputClose?: boolean;
 }
 
 /**
@@ -156,6 +158,8 @@ interface InternalProcessInstance {
   selfRelease(): void;
   /** 活跃终止 Promise，用于合并并发 terminate 调用 */
   terminationPromise?: Promise<void>;
+  markOutputClosed(reason: "natural" | "drain-timeout" | "host-lost"): void;
+  outputClosedReason?: "natural" | "drain-timeout" | "host-lost";
 }
 
 /**
@@ -231,11 +235,13 @@ function ptySignalToName(signal: number | undefined | null): string | null {
 export class NodeProcessDriver implements ProcessDriver {
   private readonly drainDeadlineMs: number;
   readonly spawnFn: typeof spawn;
+  private readonly waitForOutputClose: boolean;
   private readonly instances = new Map<string, InternalProcessInstance>();
 
   constructor(options: NodeProcessDriverOptions = {}) {
     this.drainDeadlineMs = options.drainDeadlineMs ?? 5000;
     this.spawnFn = options.spawnFn ?? childProcess.spawn;
+    this.waitForOutputClose = options.waitForOutputClose ?? false;
   }
 
   /**
@@ -380,6 +386,7 @@ export class NodeProcessDriver implements ProcessDriver {
           this.instances.delete(handleId);
         }
       },
+      markOutputClosed: (reason) => markOutputClosed(reason),
     };
 
     const markExited = (code: number | null, signal: string | null) => {
@@ -400,18 +407,20 @@ export class NodeProcessDriver implements ProcessDriver {
       }
       if (!instance.outputClosed) {
         instance.outputClosed = true;
+        instance.outputClosedReason = reason;
         observer.outputClosed(reason);
         for (const listener of closedListeners) {
           listener();
         }
       }
-      if (!instance.terminationPromise) {
+      if (instance.outputClosedReason === "natural" && !instance.terminationPromise) {
         instance.selfRelease();
       }
     };
 
     // 绑定 PTY 数据输出
     ptyProcess.onData((data: string) => {
+      if (instance.outputClosed) return;
       observer.output("pty", new TextEncoder().encode(data));
     });
 
@@ -498,6 +507,7 @@ export class NodeProcessDriver implements ProcessDriver {
           this.instances.delete(handleId);
         }
       },
+      markOutputClosed: (reason) => markOutputClosed(reason),
     };
 
     const markExited = (code: number | null, signal: string | null) => {
@@ -518,12 +528,18 @@ export class NodeProcessDriver implements ProcessDriver {
       }
       if (!instance.outputClosed) {
         instance.outputClosed = true;
+        instance.outputClosedReason = reason;
+        if (reason !== "natural") {
+          try { child.stdout?.destroy(); } catch {}
+          try { child.stderr?.destroy(); } catch {}
+          try { child.stdin?.destroy(); } catch {}
+        }
         observer.outputClosed(reason);
         for (const listener of closedListeners) {
           listener();
         }
       }
-      if (!instance.terminationPromise) {
+      if (instance.outputClosedReason === "natural" && !instance.terminationPromise) {
         instance.selfRelease();
       }
     };
@@ -531,12 +547,14 @@ export class NodeProcessDriver implements ProcessDriver {
     // 同步完成 stdout/stderr 监听绑定，防止产生数据丢失竞态
     if (child.stdout) {
       child.stdout.on("data", (chunk: Buffer) => {
+        if (instance.outputClosed) return;
         observer.output("stdout", new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
       });
     }
 
     if (child.stderr) {
       child.stderr.on("data", (chunk: Buffer) => {
+        if (instance.outputClosed) return;
         observer.output("stderr", new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
       });
     }
@@ -550,7 +568,7 @@ export class NodeProcessDriver implements ProcessDriver {
 
     child.on("exit", (code, signal) => {
       markExited(code, signal);
-      if (!instance.outputClosed && !instance.drainTimer) {
+      if (!this.waitForOutputClose && !instance.terminationPromise && !instance.outputClosed && !instance.drainTimer) {
         instance.drainTimer = setTimeout(() => {
           markOutputClosed("drain-timeout");
         }, this.drainDeadlineMs);
@@ -820,14 +838,26 @@ export class NodeProcessDriver implements ProcessDriver {
 
         // 第二阶段：强杀后等待父进程退出与输出收敛
         if (!isSettled()) {
+          if (instance.drainTimer) {
+            clearTimeout(instance.drainTimer);
+            instance.drainTimer = undefined;
+          }
+
           await new Promise<void>((resolve, reject) => {
             let timer: NodeJS.Timeout | undefined;
             let settled = false;
+            let exitListener: (() => void) | undefined;
             let closeListener: (() => void) | undefined;
 
             const cleanup = () => {
               if (settled) return;
               settled = true;
+              if (exitListener) {
+                const idx = instance.exitListeners.indexOf(exitListener);
+                if (idx >= 0) {
+                  instance.exitListeners.splice(idx, 1);
+                }
+              }
               if (closeListener) {
                 const idx = instance.closedListeners.indexOf(closeListener);
                 if (idx >= 0) {
@@ -837,15 +867,24 @@ export class NodeProcessDriver implements ProcessDriver {
               if (timer) clearTimeout(timer);
             };
 
-            closeListener = () => {
+            const check = () => {
               if (isSettled()) {
                 cleanup();
                 resolve();
               }
             };
+
+            exitListener = check;
+            closeListener = check;
+            instance.onExit(exitListener);
+            instance.onClosed(closeListener);
+
             timer = setTimeout(() => {
               cleanup();
               if (!isSettled()) {
+                if (!instance.outputClosed) {
+                  instance.markOutputClosed("drain-timeout");
+                }
                 reject(
                   new ProcessError(
                     PROCESS_TIMEOUT,
@@ -856,7 +895,6 @@ export class NodeProcessDriver implements ProcessDriver {
                 resolve();
               }
             }, this.drainDeadlineMs);
-            instance.onClosed(closeListener);
           });
         }
       } finally {

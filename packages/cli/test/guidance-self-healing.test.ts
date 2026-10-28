@@ -13,6 +13,10 @@ import { UndeclaredActionDependencyError } from "@actiondock/core/graph";
 import { StandaloneDispatcher, ExitCode } from "@actiondock/core/server";
 import { main } from "../src/index";
 import { runCliAsync } from "./helpers/run-cli";
+import "node:sqlite";
+
+// 首次加载 SQLite 的进程级提示先行排空，避免异步写入落入后续 CLI 输出捕获。
+await new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
   describe("第一阶段：执行与高频传参自愈 + 确定性缺陷修复", () => {

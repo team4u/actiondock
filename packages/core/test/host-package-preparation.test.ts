@@ -15,6 +15,7 @@ import {
   ACTION_TIMEOUT,
   DEPENDENCY_INSTALL_FAILED,
   EXECUTION_FAILED,
+  IDEMPOTENCY_CONFLICT,
   PACKAGE_NOT_FOUND,
   SERVICE_CLOSED,
   UNDECLARED_ACTION_DEPENDENCY,
@@ -861,5 +862,110 @@ describe("Host 本地包运行前准备生命周期测试 (host-package-preparat
     }
     assert.strictEqual(handlerStarted, true, "handler 应当在剩余预算内启动");
     assert.strictEqual(handlerCompleted, false, "handler 受到总期限约束应超时中止");
+  });
+
+  it("相同 requestId 在多次调用中即使本地准备耗时不同（剩余预算不同），仍成功幂等重放相同结果且 handler 仅执行一次", async () => {
+    const dirIdemp = createDummyPackageDir("pkg-idemp-prep");
+    let preparations = 0;
+    let executions = 0;
+
+    const dynamicDelayHook = async () => {
+      preparations++;
+      // 第一次准备耗时 20ms，第二次准备耗时 60ms，制造客观抖动
+      await new Promise<void>((resolve) => setTimeout(resolve, preparations === 1 ? 20 : 60));
+    };
+
+    activeHost = await createActionDockHost({
+      prepareLocalPackage: dynamicDelayHook,
+      packages: [
+        {
+          packageRoot: dirIdemp,
+          projectConfig: { id: "pkg.idemp", name: "Idempotency Test", version: "1.0.0" },
+          actions: [
+            {
+              id: "act",
+              action: defineAction({
+                run: async () => {
+                  executions++;
+                  return { count: executions };
+                },
+              }),
+            },
+          ],
+        },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+
+    const options = { requestId: "req-diff-prep-jitter", timeoutMs: 2000 };
+    const first = await activeHost.runAction("pkg.idemp/act", { val: "x" }, options);
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual((first as any).data?.count, 1);
+    const originalRunId = first.runId;
+
+    const second = await activeHost.runAction("pkg.idemp/act", { val: "x" }, options);
+    assert.strictEqual(second.ok, true);
+    assert.strictEqual(second.runId, originalRunId, "第二次幂等重放必须返回相同 runId");
+    assert.strictEqual((second as any).data?.count, 1, "重放结果应与首次执行一致");
+    assert.strictEqual(preparations, 2, "两轮调用均触发了准备 hook");
+    assert.strictEqual(executions, 1, "handler 绝不重复执行");
+  });
+
+  it("相同 requestId 但显式改变调用 timeoutMs 时，正确产生 IDEMPOTENCY_CONFLICT 冲突拒绝", async () => {
+    const dirConflict = createDummyPackageDir("pkg-idemp-conflict");
+    let executions = 0;
+
+    activeHost = await createActionDockHost({
+      prepareLocalPackage: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      },
+      packages: [
+        {
+          packageRoot: dirConflict,
+          projectConfig: { id: "pkg.conflict", name: "Conflict Test", version: "1.0.0" },
+          actions: [
+            {
+              id: "act",
+              action: defineAction({
+                run: async () => {
+                  executions++;
+                  return { count: executions };
+                },
+              }),
+            },
+          ],
+        },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+
+    const first = await activeHost.runAction(
+      "pkg.conflict/act",
+      { val: "x" },
+      { requestId: "req-conflict-check", timeoutMs: 2000 }
+    );
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual(executions, 1);
+
+    // 显式改变 timeoutMs 从 2000 变为 3000
+    const secondPromise = activeHost.runAction(
+      "pkg.conflict/act",
+      { val: "x" },
+      { requestId: "req-conflict-check", timeoutMs: 3000 }
+    );
+
+    await assert.rejects(
+      secondPromise,
+      (err: any) => {
+        assert.strictEqual(err?.code, IDEMPOTENCY_CONFLICT);
+        assert.match(err?.message, /input parameters digest mismatch/);
+        return true;
+      },
+      "真实改变 timeoutMs 必须产生 IDEMPOTENCY_CONFLICT"
+    );
+
+    assert.strictEqual(executions, 1, "冲突时 handler 绝不得执行");
   });
 });

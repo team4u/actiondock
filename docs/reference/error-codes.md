@@ -86,7 +86,7 @@ ActionDock 采用确定性的结构化错误体系。HTTP 接口与 CLI 的 `--j
 | `ACTION_CALL_CYCLE` | 508 | Action 级联调用检测到成环（如 A 调用 B，B 又调用 A）或超出调用深度上限。附带 `details.alias: "ACTION_CYCLE_DETECTED"` 或 `ACTION_MAX_DEPTH_EXCEEDED` 标记。 | 检查 Action 级联逻辑，消除相互循环调用或深层递归。 |
 | `INVALID_ACTION_REF` | 400 | Action 引用格式非法；多包环境下短 ID 冲突存在歧义；或向 `ctx.actions.invoke` 传入了函数或非规范对象。 | 检查引用标识拼写；多包时使用完整标识符；仅传入字符串标识或规范引用。 |
 | `UNDECLARED_ACTION_DEPENDENCY` | 403 | 尝试直接调用传递包内部动作，或级联调用未在 `actiondock.json` 的 `uses` 中显式声明的目标动作。 | 在 `actiondock.json` 中添加直接依赖或在 `uses` 列表中补充声明。 |
-| `IDEMPOTENCY_CONFLICT` | 409 | 携带相同 requestId 的重放请求提交了不同的入参内容摘要。 | 确保相同去重请求标识对应相同的业务入参，或更换新的 requestId。 |
+| `IDEMPOTENCY_CONFLICT` | 409 | 携带相同 requestId 的重放请求提交了不同的输入、配置或原始超时时限；准备阶段耗时变化不属于请求参数变化。 | 保持相同去重请求标识对应的输入、配置与原始时限一致，或为不同请求使用新的 requestId。 |
 | `STANDALONE_ASYNC_UNSUPPORTED` | 400 | 独立单执行交付产物拒绝异步启动语义。 | 独立交付产物仅支持同步单次运行，异步任务请通过服务模式调用。 |
 | `HOST_PROCESS_EXITED` | 502 | 宿主子进程已异常退出，调用无法送达。 | 检查子进程崩溃日志与系统资源。 |
 | `HOST_LOST` | - | 仅 `ad runs watch` 聚合输出使用：本地观察中确认运行记录的持有宿主进程已死亡（非任务终态）。 | 任务宿主已崩溃，重启派工或检查宿主进程日志；该代码出现在 watch 输出的 `error` 字段，不是 HTTP 错误。 |
@@ -102,7 +102,7 @@ ActionDock 采用确定性的结构化错误体系。HTTP 接口与 CLI 的 `--j
 | `RUN_PERSISTENCE_FAILED` | 500 | 运行记录初始事务或终态事务写入存储失败。 | 检查磁盘剩余空间与 SQLite 数据库文件权限。 |
 | `STORAGE_BUSY` | 503 | 数据库写入事务重试耗尽，底层 SQLite 锁等待超时。 | 降低并发写入压力或排查长时间占用事务。 |
 | `PROJECT_BUSY` | 409 | 工程事务排他锁被另一个活跃的主机进程持有，拒绝并发启动。 | 避免并发操作同一项目目录，或终止旧的活跃进程。 |
-| `PROJECT_RECOVERY_REQUIRED` | 409 | 前序主进程已退出，但残留受管子进程仍在后台运行，需先回收子进程方可接管数据目录。 | 清理残留孤儿进程或执行恢复流程后再行启动。 |
+| `PROJECT_RECOVERY_REQUIRED` | 409 | 工程存在未恢复的依赖事务，或恢复安装失败、被禁装策略拒绝；未恢复前不能开启新的修改事务。 | 在允许安装的前提下，通过 `ad add`、`ad remove` 或本地 `ad run` 完成恢复；恢复失败时按具体错误排查，保留事务快照。 |
 | `STATE_KEY_NOT_FOUND` | 404 | 查询的状态键不存在。 | 检查状态键命名空间与键名是否正确写入。 |
 
 ---
@@ -123,7 +123,7 @@ ActionDock 采用确定性的结构化错误体系。HTTP 接口与 CLI 的 `--j
 | `PROCESS_OUTPUT_LIMIT` | 500 | 子进程输出累计字节数超过安全上限（默认 10MB）。 | 优化外部命令输出量或增加流式过滤处理。 |
 | `PROCESS_SPAWN_ERROR` | 500 | 外部子进程派生启动失败（命令不存在或系统无执行权限）。 | 确认系统命令路径与可执行权限。 |
 | `PROCESS_CANCELLED` | 500 | 子进程在执行中被 AbortSignal 信号取消。 | 检查任务是否触发了超时或上层主动取消。 |
-| `PROCESS_TIMEOUT` | 504 | 外部命令执行耗时超出设定的超时限制。 | 优化命令执行逻辑或调大命令执行超时配置。 |
+| `PROCESS_TIMEOUT` | 504 | 外部命令执行超过时限，或终止后仍未在清理期限内完成退出与输出收敛。 | 检查错误详情区分执行超时与清理超时；优化命令或调整执行时限，清理失败时排查仍持有输出管道的后代进程。 |
 
 ---
 

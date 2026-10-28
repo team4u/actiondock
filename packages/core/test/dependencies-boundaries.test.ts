@@ -609,4 +609,103 @@ setInterval(() => {}, 1000);
     const release = acquireProjectLock(realProcDir);
     release();
   });
+
+  it("node_modules中符号链接指向外部源码时，直接ensureProjectDependencies安全跳过且不触发安装", async () => {
+    const consumerDir = join(tempDir, "consumer");
+    const sourceDir = join(tempDir, "linked-source");
+    mkdirSync(join(consumerDir, "node_modules"), { recursive: true });
+    mkdirSync(sourceDir, { recursive: true });
+
+    writeFileSync(
+      join(sourceDir, "package.json"),
+      JSON.stringify({
+        name: "linked-source",
+        version: "1.0.0",
+        dependencies: { "missing-child-dep": "1.0.0" },
+      })
+    );
+
+    const linkPath = join(consumerDir, "node_modules", "linked-source");
+    symlinkSync(sourceDir, linkPath, process.platform === "win32" ? "junction" : "dir");
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = () => {
+      spawnCount++;
+    };
+
+    const res = await ensureProjectDependencies(linkPath, {
+      processDriver: fakeDriver,
+      install: true,
+    });
+
+    assert.strictEqual(res.installed, false);
+    assert.strictEqual(spawnCount, 0, "node_modules内符号链接包严禁启动子进程安装");
+  });
+
+  it("外部符号链接指向node_modules内部包时，直接ensureProjectDependencies安全跳过且不触发安装", async () => {
+    const internalDir = join(tempDir, "app", "node_modules", "internal-pkg");
+    mkdirSync(internalDir, { recursive: true });
+    writeFileSync(
+      join(internalDir, "package.json"),
+      JSON.stringify({
+        name: "internal-pkg",
+        version: "1.0.0",
+        dependencies: { "unmet-dep": "1.0.0" },
+      })
+    );
+
+    const extLink = join(tempDir, "external-link-to-nm");
+    symlinkSync(internalDir, extLink, process.platform === "win32" ? "junction" : "dir");
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = () => {
+      spawnCount++;
+    };
+
+    const res = await ensureProjectDependencies(extLink, {
+      processDriver: fakeDriver,
+      install: true,
+    });
+
+    assert.strictEqual(res.installed, false);
+    assert.strictEqual(spawnCount, 0, "指向node_modules的符号链接严禁启动子进程安装");
+  });
+
+  it("普通独立源码无node_modules时直接ensureProjectDependencies正常执行首装", async () => {
+    const standaloneDir = join(tempDir, "standalone-app");
+    mkdirSync(standaloneDir, { recursive: true });
+    writeFileSync(
+      join(standaloneDir, "package.json"),
+      JSON.stringify({
+        name: "standalone-app",
+        version: "1.0.0",
+        dependencies: { "mock-runtime-dep": "1.0.0" },
+      })
+    );
+
+    let spawnCount = 0;
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = (_handle, _spec, observer) => {
+      spawnCount++;
+      const depDir = join(standaloneDir, "node_modules", "mock-runtime-dep");
+      mkdirSync(depDir, { recursive: true });
+      writeFileSync(
+        join(depDir, "package.json"),
+        JSON.stringify({ name: "mock-runtime-dep", version: "1.0.0" })
+      );
+      observer.output("stdout", new TextEncoder().encode("installed\n"));
+      observer.exited({ code: 0, signal: null });
+      observer.outputClosed("natural");
+    };
+
+    const res = await ensureProjectDependencies(standaloneDir, {
+      processDriver: fakeDriver,
+    });
+
+    assert.strictEqual(res.installed, true);
+    assert.strictEqual(res.installRoot, standaloneDir);
+    assert.strictEqual(spawnCount, 1, "普通独立源码首装应当正常调用安装器");
+  });
 });

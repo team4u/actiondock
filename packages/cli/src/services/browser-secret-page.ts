@@ -44,7 +44,7 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
     }
     .card {
       background: var(--card); border: 1px solid var(--border); border-radius: 0.5rem;
-      max-width: 28rem; width: 100%; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-width: 32rem; width: 100%; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
     h1, h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem; }
     .meta {
@@ -53,12 +53,34 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
     }
     .meta-k { color: var(--muted); }
     .meta-v { font-family: monospace; color: #38bdf8; word-break: break-all; }
-    label { display: block; font-size: 0.85rem; margin-bottom: 0.375rem; }
-    .input-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-    input[type="password"], input[type="text"] {
-      flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0.375rem;
-      padding: 0.5rem 0.625rem; color: var(--text); font-family: monospace; font-size: 0.9rem;
+    .field-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.375rem;
     }
+    .field-header label { font-size: 0.85rem; margin-bottom: 0; }
+    .editor-wrap {
+      position: relative; margin-bottom: 1rem;
+    }
+    textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0.375rem;
+      padding: 0.625rem; color: var(--text); font-family: monospace; font-size: 0.85rem;
+      resize: vertical; min-height: 7.5rem; line-height: 1.45; word-break: break-all; display: block;
+    }
+    textarea.masked {
+      -webkit-text-security: disc;
+      text-security: disc;
+    }
+    textarea.masked-fallback {
+      color: transparent !important;
+      user-select: none !important;
+    }
+    .mask-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--card); border: 1px solid var(--border); border-radius: 0.375rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 0.85rem; cursor: pointer; padding: 0.75rem; text-align: center;
+    }
+    .mask-overlay.hidden { display: none; }
+    .mask-overlay-sub { font-size: 0.75rem; margin-top: 0.375rem; color: #38bdf8; }
     button {
       border: none; border-radius: 0.375rem; padding: 0.5rem 0.875rem;
       font-size: 0.85rem; cursor: pointer; font-weight: 500;
@@ -89,10 +111,16 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
     </div>
     <form id="form">
       <div>
-        <label for="val">敏感配置值</label>
-        <div class="input-row">
-          <input id="val" type="password" autocomplete="off" spellcheck="false" required>
+        <div class="field-header">
+          <label for="val">敏感配置值</label>
           <button type="button" class="toggle" id="tog">显示</button>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="val" class="masked" autocomplete="off" spellcheck="false" rows="6" required></textarea>
+          <div id="mask" class="mask-overlay hidden" aria-hidden="true">
+            <div>已启用敏感配置遮罩保护</div>
+            <div class="mask-overlay-sub">点击此处或「显示」切换明文</div>
+          </div>
         </div>
       </div>
       <div class="actions">
@@ -102,7 +130,7 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
       <div class="status" id="st"></div>
     </form>
     <div class="footer">
-      说明：输入限时 5 分钟。本页面用于避免凭据经命令参数和模型对话传递；配置在本地 SQLite 仍明文存储（无磁盘加密）。临时链接不可分享；已授权 Action 及本机程序不受此隔离。
+      说明：输入限时 5 分钟。本页面用于避免凭据经命令参数和模型对话传递；配置在本地 SQLite 仍明文存储（无磁盘加密）。支持多行输入，浏览器将换行统一为 LF。临时链接不可分享；已授权 Action 及本机程序不受此隔离。
     </div>
   </div>
   <script nonce="${safeNonce}">
@@ -112,6 +140,7 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
       var ticket = params.get("ticket");
       var input = document.getElementById("val");
       var toggleBtn = document.getElementById("tog");
+      var maskOverlay = document.getElementById("mask");
       var submitBtn = document.getElementById("sub");
       var cancelBtn = document.getElementById("can");
       var status = document.getElementById("st");
@@ -129,15 +158,51 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
         return;
       }
 
-      toggleBtn.addEventListener("click", function() {
-        if (input.type === "password") {
-          input.type = "text";
-          toggleBtn.textContent = "隐藏";
-        } else {
-          input.type = "password";
+      var supportsTextSecurity = !!(window.CSS && typeof CSS.supports === "function" && (CSS.supports("-webkit-text-security", "disc") || CSS.supports("text-security", "disc")));
+      var isMasked = true;
+
+      function updateMask() {
+        if (isMasked) {
           toggleBtn.textContent = "显示";
+          if (supportsTextSecurity) {
+            input.classList.add("masked");
+            input.classList.remove("masked-fallback");
+            maskOverlay.classList.add("hidden");
+          } else {
+            input.classList.remove("masked");
+            input.classList.add("masked-fallback");
+            if (input.value.length > 0) {
+              maskOverlay.classList.remove("hidden");
+            } else {
+              maskOverlay.classList.add("hidden");
+            }
+          }
+        } else {
+          toggleBtn.textContent = "隐藏";
+          input.classList.remove("masked");
+          input.classList.remove("masked-fallback");
+          maskOverlay.classList.add("hidden");
+        }
+      }
+
+      toggleBtn.addEventListener("click", function() {
+        isMasked = !isMasked;
+        updateMask();
+      });
+
+      input.addEventListener("input", function() {
+        if (!supportsTextSecurity && isMasked) {
+          updateMask();
         }
       });
+
+      maskOverlay.addEventListener("click", function() {
+        isMasked = false;
+        updateMask();
+        input.focus();
+      });
+
+      updateMask();
 
       document.getElementById("form").addEventListener("submit", async function(e) {
         e.preventDefault();
@@ -167,6 +232,11 @@ export function renderBrowserSecretPage(options: RenderBrowserSecretPageOptions)
               if (data && data.error) err = data.error;
             } catch (_) {}
             status.textContent = err;
+            status.className = "status err";
+          } else if (res.status === 413) {
+            submitBtn.disabled = false;
+            cancelBtn.disabled = false;
+            status.textContent = "配置值体积超出上限（单次最大 64 KiB），请缩减内容后重试或取消。";
             status.className = "status err";
           } else if (res.status === 409) {
             status.textContent = "提交冲突：已有提交正在处理或会话已结束，请查看终端输出。";

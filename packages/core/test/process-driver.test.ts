@@ -411,19 +411,28 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       resolveClose = resolve;
     });
 
+    let resolveReady: () => void;
+    const readyPromise = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+
     const handle = await driver.spawn(
       {
         executable: process.execPath,
         args: [
           "-e",
-          "process.on('SIGINT', () => { process.stdout.write('SIGINT_CAUGHT'); process.exit(0); }); setInterval(() => {}, 1000);",
+          "process.on('SIGINT', () => { process.stdout.write('SIGINT_CAUGHT'); process.exit(0); }); process.stdout.write('READY\\n'); setInterval(() => {}, 1000);",
         ],
         io: { mode: "pipe" },
       },
       {
         output(stream, data) {
           if (stream === "stdout") {
-            stdoutParts.push(new TextDecoder().decode(data));
+            const text = new TextDecoder().decode(data);
+            stdoutParts.push(text);
+            if (text.includes("READY")) {
+              resolveReady();
+            }
           }
         },
         exited() {},
@@ -433,8 +442,8 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       }
     );
 
-    // 短暂等待子进程启动并注册信号监听
-    await new Promise((r) => setTimeout(r, 80));
+    // 等待子进程明确输出 READY 握手确认信号监听已就绪
+    await readyPromise;
 
     await driver.interruptForeground(handle);
     await closePromise;
@@ -657,7 +666,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     assert.strictEqual(instances.size, 0);
   });
 
-  it("drain 超时路径同样触发实例自清理", async () => {
+  it("drain 超时路径保留实例直到显式 dispose 或 terminate 自清理", async () => {
     const mockChild = new EventEmitter() as any;
     mockChild.pid = 99998;
     mockChild.stdout = new PassThrough();
@@ -675,7 +684,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       resolveClose = resolve;
     });
 
-    await driver.spawn(
+    const handle = await driver.spawn(
       { executable: "mock-binary", args: [], io: { mode: "pipe" } },
       {
         output() {},
@@ -688,10 +697,12 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     assert.strictEqual(instances.size, 1);
 
-    // 触发 exit 但刻意不关闭 stdio，等待 drain 超时后输出关闭也应触发自清理
+    // 触发 exit 但刻意不关闭 stdio，等待 drain 超时后输出关闭，非 natural 闭合保留实例直到显式 dispose
     mockChild.emit("exit", 0, null);
     await closePromise;
 
+    assert.strictEqual(instances.size, 1);
+    await driver.dispose(handle);
     assert.strictEqual(instances.size, 0);
   });
 

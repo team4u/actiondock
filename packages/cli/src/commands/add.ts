@@ -22,7 +22,7 @@ import type { CliContext } from "../types";
 import {
   assertSafePackageSpec,
   getEffectiveOptions,
-  requireProjectManifestRoot,
+  prepareProjectManifestRoot,
   rollbackAndRethrow,
 } from "../utils";
 
@@ -58,10 +58,9 @@ export function registerAddCommand(program: Command, context?: CliContext): void
     .option("--json", "Output as JSON")
     .action(async (packageSpec: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const { root, manifest } = requireProjectManifestRoot(options.package);
-
       // 包说明符白名单前置校验：拒绝 shell 元字符
       assertSafePackageSpec(packageSpec);
+      const { root, manifest } = await prepareProjectManifestRoot(options.package, context);
 
       const npmPackageName = extractNpmPackageName(packageSpec);
 

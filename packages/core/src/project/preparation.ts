@@ -125,7 +125,6 @@ export function createLocalPackagePreparer(
 
     const root = resolveInstallRoot(target.packageRoot);
     if (root.skip || !root.installRoot) {
-      await ensureProjectDependencies(target.packageRoot, { ...options, signal: context.signal });
       if (context.signal.aborted) throw cancellationError(context.signal.reason);
       readyCache.add(instanceKey);
       return;

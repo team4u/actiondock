@@ -407,12 +407,12 @@ export async function ensureProjectDependencies(
   requestedPackageRoot: string,
   options: EnsureProjectDependenciesOptions = {}
 ): Promise<EnsureProjectDependenciesResult> {
-  const packageRoot = resolvePackageDirectory(requestedPackageRoot);
-  const rootResolution = resolveInstallRoot(packageRoot);
+  const rootResolution = resolveInstallRoot(requestedPackageRoot);
   if (rootResolution.skip || !rootResolution.installRoot) {
     return { installed: false };
   }
 
+  const packageRoot = resolvePackageDirectory(requestedPackageRoot);
   const installRoot = rootResolution.installRoot;
 
   // 1. 快速检查：若必需生产依赖已物化，直接返回无需持锁
