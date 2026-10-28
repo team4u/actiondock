@@ -76,6 +76,48 @@ export function launchSystemBrowser(
 }
 
 /**
+ * 会话结算响应写出规格。
+ */
+interface FinalizeResponseSpec {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+/**
+ * 统一响应收尾：写出响应并在其真正关闭（或兜底超时）后结算会话。
+ * 连接已销毁时跳过写出直接结算；close、finish、end 回调与兜底定时器
+ * 任一触发即结算且幂等，不会重复执行结算逻辑。
+ */
+function finalizeResponse(
+  res: http.ServerResponse,
+  settle: () => void,
+  spec: FinalizeResponseSpec
+): void {
+  let settled = false;
+  const settleOnce = () => {
+    if (settled) return;
+    settled = true;
+    settle();
+  };
+
+  if (res.destroyed || !res.socket || res.socket.destroyed) {
+    settleOnce();
+    return;
+  }
+
+  res.on("close", settleOnce);
+  res.on("finish", settleOnce);
+  try {
+    res.writeHead(spec.status, spec.headers);
+    res.end(spec.body, settleOnce);
+  } catch {
+    settleOnce();
+  }
+  setTimeout(settleOnce, 100).unref();
+}
+
+/**
  * 启动临时本地 HTTP 服务，通过浏览器交互页面安全录入敏感配置。
  */
 export async function promptBrowserSecret(options: PromptBrowserSecretOptions): Promise<void> {
@@ -323,23 +365,18 @@ export async function promptBrowserSecret(options: PromptBrowserSecretOptions): 
             return;
           }
           state = "CANCELLED";
-          const finishCancel = () => {
-            cleanup();
-            reject(new SigintError("User cancelled input in browser"));
-          };
-          if (res.destroyed || !res.socket || res.socket.destroyed) {
-            finishCancel();
-            return;
-          }
-          res.on("close", finishCancel);
-          res.on("finish", finishCancel);
-          try {
-            res.writeHead(200, { "Content-Type": "application/json", ...securityHeaders });
-            res.end(JSON.stringify({ ok: true }), finishCancel);
-          } catch {
-            finishCancel();
-          }
-          setTimeout(finishCancel, 100).unref();
+          finalizeResponse(
+            res,
+            () => {
+              cleanup();
+              reject(new SigintError("User cancelled input in browser"));
+            },
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...securityHeaders },
+              body: JSON.stringify({ ok: true }),
+            }
+          );
           return;
         }
 
@@ -388,23 +425,18 @@ export async function promptBrowserSecret(options: PromptBrowserSecretOptions): 
           await onSubmit(body.value);
 
           state = "DONE";
-          const finishSession = () => {
-            cleanup();
-            resolve();
-          };
-          if (res.destroyed || !res.socket || res.socket.destroyed) {
-            finishSession();
-            return;
-          }
-          res.on("close", finishSession);
-          res.on("finish", finishSession);
-          try {
-            res.writeHead(200, { "Content-Type": "application/json", ...securityHeaders });
-            res.end(JSON.stringify({ ok: true }), finishSession);
-          } catch {
-            finishSession();
-          }
-          setTimeout(finishSession, 100).unref();
+          finalizeResponse(
+            res,
+            () => {
+              cleanup();
+              resolve();
+            },
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...securityHeaders },
+              body: JSON.stringify({ ok: true }),
+            }
+          );
         } catch (err: unknown) {
           // 已知校验失败返回 400
           const errorCode = (err as { code?: string })?.code;
@@ -441,27 +473,28 @@ export async function promptBrowserSecret(options: PromptBrowserSecretOptions): 
 
           // 其他内部或持久化严重异常返回 500，终止会话并使 CLI 以安全 ExecutionError 退出
           state = "FAILED";
-          const finishFailed = () => {
-            cleanup();
-            reject(new ExecutionError("Failed to save configuration due to an internal error.", undefined, "EXECUTION_FAILURE"));
-          };
-          if (res.destroyed || !res.socket || res.socket.destroyed) {
-            finishFailed();
-            return;
-          }
-          res.on("close", finishFailed);
-          res.on("finish", finishFailed);
-          try {
-            res.writeHead(500, {
-              "Content-Type": "application/json",
-              Connection: "close",
-              ...securityHeaders,
-            });
-            res.end(JSON.stringify({ error: "存储服务异常，未能保存配置。" }), finishFailed);
-          } catch {
-            finishFailed();
-          }
-          setTimeout(finishFailed, 100).unref();
+          finalizeResponse(
+            res,
+            () => {
+              cleanup();
+              reject(
+                new ExecutionError(
+                  "Failed to save configuration due to an internal error.",
+                  undefined,
+                  "EXECUTION_FAILURE"
+                )
+              );
+            },
+            {
+              status: 500,
+              headers: {
+                "Content-Type": "application/json",
+                Connection: "close",
+                ...securityHeaders,
+              },
+              body: JSON.stringify({ error: "存储服务异常，未能保存配置。" }),
+            }
+          );
         }
         return;
       }
