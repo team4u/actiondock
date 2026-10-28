@@ -389,6 +389,172 @@ export function checkDependenciesMaterialized(packageRoot: string): {
   };
 }
 
+export interface PackageManagerPlan {
+  /** 决策选定的包管理器 */
+  manager: "npm" | "bun";
+  /** 安装根是否存在该管理器对应的锁文件 */
+  hasLock: boolean;
+  /** 该管理器在当前锁状态下应执行的安装参数 */
+  args: string[];
+}
+
+/**
+ * 解析安装根的锁文件、packageManager 声明与环境变量，产出确定性的包管理器安装决策。
+ *
+ * 决策契约（优先级从高到低）：
+ * - 环境变量 ACTIONDOCK_INSTALLER 显式指定 > package.json packageManager 声明 > 锁文件归属 > 默认 npm；
+ * - 多锁文件冲突、声明与环境变量互相冲突、声明或环境变量为不支持的工具时，一律显式拒绝；
+ * - 检测到 pnpm 或 yarn 工程时引导手动准备，不自动安装；
+ * - 有锁走冻结安装（npm ci / bun --frozen-lockfile），无锁走普通生产安装。
+ *
+ * @param installRoot 安装根目录
+ * @param env 环境变量视图（默认 process.env，测试可注入确定性环境）
+ */
+export function resolvePackageManagerPlan(
+  installRoot: string,
+  env: Record<string, string | undefined> = process.env
+): PackageManagerPlan {
+  const hasPnpmLock = existsSync(join(installRoot, "pnpm-lock.yaml"));
+  const hasYarnLock = existsSync(join(installRoot, "yarn.lock"));
+  const hasNpmLock =
+    existsSync(join(installRoot, "package-lock.json")) ||
+    existsSync(join(installRoot, "npm-shrinkwrap.json"));
+  const hasBunLock =
+    existsSync(join(installRoot, "bun.lock")) || existsSync(join(installRoot, "bun.lockb"));
+
+  const lockTypes: string[] = [];
+  if (hasNpmLock) lockTypes.push("npm");
+  if (hasBunLock) lockTypes.push("bun");
+  if (hasPnpmLock) lockTypes.push("pnpm");
+  if (hasYarnLock) lockTypes.push("yarn");
+
+  // 检测多锁文件冲突（即便设置 ACTIONDOCK_INSTALLER 也严禁忽略明确锁文件冲突）
+  if (lockTypes.length > 1) {
+    throw new ActionDockError(
+      DEPENDENCY_INSTALL_FAILED,
+      `Conflicting lockfiles found in '${installRoot}' (${lockTypes.join(", ")} lockfiles exist). Please clean up conflicting lockfiles.`,
+      { stage: "planner", installRoot, conflictingManagers: lockTypes }
+    );
+  }
+
+  // 识别 package.json.packageManager
+  let declaredPm: string | undefined;
+  const rootPkgJsonPath = join(installRoot, "package.json");
+  if (existsSync(rootPkgJsonPath)) {
+    try {
+      const rootPkg = JSON.parse(readFileSync(rootPkgJsonPath, "utf-8"));
+      if (typeof rootPkg?.packageManager === "string") {
+        const match = rootPkg.packageManager.trim().match(/^([a-z0-9_-]+)/i);
+        if (match) {
+          declaredPm = match[1].toLowerCase();
+        }
+      }
+    } catch (error: any) {
+      throw new ActionDockError(
+        DEPENDENCIES_NOT_READY,
+        `Cannot read package manager declaration at '${rootPkgJsonPath}': ${error?.message || String(error)}`,
+        { path: rootPkgJsonPath, cause: error }
+      );
+    }
+  }
+
+  if (declaredPm === "pnpm" || (hasPnpmLock && lockTypes.length === 1)) {
+    throw new ActionDockError(
+      DEPENDENCIES_NOT_READY,
+      `Detected pnpm project (${hasPnpmLock ? "pnpm-lock.yaml found" : `packageManager: '${declaredPm}'`}) in '${installRoot}'. Automatic installation only supports npm and bun. Please install dependencies manually using pnpm.`,
+      { stage: "planner", installRoot, manager: "pnpm" }
+    );
+  }
+
+  if (declaredPm === "yarn" || (hasYarnLock && lockTypes.length === 1)) {
+    throw new ActionDockError(
+      DEPENDENCIES_NOT_READY,
+      `Detected yarn project (${hasYarnLock ? "yarn.lock found" : `packageManager: '${declaredPm}'`}) in '${installRoot}'. Automatic installation only supports npm and bun. Please install dependencies manually using yarn.`,
+      { stage: "planner", installRoot, manager: "yarn" }
+    );
+  }
+
+  if (declaredPm && declaredPm !== "npm" && declaredPm !== "bun") {
+    throw new ActionDockError(
+      DEPENDENCY_INSTALL_FAILED,
+      `Unsupported packageManager '${declaredPm}' declared in '${rootPkgJsonPath}'. Automatic installation only supports npm and bun.`,
+      { stage: "planner", installRoot, manager: declaredPm }
+    );
+  }
+
+  if (declaredPm && lockTypes.length === 1) {
+    const lockPm = lockTypes[0];
+    if (declaredPm !== lockPm) {
+      throw new ActionDockError(
+        DEPENDENCY_INSTALL_FAILED,
+        `Declared packageManager '${declaredPm}' conflicts with existing ${lockPm} lockfile in '${installRoot}'.`,
+        { stage: "planner", installRoot, declaredManager: declaredPm, lockManager: lockPm }
+      );
+    }
+  }
+
+  const envInstaller = env.ACTIONDOCK_INSTALLER?.trim();
+  if (envInstaller) {
+    if (envInstaller !== "npm" && envInstaller !== "bun") {
+      throw new ActionDockError(
+        DEPENDENCY_INSTALL_FAILED,
+        `Unsupported ACTIONDOCK_INSTALLER '${envInstaller}'. Allowed values: npm, bun.`
+      );
+    }
+    if (lockTypes.length === 1 && envInstaller !== lockTypes[0]) {
+      throw new ActionDockError(
+        DEPENDENCY_INSTALL_FAILED,
+        `Explicit ACTIONDOCK_INSTALLER '${envInstaller}' conflicts with existing ${lockTypes[0]} lockfile in '${installRoot}'.`,
+        { stage: "planner", installRoot, envInstaller, lockManager: lockTypes[0] }
+      );
+    }
+    if (declaredPm && envInstaller !== declaredPm) {
+      throw new ActionDockError(
+        DEPENDENCY_INSTALL_FAILED,
+        `Explicit ACTIONDOCK_INSTALLER '${envInstaller}' conflicts with declared packageManager '${declaredPm}' in '${installRoot}'.`,
+        { stage: "planner", installRoot, envInstaller, declaredManager: declaredPm }
+      );
+    }
+  }
+
+  let manager: "npm" | "bun";
+  let hasLock = false;
+
+  if (envInstaller) {
+    manager = envInstaller as "npm" | "bun";
+    hasLock = manager === "npm" ? hasNpmLock : hasBunLock;
+  } else if (declaredPm) {
+    manager = declaredPm as "npm" | "bun";
+    hasLock = manager === "npm" ? hasNpmLock : hasBunLock;
+  } else if (hasBunLock) {
+    manager = "bun";
+    hasLock = true;
+  } else if (hasNpmLock) {
+    manager = "npm";
+    hasLock = true;
+  } else {
+    manager = "npm";
+    hasLock = false;
+  }
+
+  let args: string[];
+  if (manager === "npm") {
+    if (hasLock) {
+      args = ["ci", "--omit=dev", "--ignore-scripts"];
+    } else {
+      args = ["install", "--omit=dev", "--ignore-scripts"];
+    }
+  } else {
+    if (hasLock) {
+      args = ["install", "--production", "--frozen-lockfile", "--ignore-scripts"];
+    } else {
+      args = ["install", "--production", "--ignore-scripts"];
+    }
+  }
+
+  return { manager, hasLock, args };
+}
+
 /**
  * 确保项目所需生产依赖处于就绪状态。
  *
@@ -519,144 +685,10 @@ export async function ensureProjectDependencies(
       );
     }
 
-    // 5. 依赖声明与包管理器决策
-    const hasPnpmLock = existsSync(join(installRoot, "pnpm-lock.yaml"));
-    const hasYarnLock = existsSync(join(installRoot, "yarn.lock"));
-    const hasNpmLock =
-      existsSync(join(installRoot, "package-lock.json")) ||
-      existsSync(join(installRoot, "npm-shrinkwrap.json"));
-    const hasBunLock =
-      existsSync(join(installRoot, "bun.lock")) || existsSync(join(installRoot, "bun.lockb"));
-
-    const lockTypes: string[] = [];
-    if (hasNpmLock) lockTypes.push("npm");
-    if (hasBunLock) lockTypes.push("bun");
-    if (hasPnpmLock) lockTypes.push("pnpm");
-    if (hasYarnLock) lockTypes.push("yarn");
-
-    // 检测多锁文件冲突（即便设置 ACTIONDOCK_INSTALLER 也严禁忽略明确锁文件冲突）
-    if (lockTypes.length > 1) {
-      throw new ActionDockError(
-        DEPENDENCY_INSTALL_FAILED,
-        `Conflicting lockfiles found in '${installRoot}' (${lockTypes.join(", ")} lockfiles exist). Please clean up conflicting lockfiles.`,
-        { stage: "planner", installRoot, conflictingManagers: lockTypes }
-      );
-    }
-
-    // 识别 package.json.packageManager
-    let declaredPm: string | undefined;
-    const rootPkgJsonPath = join(installRoot, "package.json");
-    if (existsSync(rootPkgJsonPath)) {
-      try {
-        const rootPkg = JSON.parse(readFileSync(rootPkgJsonPath, "utf-8"));
-        if (typeof rootPkg?.packageManager === "string") {
-          const match = rootPkg.packageManager.trim().match(/^([a-z0-9_-]+)/i);
-          if (match) {
-            declaredPm = match[1].toLowerCase();
-          }
-        }
-      } catch (error: any) {
-        throw new ActionDockError(
-          DEPENDENCIES_NOT_READY,
-          `Cannot read package manager declaration at '${rootPkgJsonPath}': ${error?.message || String(error)}`,
-          { path: rootPkgJsonPath, cause: error }
-        );
-      }
-    }
-
-    if (declaredPm === "pnpm" || (hasPnpmLock && lockTypes.length === 1)) {
-      throw new ActionDockError(
-        DEPENDENCIES_NOT_READY,
-        `Detected pnpm project (${hasPnpmLock ? "pnpm-lock.yaml found" : `packageManager: '${declaredPm}'`}) in '${installRoot}'. Automatic installation only supports npm and bun. Please install dependencies manually using pnpm.`,
-        { stage: "planner", installRoot, manager: "pnpm" }
-      );
-    }
-
-    if (declaredPm === "yarn" || (hasYarnLock && lockTypes.length === 1)) {
-      throw new ActionDockError(
-        DEPENDENCIES_NOT_READY,
-        `Detected yarn project (${hasYarnLock ? "yarn.lock found" : `packageManager: '${declaredPm}'`}) in '${installRoot}'. Automatic installation only supports npm and bun. Please install dependencies manually using yarn.`,
-        { stage: "planner", installRoot, manager: "yarn" }
-      );
-    }
-
-    if (declaredPm && declaredPm !== "npm" && declaredPm !== "bun") {
-      throw new ActionDockError(
-        DEPENDENCY_INSTALL_FAILED,
-        `Unsupported packageManager '${declaredPm}' declared in '${rootPkgJsonPath}'. Automatic installation only supports npm and bun.`,
-        { stage: "planner", installRoot, manager: declaredPm }
-      );
-    }
-
-    if (declaredPm && lockTypes.length === 1) {
-      const lockPm = lockTypes[0];
-      if (declaredPm !== lockPm) {
-        throw new ActionDockError(
-          DEPENDENCY_INSTALL_FAILED,
-          `Declared packageManager '${declaredPm}' conflicts with existing ${lockPm} lockfile in '${installRoot}'.`,
-          { stage: "planner", installRoot, declaredManager: declaredPm, lockManager: lockPm }
-        );
-      }
-    }
-
-    const envInstaller = process.env.ACTIONDOCK_INSTALLER?.trim();
-    if (envInstaller) {
-      if (envInstaller !== "npm" && envInstaller !== "bun") {
-        throw new ActionDockError(
-          DEPENDENCY_INSTALL_FAILED,
-          `Unsupported ACTIONDOCK_INSTALLER '${envInstaller}'. Allowed values: npm, bun.`
-        );
-      }
-      if (lockTypes.length === 1 && envInstaller !== lockTypes[0]) {
-        throw new ActionDockError(
-          DEPENDENCY_INSTALL_FAILED,
-          `Explicit ACTIONDOCK_INSTALLER '${envInstaller}' conflicts with existing ${lockTypes[0]} lockfile in '${installRoot}'.`,
-          { stage: "planner", installRoot, envInstaller, lockManager: lockTypes[0] }
-        );
-      }
-      if (declaredPm && envInstaller !== declaredPm) {
-        throw new ActionDockError(
-          DEPENDENCY_INSTALL_FAILED,
-          `Explicit ACTIONDOCK_INSTALLER '${envInstaller}' conflicts with declared packageManager '${declaredPm}' in '${installRoot}'.`,
-          { stage: "planner", installRoot, envInstaller, declaredManager: declaredPm }
-        );
-      }
-    }
-
-    let pm: "npm" | "bun";
-    let hasLock = false;
-
-    if (envInstaller) {
-      pm = envInstaller as "npm" | "bun";
-      hasLock = pm === "npm" ? hasNpmLock : hasBunLock;
-    } else if (declaredPm) {
-      pm = declaredPm as "npm" | "bun";
-      hasLock = pm === "npm" ? hasNpmLock : hasBunLock;
-    } else if (hasBunLock) {
-      pm = "bun";
-      hasLock = true;
-    } else if (hasNpmLock) {
-      pm = "npm";
-      hasLock = true;
-    } else {
-      pm = "npm";
-      hasLock = false;
-    }
-
-    let args: string[];
-    if (pm === "npm") {
-      if (hasLock) {
-        args = ["ci", "--omit=dev", "--ignore-scripts"];
-      } else {
-        args = ["install", "--omit=dev", "--ignore-scripts"];
-      }
-    } else {
-      if (hasLock) {
-        args = ["install", "--production", "--frozen-lockfile", "--ignore-scripts"];
-      } else {
-        args = ["install", "--production", "--ignore-scripts"];
-      }
-    }
+    // 5. 包管理器决策与安装参数规划
+    const plan = resolvePackageManagerPlan(installRoot);
+    const pm = plan.manager;
+    const args = plan.args;
 
     const reportProgress = (msg: string) => {
       try {
