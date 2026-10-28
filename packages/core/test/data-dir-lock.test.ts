@@ -9,6 +9,7 @@ import { Worker } from "node:worker_threads";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
 import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
+import { UNSUPPORTED_STORAGE_SCHEMA } from "../src/errors";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import {
   DataDirLock,
@@ -187,7 +188,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
   });
 
   it("存储 Schema 版本严格保护与单事务初始化失败原子回滚", async () => {
-    assert.strictEqual(STORAGE_SCHEMA_VERSION, 2);
+    assert.strictEqual(STORAGE_SCHEMA_VERSION, 3);
 
     const dbPath = join(tempDir, "schema-test.db");
 
@@ -199,10 +200,10 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
     assert.strictEqual(storage1.isOpen, true);
     await storage1.close();
 
-    // 验证 user_version 精确为 STORAGE_SCHEMA_VERSION (2)
+    // 验证 user_version 精确为 STORAGE_SCHEMA_VERSION (3)
     const dbCheck = new NodeSqliteDriver(dbPath);
     const row = dbCheck.prepare("PRAGMA user_version;").get() as any;
-    assert.strictEqual(row.user_version, 2);
+    assert.strictEqual(row.user_version, 3);
 
     // 修改 user_version 为不支持的版本（例如 99）
     dbCheck.exec("PRAGMA user_version = 99;");
@@ -214,7 +215,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
         packageId: "pkg.schema",
         dbPath,
       });
-    }, /UNSUPPORTED_STORAGE_SCHEMA/);
+    }, (err: unknown) => (err as { code?: string })?.code === UNSUPPORTED_STORAGE_SCHEMA);
 
     // 注入事务失败模拟：验证初始化事务失败时原子回滚，不留下残缺表
     const badDbPath = join(tempDir, "rollback-test.db");

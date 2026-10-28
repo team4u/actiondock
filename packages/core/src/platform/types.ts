@@ -4,6 +4,7 @@ import type { ModuleLoader } from "./module-loader";
 import type { RunsRetentionPolicy, RuntimeStorage } from "../storage/types";
 import type { EventSink } from "../runtime/events";
 import type { PackageRuntime } from "../package/types";
+import type { ConfigItemDefinition } from "../project/types";
 
 
 /**
@@ -21,6 +22,11 @@ export interface StorageFactoryOptions {
   recoverOrphans?: boolean;
   /** 运行记录保留策略配置 */
   retentionPolicy?: RunsRetentionPolicy;
+  /**
+   * 供旧版本数据库迁移判定的配置声明字典集合（包级存储传当前包声明）。
+   * 仅在库需要迁移时被读取；版本迁移只在首次打开执行。
+   */
+  configDeclarations?: readonly Record<string, ConfigItemDefinition>[];
 }
 
 /**
@@ -32,6 +38,11 @@ export interface GlobalStorageFactoryOptions {
   customHome?: string;
   /** 是否以持有者身份打开并收割遗留非终态运行记录（默认 false，旁观语义） */
   recoverOrphans?: boolean;
+  /**
+   * 供旧版本全局库迁移判定的配置声明字典集合（通常为所有已加载包的声明并集）。
+   * 仅在库需要迁移时被读取；版本迁移只在首次打开执行。
+   */
+  configDeclarations?: readonly Record<string, ConfigItemDefinition>[];
 }
 
 /**

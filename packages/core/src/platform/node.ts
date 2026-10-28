@@ -15,6 +15,8 @@ import {
   type RuntimeStorage,
   type SqliteDriver,
 } from "../storage";
+import { createConfigKeyProvider } from "../security/config-key";
+import type { ConfigKeyProvider } from "../security/config-cipher";
 import type { EventSink } from "../runtime/events";
 import type {
   GlobalStorageFactoryOptions,
@@ -52,6 +54,11 @@ export interface NodePlatformOptions {
   clock?: Clock;
   /** 自定义存储工厂（默认基于 NodeSqliteDriver 构造） */
   storage?: StorageFactory;
+  /**
+   * 显式注入的配置加密密钥提供器：优先于由有效 customHome/dataDir 派生的默认提供器，
+   * 显式注入时对内存库同样生效（供测试注入固定密钥）。
+   */
+  configKeyProvider?: ConfigKeyProvider;
   /** 可选注入的执行事件接收器 */
   eventSink?: EventSink;
   /** 可选注入的统一日志记录器 */
@@ -133,43 +140,100 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
 
+  // - 配置加密密钥提供器按每次建库时的有效路径派生：密钥必须与数据库共享同一
+  //   dataDir/customHome 域，禁止密钥落真实 home 而数据库在别处（或反向）。
+  //   提供器懒加载：仅构造平台或读取普通配置不创建 keys 目录；
+  //   内存库不注入派生提供器，由存储使用随机内存密钥，即使环境提供密钥也不触真实密钥源；
+  //   显式注入的测试提供器对内存库保留生效。
+  const resolveConfigKeyProvider = (
+    dbPath: string,
+    effectiveCustomHome: string | undefined,
+    effectiveDataDir: string | undefined
+  ): ConfigKeyProvider | undefined => {
+    if (options.configKeyProvider) {
+      return options.configKeyProvider;
+    }
+    if (dbPath === ":memory:") {
+      return undefined;
+    }
+    return createConfigKeyProvider({
+      customHome: effectiveCustomHome,
+      dataDir: effectiveDataDir,
+    });
+  };
+
+  // - 自建驱动构造失败时释放句柄：SqliteRuntimeStorage 将注入 driver 视为外部资源，
+  //   构造抛出不会代为关闭，此处回收驱动，避免锁泄漏后原样透传错误
+  const createStorageWithDriverCleanup = (
+    build: (driver: SqliteDriver) => RuntimeStorage,
+    dbPath: string
+  ): RuntimeStorage => {
+    const driver = createDriver(dbPath);
+    try {
+      return build(driver);
+    } catch (err) {
+      try {
+        driver.close();
+      } catch {
+        // 忽略清理阶段副异常，确保原始错误优先透传
+      }
+      throw err;
+    }
+  };
+
   const storage: StorageFactory = options.storage ?? {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {
+      // 显式 opts 中的 undefined 不得覆盖平台级路径：密钥与数据库必须解析同一有效路径
+      const effectiveCustomHome = opts?.customHome ?? options.customHome;
+      const effectiveDataDir = opts?.dataDir ?? options.dataDir;
       const mergedOpts = {
-        customHome: options.customHome,
-        dataDir: options.dataDir,
-        ...opts,
+        customHome: effectiveCustomHome,
+        dataDir: effectiveDataDir,
+        inMemory: opts?.inMemory,
+        projectRoot: opts?.projectRoot,
       };
       const dbPath = resolveDatabasePath(packageId, mergedOpts);
       ensureDirectoryForDb(dbPath);
-      return new SqliteRuntimeStorage({
+      const configKeyProvider = resolveConfigKeyProvider(
+        dbPath,
+        effectiveCustomHome,
+        effectiveDataDir
+      );
+      return createStorageWithDriverCleanup((driver) => new SqliteRuntimeStorage({
         dbPath,
         packageId,
         clock,
-        driver: createDriver(dbPath),
+        driver,
         recoverOrphans: opts?.recoverOrphans === true,
         retentionPolicy: opts?.retentionPolicy,
         logger: options.logger,
-      });
+        ...(configKeyProvider ? { configKeyProvider } : {}),
+        ...(opts?.configDeclarations?.length ? { configDeclarations: opts.configDeclarations } : {}),
+      }), dbPath);
     },
     createGlobalStorage(opts?: GlobalStorageFactoryOptions): RuntimeStorage {
-      const mergedOpts = {
-        customHome: options.customHome,
-        dataDir: options.dataDir,
-        ...opts,
-      };
-      const dbPath = mergedOpts.inMemory
+      const effectiveCustomHome = opts?.customHome ?? options.customHome;
+      const effectiveDataDir = opts?.dataDir ?? options.dataDir;
+      const inMemory = Boolean(opts?.inMemory);
+      const dbPath = inMemory
         ? ":memory:"
-        : resolveGlobalDatabasePath({ dataDir: mergedOpts.dataDir, customHome: mergedOpts.customHome });
+        : resolveGlobalDatabasePath({ dataDir: effectiveDataDir, customHome: effectiveCustomHome });
       ensureDirectoryForDb(dbPath);
-      return new SqliteRuntimeStorage({
+      const configKeyProvider = resolveConfigKeyProvider(
+        dbPath,
+        effectiveCustomHome,
+        effectiveDataDir
+      );
+      return createStorageWithDriverCleanup((driver) => new SqliteRuntimeStorage({
         dbPath,
         packageId: "__global__",
         clock,
-        driver: createDriver(dbPath),
+        driver,
         recoverOrphans: opts?.recoverOrphans === true,
         logger: options.logger,
-      });
+        ...(configKeyProvider ? { configKeyProvider } : {}),
+        ...(opts?.configDeclarations?.length ? { configDeclarations: opts.configDeclarations } : {}),
+      }), dbPath);
     },
   };
 

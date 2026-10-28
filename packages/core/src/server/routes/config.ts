@@ -10,6 +10,7 @@ import {
   PACKAGE_NOT_ALLOWED,
   PACKAGE_NOT_FOUND,
   PATH_TRAVERSAL,
+  isConfigEncryptionError,
 } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../../storage";
@@ -32,6 +33,15 @@ function isClientConfigError(err: any): boolean {
     err?.code === CONFIG_VALUE_INVALID ||
     err?.status === 400 ||
     err?.status === 404
+  );
+}
+
+/** 加密/迁移错误原样透传响应（保留原始码、消息与详情） */
+function encryptionErrorResponse(err: any, corsHeaders: Record<string, string>): Response {
+  return jsonResponse(
+    { ok: false, error: { code: err.code, message: err.message, details: err.details } },
+    500,
+    corsHeaders
   );
 }
 
@@ -106,6 +116,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
+      if (isConfigEncryptionError(err)) {
+        return encryptionErrorResponse(err, corsHeaders);
+      }
       const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_ENV_ERROR, message: err.message } },
@@ -172,6 +185,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
+      if (isConfigEncryptionError(err)) {
+        return encryptionErrorResponse(err, corsHeaders);
+      }
       const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_LIST_ERROR, message: err.message } },
@@ -212,6 +228,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           403,
           corsHeaders
         );
+      }
+      if (isConfigEncryptionError(err)) {
+        return encryptionErrorResponse(err, corsHeaders);
       }
       const isClient = isClientConfigError(err);
       const errCode =
@@ -254,6 +273,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
+      if (isConfigEncryptionError(err)) {
+        return encryptionErrorResponse(err, corsHeaders);
+      }
       const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_LIST_ERROR, message: err.message } },
@@ -285,6 +307,9 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           403,
           corsHeaders
         );
+      }
+      if (isConfigEncryptionError(err)) {
+        return encryptionErrorResponse(err, corsHeaders);
       }
       const isClient = isClientConfigError(err);
       return jsonResponse(

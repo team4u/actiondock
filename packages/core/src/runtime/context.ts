@@ -10,12 +10,20 @@ import type {
   StateStore,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
+import type { ConfigItemDefinition } from "../project/types";
 import { assertConcreteConfigKey, assertValidConfigDeclarations, resolveConfigDeclaration, validateConfigValue } from "../project/config-declarations";
 import type { RuntimeStorage } from "../storage/types";
+import { readConfigWithProtection } from "../storage";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { createDefaultProcessOwner } from "../invocation/types";
 import { resolveEnvValue } from "./env";
-import { ActionDockError, INVALID_ACTION_REF, INVALID_ARGUMENT, INVALID_STATE } from "../errors";
+import {
+  ActionDockError,
+  isConfigEncryptionError,
+  INVALID_ACTION_REF,
+  INVALID_ARGUMENT,
+  INVALID_STATE,
+} from "../errors";
 import type { ConfigSource } from "../service/types";
 
 /**
@@ -67,16 +75,11 @@ export class RuntimeConfig implements Config {
   }
 
   /**
-   * 结构化解析指定配置项的来源与取值视图。
-   *
-   * 作为五层优先级链的唯一事实源读取视图，供 app 层 getConfig 安全视图直接委托，
-   * 避免重复实现解析链导致行为漂移。
-   * source 仅表达实际生效值来源；undefined 统一视为未命中并继续向低优先级解析，
-   * null/false/0/空串均为真实值；整链未命中时 source 为 null。
+   * 含历史保护声明的配置解析结果视图。
    */
-  describe<T = unknown>(
+  describeWithProtection<T = unknown>(
     key: string
-  ): { source: ConfigSource | null; value: T | undefined } {
+  ): ConfigResolutionWithProtection<T> {
     assertConcreteConfigKey(key);
     // 1. 运行时固定覆盖与单次调用覆盖（值为 undefined 视为未命中，继续解析链）
     if (this.overrides.has(key)) {
@@ -86,20 +89,38 @@ export class RuntimeConfig implements Config {
       }
     }
 
-    // 2. 包级持久化存储
-    const stored = this.storage.getConfig<T>(key);
-    if (stored !== undefined) {
-      return { source: "package", value: stored };
+    // 2. 包级持久化存储：原子快照配对读取值与历史保护声明；
+    //    加密错误直接透传，绝不降级继续解析链（旧版库已在打开时自动迁移）
+    const resolvedDecl = resolveConfigDeclaration(this.projectConfig?.config, key);
+    const packageSnapshot = readConfigWithProtection(this.storage, key);
+    if (packageSnapshot !== undefined) {
+      return {
+        source: "package",
+        value: packageSnapshot.value as T,
+        ...(packageSnapshot.protection !== undefined
+          ? { protection: packageSnapshot.protection }
+          : {}),
+      };
     }
 
-    // 3. 全局持久化存储（读取异常时降级继续解析链，但记录警告确保不静默吞没）
+    // 3. 全局持久化存储（一般读取异常降级继续解析链并告警；
+    //    加密错误严禁回退，必须原样透传）
     if (this.globalStorage) {
       try {
-        const globalStored = this.globalStorage.getConfig<T>(key);
-        if (globalStored !== undefined) {
-          return { source: "global", value: globalStored };
+        const globalSnapshot = readConfigWithProtection(this.globalStorage, key);
+        if (globalSnapshot !== undefined) {
+          return {
+            source: "global",
+            value: globalSnapshot.value as T,
+            ...(globalSnapshot.protection !== undefined
+              ? { protection: globalSnapshot.protection }
+              : {}),
+          };
         }
       } catch (err) {
+        if (isConfigEncryptionError(err)) {
+          throw err;
+        }
         console.warn(
           `[actiondock] global config read failed for ${key}: ${err instanceof Error ? err.message : String(err)}`
         );
@@ -107,7 +128,6 @@ export class RuntimeConfig implements Config {
     }
 
     // 4. 环境变量
-    const resolvedDecl = resolveConfigDeclaration(this.projectConfig?.config, key);
     const itemDef = resolvedDecl?.item;
     const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
     if (envResolved !== undefined) {
@@ -120,6 +140,36 @@ export class RuntimeConfig implements Config {
     }
     return { source: null, value: undefined };
   }
+
+  /**
+   * 结构化解析指定配置项的来源与取值视图。
+   *
+   * 委托 describeWithProtection 五层优先级链单一事实源，剥出既有公开契约视图，
+   * 避免双实现漂移；历史保护声明仅由管理视图消费。
+   * source 仅表达实际生效值来源；undefined 统一视为未命中并继续向低优先级解析，
+   * null/false/0/空串均为真实值；整链未命中时 source 为 null。
+   */
+  describe<T = unknown>(
+    key: string
+  ): { source: ConfigSource | null; value: T | undefined } {
+    const resolved = this.describeWithProtection<T>(key);
+    return { source: resolved.source, value: resolved.value };
+  }
+}
+
+/**
+ * 含历史保护声明的配置解析结果视图。
+ */
+export interface ConfigResolutionWithProtection<T = unknown> {
+  /** 实际生效值来源；整链未命中为 null */
+  source: ConfigSource | null;
+  /** 实际生效值 */
+  value: T | undefined;
+  /**
+   * 值来源存储持久化的历史保护声明（仅 package/global 来源可能存在）。
+   * 与值取自同一次原子读取，避免并发删除造成值与规则错配。
+   */
+  protection?: readonly ConfigItemDefinition[];
 }
 
 /**

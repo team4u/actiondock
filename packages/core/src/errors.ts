@@ -468,6 +468,23 @@ export const MANIFEST_LOAD_FAILED = "MANIFEST_LOAD_FAILED";
 /** 配置项数据值不符合声明的模式规范 */
 export const CONFIG_VALUE_INVALID = "CONFIG_VALUE_INVALID";
 
+/** 配置加密密钥缺失、无效或与存储域身份不符等加密配置错误 */
+export const CONFIG_ENCRYPTION_ERROR = "CONFIG_ENCRYPTION_ERROR";
+
+/** 配置密文解密失败（信封格式非法、版本未知、密钥身份不符或认证校验失败） */
+export const CONFIG_DECRYPT_FAILED = "CONFIG_DECRYPT_FAILED";
+
+const CONFIG_ENCRYPTION_ERROR_CODES: ReadonlySet<string> = new Set([
+  CONFIG_ENCRYPTION_ERROR,
+  CONFIG_DECRYPT_FAILED,
+]);
+
+/** 配置加密与解密错误按结构化错误码识别，跨模块副本也不得吞没或覆盖。 */
+export function isConfigEncryptionError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" && CONFIG_ENCRYPTION_ERROR_CODES.has(code);
+}
+
 /** 动作标识符不符合命名规范 */
 export const INVALID_ACTION_ID = "INVALID_ACTION_ID";
 
@@ -729,6 +746,8 @@ export type ErrorCode =
   | typeof PROJECT_CONFIG_NOT_FOUND
   | typeof MANIFEST_LOAD_FAILED
   | typeof CONFIG_VALUE_INVALID
+  | typeof CONFIG_ENCRYPTION_ERROR
+  | typeof CONFIG_DECRYPT_FAILED
   | typeof INVALID_ACTION_ID
   | typeof INVALID_PLAYBOOK_ID
   | typeof PROJECT_ROOT_NOT_FOUND;

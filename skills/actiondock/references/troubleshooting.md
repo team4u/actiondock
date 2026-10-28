@@ -85,6 +85,8 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `DATA_DIR_RECOVERY_REQUIRED` | 前序主进程已退出，但其残留子进程仍在运行阻碍接管。 | 清理未退出的残留孤儿进程后再行启动。 |
 | `RUN_REPOSITORY_UNAVAILABLE` | 运行记录仓储服务不可用，底层存储连接尚未初始化或已关闭。 | 确认 Host 实例是否正常启动，检查数据目录读写权限。 |
 | `STORAGE_BUSY` | 数据库写入事务重试耗尽，底层 SQLite 忙等待超时。 | 降低并发写入压力或检查是否存在长事务占用。 |
+| `CONFIG_ENCRYPTION_ERROR` | 加密密钥不可用、无效或与数据库记录的密钥身份指纹不一致（换用了另一把密钥）。 | 恢复原密钥来源：`ACTIONDOCK_ENCRYPTION_KEY` 环境变量或 `~/.actiondock/keys/config.key`（`--data-dir` 时为 `<dataDir>/keys/config.key`）；首版不支持密钥轮换，不要尝试换钥写入。 |
+| `CONFIG_DECRYPT_FAILED` | 密文格式非法、认证失败或加密负载损坏。 | 用配套备份库与对应密钥恢复受影响数据；密钥本身缺失、无效或与数据库指纹不匹配属于 `CONFIG_ENCRYPTION_ERROR`，先恢复密钥来源再重试。旧版本程序打开 v3 加密库也会被拒绝，先用新版本程序或恢复自行保留的 v2 备份库。 |
 
 ---
 

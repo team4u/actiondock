@@ -6,12 +6,36 @@ import { join } from "node:path";
 import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { Command } from "commander";
-import { initProject } from "@actiondock/core";
+import { createConfigKeyProvider, initProject } from "@actiondock/core";
+import { resolveDatabasePath, SqliteRuntimeStorage } from "@actiondock/core/package";
 import { linkPackage } from "@actiondock/core/registry";
 import { registerConfigSetCommand } from "../src/commands/config/set";
 import { promptBrowserSecret, type PromptBrowserSecretOptions } from "../src/services/browser-secret-input";
 import { runCliAsync } from "./helpers/run-cli";
 import type { CliContext } from "../src/types";
+
+function assertEncryptedSecret(
+  raw: string,
+  scope: string,
+  key: string,
+  customHome: string,
+  expected: string,
+  dbPath?: string
+): void {
+  assert.match(raw, /^adenc:v1:/);
+  assert.strictEqual(raw.includes(expected), false);
+  // 以真实存储重开验证透明解密：不依赖公开加解密原语
+  const storage = new SqliteRuntimeStorage({
+    dbPath: dbPath ?? resolveDatabasePath(scope, { customHome }),
+    packageId: scope,
+    configKeyProvider: createConfigKeyProvider({ customHome }),
+  });
+  try {
+    assert.strictEqual(storage.getConfig(key), expected);
+  } finally {
+    void storage.close();
+  }
+}
 
 function makeRawHttpRequest(
   port: number,
@@ -258,7 +282,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
     const row = db
       .prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?")
       .get("__global__", "GITHUB_TOKEN") as { value_json: string };
-    assert.strictEqual(JSON.parse(row.value_json), rawSecret);
+    assertEncryptedSecret(row.value_json, "__global__", "GITHUB_TOKEN", tempHome, rawSecret, globalDbPath);
     db.close();
 
     // 查验包库未被写入该敏感值
@@ -305,7 +329,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
     const row2 = db2
       .prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?")
       .get("__global__", "GITHUB_TOKEN") as { value_json: string };
-    assert.strictEqual(JSON.parse(row2.value_json), rawSecret);
+    assertEncryptedSecret(row2.value_json, "__global__", "GITHUB_TOKEN", tempHome, rawSecret, globalDbPath);
     db2.close();
   });
 
@@ -432,7 +456,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
       const row = db
         .prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?")
         .get("__global__", "UNION_KEY") as { value_json: string };
-      assert.strictEqual(JSON.parse(row.value_json), rawSecret);
+      assertEncryptedSecret(row.value_json, "__global__", "UNION_KEY", tempHome, rawSecret, globalDbPath);
       db.close();
     } finally {
       rmSync(pkg2Dir, { recursive: true, force: true });
@@ -455,7 +479,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
     const row = db
       .prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?")
       .get("__global__", "API_OPENAI_TOKEN") as { value_json: string };
-    assert.strictEqual(JSON.parse(row.value_json), rawSecret);
+    assertEncryptedSecret(row.value_json, "__global__", "API_OPENAI_TOKEN", tempHome, rawSecret, globalDbPath);
     db.close();
   });
 
@@ -600,7 +624,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
       const row = db
         .prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?")
         .get("__global__", "LINKED_SECRET") as { value_json: string };
-      assert.strictEqual(JSON.parse(row.value_json), rawSecret);
+      assertEncryptedSecret(row.value_json, "__global__", "LINKED_SECRET", tempHome, rawSecret, globalDbPath);
       db.close();
 
       // 2. 在无项目目录执行未声明配置：报资格错误，绝不报 Not in project
@@ -732,7 +756,7 @@ describe("CLI ad config set --browser 参数、目标、声明与端到端测试
     const dbPath = join(tempHome, ".actiondock", "data", "test.browser.pkg", "runtime.db");
     const db = new DatabaseSync(dbPath);
     const row = db.prepare("SELECT value_json FROM config WHERE package_id = ? AND key = ?").get("test.browser.pkg", "GITHUB_TOKEN") as { value_json: string };
-    assert.strictEqual(JSON.parse(row.value_json), rawSecret);
+    assertEncryptedSecret(row.value_json, "test.browser.pkg", "GITHUB_TOKEN", tempHome, rawSecret);
     db.close();
   });
 

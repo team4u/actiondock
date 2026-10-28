@@ -1,11 +1,18 @@
 import type { RuntimeError, RunRecord, RunStatus } from "@actiondock/sdk";
 import { ACTION_CANCELLED, ACTION_TIMEOUT } from "../errors";
+import type { ConfigItemDefinition } from "../project/types";
+import type { ConfigKeyProvider } from "../security/config-cipher";
 import type { Clock } from "./clock";
 
 /**
- * 固定的存储 Schema 目标版本常量。
+ * 固定的存储 Schema 当前版本常量。
+ *
+ * 当前版本（3）数据库总是携带 config_encryption 密钥元数据表（无敏感
+ * 写入时表保持空置），config 表允许普通 JSON 明文行与 adenc: 密文行
+ * 共存。旧版本数据库在存储打开前由 migrations/ 通用版本调度完成升级，
+ * 当前版本读写代码不感知历史版本。
  */
-export const STORAGE_SCHEMA_VERSION = 2;
+export const STORAGE_SCHEMA_VERSION = 3;
 
 /**
  * 幂等去重记录保留窗口（24 小时），与 ActionDockService.info()
@@ -88,6 +95,15 @@ export interface SqliteStatement {
 }
 
 /**
+ * 事务开启模式。
+ *
+ * deferred 为历史默认；读后写升级场景（如先读旧行再决定加密写入）
+ * 必须使用 immediate，在事务开始即取得写锁，避免并发提交下的
+ * 快照升级 SQLITE_BUSY；exclusive 供离线维护取得持续排他锁。
+ */
+export type SqliteTransactionMode = "deferred" | "immediate" | "exclusive";
+
+/**
  * 统一 SQLite 驱动层接口（严格同步契约）。
  *
  * 本契约为同步驱动：exec、prepare 与 transaction 全部以同步语义返回结果，
@@ -99,7 +115,10 @@ export interface SqliteStatement {
 export interface SqliteDriver {
   exec(sql: string): void;
   prepare(sql: string): SqliteStatement;
-  transaction<T>(fn: () => T extends PromiseLike<unknown> ? never : T): T;
+  transaction<T>(
+    fn: () => T extends PromiseLike<unknown> ? never : T,
+    mode?: SqliteTransactionMode
+  ): T;
   close(): void;
 }
 
@@ -138,6 +157,31 @@ export interface StateEntry {
 }
 
 /**
+ * 配置写入选项。
+ *
+ * declarations 为写入时目标键的有效声明集合（跨包并集），存储层据此
+ * 判定敏感性、执行整键加密并合并历史保护声明；缺省视为无敏感声明。
+ */
+export interface ConfigWriteOptions {
+  /** 写入时目标键的有效配置声明集合 */
+  declarations?: readonly ConfigItemDefinition[];
+}
+
+/**
+ * 单键配置原子读取快照。
+ *
+ * 单次 SELECT 同时解出业务值与历史保护声明，避免管理视图分两次读取
+ * 时因其他进程恰好删除行而出现「旧秘密值 + 空保护」的组合泄漏。
+ * 明文行的快照仅含 value；密文行同时携带解密验证后的保护声明。
+ */
+export interface ConfigSnapshot {
+  /** 业务配置值（密文行经透明解密还原） */
+  value: unknown;
+  /** 历史保护声明（仅密文行存在；用于当前声明弱化后的脱敏兜底） */
+  protection?: readonly ConfigItemDefinition[];
+}
+
+/**
  * 初始化存储引擎所需的选项。
  */
 export interface StorageOptions {
@@ -159,6 +203,21 @@ export interface StorageOptions {
   recoverOrphans?: boolean;
   /** 运行记录保留策略配置 */
   retentionPolicy?: RunsRetentionPolicy;
+  /**
+   * 配置加密密钥提供器。
+   *
+   * 缺省时文件库懒使用本地默认密钥定位（createConfigKeyProvider），
+   * 内存库使用一次性随机内存密钥（不读取环境变量或密钥文件）。
+   */
+  configKeyProvider?: ConfigKeyProvider;
+  /**
+   * 打开存储时用于版本迁移判定的配置声明字典集合。
+   *
+   * 包级存储传当前包声明；全局存储传所有已加载包的声明字典（跨包并集
+   * 判定敏感性）。声明解析遵循各字典内具体键优先于模板、跨字典取并集。
+   * 仅在旧版本数据库需要迁移时被读取；版本迁移只在首次打开执行。
+   */
+  configDeclarations?: readonly Record<string, ConfigItemDefinition>[];
 }
 
 /**
@@ -238,8 +297,23 @@ export interface RuntimeStorage {
   // --- Config 配置管理 ---
   getConfig<T = unknown>(key: string): T | undefined;
   listConfig(): Record<string, unknown>;
-  setConfig(key: string, value: unknown): void | Promise<void>;
+  setConfig(key: string, value: unknown, options?: ConfigWriteOptions): void | Promise<void>;
   deleteConfig(key: string): boolean | Promise<boolean>;
+  /**
+   * 单次读取同时解出业务值与历史保护声明的原子快照。
+   *
+   * 键不存在返回 undefined；明文行仅含 value；密文行经严格解密验证后
+   * 同时携带 protection。管理视图优先使用本方法，避免分离读取的
+   * 并发窗口泄漏无保护的秘密值。
+   */
+  getConfigSnapshot?(key: string): ConfigSnapshot | undefined;
+  /**
+   * 读取目标键的历史保护声明（密文行解密验证后返回；明文行或不存在返回 undefined）。
+   *
+   * 用于当前声明弱化（如移除 secret 标记）后的脱敏兜底，防止已加密的
+   * 历史敏感值在管理视图重新明文展示。
+   */
+  getConfigProtection?(key: string): readonly ConfigItemDefinition[] | undefined;
 
   // --- State 状态管理 ---
   getState<T = unknown>(namespace: string, key: string): Promise<T | undefined>;

@@ -19,6 +19,7 @@ import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
 import { redactConfigValue, sanitizeConfigDefinitions } from "../storage/mask";
+import { redactConfigValueWithProtection } from "../storage";
 import {
   assertConcreteConfigKey,
   assertValidConfigDeclarations,
@@ -353,6 +354,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   /** 构造包存储工厂选项（单一事实源，异步与同步打开路径共用） */
   private buildStorageOptions(): StorageFactoryOptions {
+    const config = this.projectConfig?.config;
     return {
       projectRoot: this.packageRoot,
       dataDir: this.options.dataDir,
@@ -361,6 +363,9 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       // 默认持有者语义：App 主路径打开时收割死亡会话遗留非终态运行记录；
       // CLI 查询旁观视图显式置 recoverOrphans: false 跳过收割
       recoverOrphans: this.options.recoverOrphans !== false,
+      // 供旧版本库自动迁移判定敏感性（各字典内具体键优先于模板）；
+      // 仅在库需要迁移时被读取，不引入新的生命周期
+      ...(config && Object.keys(config).length > 0 ? { configDeclarations: [config] } : {}),
     };
   }
 
@@ -418,12 +423,15 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       this.globalStorageRes = { kind: "own", storage };
       return storage;
     }
+    const config = this.projectConfig?.config;
     const globalOpts = {
       customHome: this.options.customHome,
       dataDir: this.options.dataDir,
       inMemory: this.options.inMemory,
       // 与主存储保持同侧收割语义（全局库 runs 表为空集，收割无实际副作用）
       recoverOrphans: this.options.recoverOrphans !== false,
+      // 独立全局库迁移以当前包声明为并集口径；Host 共享路径由 Host 汇集全部已加载包声明
+      ...(config && Object.keys(config).length > 0 ? { configDeclarations: [config] } : {}),
     };
     const storage = this.platform.storage.createGlobalStorage(globalOpts);
     this.globalStorageRes = { kind: "own", storage };
@@ -903,12 +911,21 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     assertConcreteConfigKey(key);
 
     const decl = resolveConfigDeclaration(this.projectConfig.config, key);
-    // 委托 RuntimeConfig 五层优先级链单一事实源，避免重复实现解析链
-    const resolved = this.ensureRuntimeConfig().describe(key);
+    // 委托 RuntimeConfig 五层优先级链单一事实源，取值与历史保护声明同链原子解析
+    const resolved = this.ensureRuntimeConfig().describeWithProtection(key);
     // configured 显式判定：仅真实显式来源（override/package/global/env）为 true，
     // default 与整链未命中（source null）均为 false，不得依赖与 "default" 的不等比较
     const configured = resolved.source !== null && resolved.source !== "default";
-    const redacted = redactConfigValue(resolved.value, decl?.item);
+    // 当前声明与存储持久化的历史保护声明合并脱敏：删除或弱化声明后仍保持既有保护；
+    // 无历史保护时沿用单声明脱敏原语，保持既有视图行为不变
+    const redacted =
+      resolved.protection !== undefined
+        ? redactConfigValueWithProtection(
+            resolved.value,
+            decl?.item ? [decl.item] : [],
+            resolved.protection
+          )
+        : redactConfigValue(resolved.value, decl?.item);
 
     return {
       key,
@@ -925,7 +942,13 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     assertConcreteConfigKey(key);
     const decl = resolveConfigDeclaration(this.projectConfig.config, key);
     validateConfigValue(key, value, decl?.item);
-    await (await this.prepareStorageAsync()).setConfig(key, value);
+    // 传递当前有效声明（具体键优先于模板解析结果），
+    // 由存储统一判定整键加密并合并历史保护，禁止保护弱化
+    await (await this.prepareStorageAsync()).setConfig(
+      key,
+      value,
+      decl?.item ? { declarations: [decl.item] } : undefined
+    );
   }
 
   async deleteConfig(key: string): Promise<boolean> {

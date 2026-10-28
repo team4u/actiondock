@@ -157,6 +157,8 @@ export {
   PROCESS_CANCELLED,
   PROCESS_TIMEOUT,
   UNAUTHORIZED,
+  CONFIG_ENCRYPTION_ERROR,
+  CONFIG_DECRYPT_FAILED,
   NOT_FOUND,
   SERVER_ERROR,
   PACKAGE_FORBIDDEN,
@@ -199,3 +201,11 @@ export type {
   ExecuteCommandOptions,
   CommandExecutionResult,
 } from "./process/command-executor";
+
+// 敏感配置静态加密：公开密钥注入能力（提供器与密钥材料类型）；
+// 加解密原语为内部实现，验证明文请通过真实存储读取
+export type {
+  ConfigEncryptionKey,
+  ConfigKeyProvider,
+} from "./security/config-cipher";
+export { createConfigKeyProvider } from "./security/config-key";

@@ -65,4 +65,6 @@ export type {
   RuntimeStorage,
   SqliteDriver,
   StateEntry,
+  ConfigWriteOptions,
+  ConfigSnapshot,
 } from "../storage/types";

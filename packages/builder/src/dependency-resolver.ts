@@ -18,10 +18,42 @@ export const TEST_FILE_SUFFIXES = [
   ".d.ts",
 ];
 
+/**
+ * ActionDock 配置加密主密钥与身份标记的规范文件名（位于密钥目录 keys 内）。
+ *
+ * 命名事实源为 core/security/config-key.ts 的 resolveKeyPaths：
+ * 密钥文件 config.key、身份标记 config.key.id。
+ */
+const CONFIG_KEY_FILE_NAMES = ["config.key", "config.key.id"];
+
+/**
+ * 判断文件名是否为 ActionDock 配置加密密钥资产。
+ *
+ * 密钥发布采用原子硬链接，临时文件名为 .{原名}.tmp.{pid}.{uuid}
+ * （core/security/config-key.ts 的 publishAtomically）；失败清理为尽力而为，
+ * 残留临时名同样可能出现在密钥目录内，须一并识别。
+ */
+function isConfigKeyArtifactName(fileName: string): boolean {
+  for (const name of CONFIG_KEY_FILE_NAMES) {
+    if (fileName === name || fileName.startsWith(`.${name}.tmp.`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** 运行环境配置不得进入分发产物；普通业务 bindings.json 不受影响。 */
 export function isRuntimeConfigFile(relPath: string): boolean {
   const segments = relPath.replace(/\\/g, "/").split("/");
-  return segments.includes(".actiondock") || segments.at(-1) === "profiles.json";
+  const fileName = segments.at(-1) ?? "";
+  if (segments.includes(".actiondock") || fileName === "profiles.json") {
+    return true;
+  }
+  // 配置加密主密钥仅落在密钥目录 keys 内：dataDir 定位为 <dataDir>/keys，
+  // 主目录定位为 .actiondock/keys（后者已被上方 .actiondock 分支覆盖）。
+  // 仅在 keys 目录上下文下精确排除，普通业务 keys 目录内的其他文件
+  // （如 keys/data.json、keys/api.key）与密钥目录外的同名业务资产不受影响。
+  return segments.at(-2) === "keys" && isConfigKeyArtifactName(fileName);
 }
 
 /**

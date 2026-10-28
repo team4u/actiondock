@@ -102,7 +102,7 @@ import type {
   StateScopeOptions,
 } from "../service/types";
 import { CAPABILITY_UNAVAILABLE } from "../errors";
-import { createGlobalStorage, redactConfigValueAtPaths, redactConfigValueForDeclarations } from "../storage";
+import { createGlobalStorage, redactConfigValueAtPaths, redactConfigValueForDeclarations, readConfigWithProtection, redactConfigValueWithProtection } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import type { ConfigItemDefinition } from "../project/types";
 import { filterByIntent } from "../utils/intent";
@@ -1921,16 +1921,24 @@ export class DefaultActionDockHost implements ActionDockHost {
         }) ||
         Array.from(this.runtimes.values()).some((rt) => Boolean(rt.inMemory || (rt as any).options?.inMemory));
       const inMemory = Boolean(this.options.inMemory || hasInMemoryPackage);
+      // 旧版本全局库迁移的声明并集：取首次打开时已加载包的声明字典；
+      // 后续 registerRuntime 带来的新声明属当前版本正常写入，不重跑历史迁移
+      const configDeclarations = this.listRuntimes()
+        .map((runtime) => runtime.projectConfig?.config)
+        .filter((config): config is Record<string, ConfigItemDefinition> =>
+          Boolean(config && Object.keys(config).length > 0));
       this.globalStorage =
         this.options.platform?.storage?.createGlobalStorage?.({
           dataDir: this.options.dataDir,
           customHome: this.options.customHome,
           ...(inMemory ? { inMemory: true } : {}),
+          configDeclarations,
         }) ??
         createGlobalStorage({
           dataDir: this.options.dataDir,
           customHome: this.options.customHome,
           inMemory,
+          configDeclarations,
         });
     }
     return this.globalStorage;
@@ -1981,10 +1989,15 @@ export class DefaultActionDockHost implements ActionDockHost {
     assertConcreteConfigKey(key);
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
-      const val = globalStorage.getConfig(key);
-      const configured = val !== undefined;
+      // 原子快照配对读取值与历史保护声明，消除并发删除造成的值与规则错配
+      const snapshot = readConfigWithProtection(globalStorage, key);
+      const configured = snapshot !== undefined;
       const items = this.findAllDeclaredConfigItems(key);
-      const redacted = redactConfigValueForDeclarations(val, items);
+      const redacted = redactConfigValueWithProtection(
+        snapshot?.value,
+        items,
+        snapshot?.protection
+      );
       return {
         key,
         configured,
@@ -2005,7 +2018,13 @@ export class DefaultActionDockHost implements ActionDockHost {
       for (const item of items) {
         validateConfigValue(key, value, item);
       }
-      await this.getGlobalStorage().setConfig(key, value);
+      // 传递全部已加载包各自解析出的有效声明并集（各包内具体键优先于模板），
+      // 由存储统一判定整键加密并合并历史保护
+      await this.getGlobalStorage().setConfig(
+        key,
+        value,
+        items.length > 0 ? { declarations: items } : undefined
+      );
       return;
     }
     await this.requireRuntime(packageId).setConfig(key, value);
@@ -2026,12 +2045,22 @@ export class DefaultActionDockHost implements ActionDockHost {
       const globalStorage = this.getGlobalStorage();
       const all = globalStorage.listConfig();
       const views: ConfigValueView[] = [];
-      for (const [key, val] of Object.entries(all)) {
+      for (const key of Object.keys(all)) {
         if (isConfigTemplate(key)) {
           continue;
         }
+        // 同源原子重读：值与历史保护声明取自同一次读取；
+        // 行在列键之后又被并发删除时跳过该项，不回退旧值
+        const snapshot = readConfigWithProtection(globalStorage, key);
+        if (snapshot === undefined) {
+          continue;
+        }
         const items = this.findAllDeclaredConfigItems(key);
-        const redacted = redactConfigValueForDeclarations(val, items);
+        const redacted = redactConfigValueWithProtection(
+          snapshot.value,
+          items,
+          snapshot.protection
+        );
         views.push({
           key,
           configured: true,

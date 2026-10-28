@@ -7,6 +7,7 @@ import * as sdk from "@actiondock/sdk";
 import * as coreStorage from "../src/storage";
 import { resolveDatabasePath } from "../src/storage";
 import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
+import { UNSUPPORTED_STORAGE_SCHEMA } from "../src/errors";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 /**
@@ -298,7 +299,7 @@ describe("SqliteRuntimeStorage", () => {
           packageId: "old-pkg",
           dbPath: tempDbPath,
         });
-      }, /UNSUPPORTED_STORAGE_SCHEMA/);
+      }, (err: unknown) => (err as { code?: string })?.code === UNSUPPORTED_STORAGE_SCHEMA);
 
       // 验证原数据库未被修改且保留原版本号
       const checkDb = new NodeSqliteDriver(tempDbPath);
@@ -334,7 +335,7 @@ describe("SqliteRuntimeStorage", () => {
           packageId: "incompatible-pkg",
           dbPath: tempDbPath,
         });
-      }, /UNSUPPORTED_STORAGE_SCHEMA/);
+      }, (err: unknown) => (err as { code?: string })?.code === UNSUPPORTED_STORAGE_SCHEMA);
 
       // 验证原数据库文件与 user_version 保持未修改
       const checkDb = new NodeSqliteDriver(tempDbPath);

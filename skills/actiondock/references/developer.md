@@ -113,6 +113,8 @@
   - Action 的 `ctx.config.get` 对最终生效值执行模式校验，失败报 `CONFIG_VALUE_INVALID`，错误只包含键名、路径和原因。没有配置时仍返回 `undefined` 或调用方默认值；外层 `required` 只参与诊断。
   - 管理视图不会修改执行原值，也不提供明文读取能力。全局管理脱敏合并各包保护范围；全局写入须通过所有匹配模式。避免将凭据放进清单默认值或枚举约束，对外声明会清理这些敏感内容。
   - `ad config set` 的完整位置值、`--stdin`、扁平赋值及 `--stdin-field` 都先组装完整值，再按模式校验并整键替换，不做部分更新或对象合并。缺少密码等必填字段时报 `CONFIG_VALUE_INVALID` 并保留旧值；字段绑定不意味着保留其他旧字段，完整输入规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+  - 上述声明同时驱动静态加密：当前声明判定敏感的配置键（顶层 `secret: true` 或模式字段级敏感）持久化时整键加密（AES-256-GCM），无需迁移命令；旧版明文库在升级后首次打开时自动加密存量敏感明文并升级为当前结构（v3）。密钥优先取 `ACTIONDOCK_ENCRYPTION_KEY` 环境变量，否则为 `~/.actiondock/keys/config.key`（`--data-dir` 时为 `<dataDir>/keys/config.key`）；旧版本程序拒绝打开 v3 库。状态存储不加密，不要把配置原值转存到状态并假定仍受配置安全视图保护。
+  - 底层存储集成：配置管理端口统一解析清单并传递敏感声明；直接调用 `RuntimeStorage.setConfig(key, value, { declarations })` 时由调用方传入有效声明，未传声明的新键按普通配置保存，已加密键仍保留加密与历史保护。`SqliteRuntimeStorage` 支持可选 `configDeclarations` 供打开旧库时自动迁移使用；`createNodePlatform({ configKeyProvider })` 可注入同步密钥提供器；测试用 `createConfigKeyProvider({ key: fixedTestKey })` 注入固定 32 字节测试密钥，数据库与密钥文件均放临时目录。
 
 - 清单字段说明：
   - `actions`：声明 Action 标识符、执行源码入口、描述以及输入输出契约。其中 `inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范，推荐在字段或根对象层级添加 `examples` 示例数组，增强智能体参数识别精度。

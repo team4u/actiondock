@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname } from "node:path";
 import {
   decodeStateKey,
@@ -12,6 +13,8 @@ import {
 import { type Clock, SystemClock } from "./clock";
 import { NodeSqliteDriver } from "./sqlite-driver";
 import {
+  type ConfigSnapshot,
+  type ConfigWriteOptions,
   type IdempotencyCheckResult,
   type IdempotencyRecord,
   type RunsQueryFilterOptions,
@@ -22,11 +25,14 @@ import {
   type StorageOptions,
   type TerminalRunStatus,
 } from "./types";
-import { initSchema } from "./sqlite-schema";
+import { ensureStorageSchema } from "./migrations/index";
 import { SqliteRunsStore } from "./sqlite-runs";
 import { SqliteStateStore } from "./sqlite-state";
 import { SqliteConfigStore } from "./sqlite-config";
 import { SqliteEventsStore } from "./sqlite-events";
+import { createConfigKeyProvider } from "../security/config-key";
+import type { ConfigKeyProvider } from "../security/config-cipher";
+import type { ConfigItemDefinition } from "../project/types";
 
 export {
   decodeStateKey,
@@ -39,6 +45,23 @@ export interface SqliteStorageOptions extends StorageOptions {
   logger?: Logger;
 }
 
+/**
+ * 内存库默认密钥提供器：一次性随机内存密钥。
+ *
+ * 通过 createConfigKeyProvider({ key }) 注入纯内存材料，懒加载缓存，
+ * 绝不读取环境变量，也绝不访问或创建任何密钥文件；同一存储实例
+ * 生命周期内密钥恒定，进程退出即失效。
+ */
+function createMemoryConfigKeyProvider(): ConfigKeyProvider {
+  return createConfigKeyProvider({ key: randomBytes(32) });
+}
+
+/** 解析存储级密钥提供器：显式注入优先，否则按库类型选择默认。 */
+function resolveConfigKeyProvider(dbPath: string, injected?: ConfigKeyProvider): ConfigKeyProvider {
+  if (injected) return injected;
+  return dbPath === ":memory:" ? createMemoryConfigKeyProvider() : createConfigKeyProvider();
+}
+
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private driver: SqliteDriver;
   private packageId: string;
@@ -48,6 +71,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private dbPath: string;
   private recoverOrphans: boolean;
   private retentionPolicy?: RunsRetentionPolicy;
+  private configKeyProvider?: ConfigKeyProvider;
+  private configDeclarations?: readonly Record<string, ConfigItemDefinition>[];
 
   private runsStore!: SqliteRunsStore;
   private stateStore!: SqliteStateStore;
@@ -78,6 +103,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     this.dbPath = dbPath;
     this.recoverOrphans = options.recoverOrphans === true;
     this.retentionPolicy = options.retentionPolicy;
+    this.configKeyProvider = options.configKeyProvider;
+    this.configDeclarations = options.configDeclarations;
 
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
@@ -93,20 +120,45 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
     this.driver = options.driver ?? new NodeSqliteDriver(dbPath);
 
-    if (dbPath !== ":memory:" && existsSync(dbPath)) {
-      try {
-        chmodSync(dbPath, 0o600);
-      } catch {
-        // 忽略文件权限设置异常
+    try {
+      this.init();
+    } catch (err) {
+      // 构造失败回收自建连接，避免数据库文件锁泄漏：注入的 driver 归调用方管理，
+      // 自建的 driver 生命周期归本实例，初始化失败时必须立即关闭
+      if (options.driver === undefined) {
+        try {
+          this.driver.close();
+        } catch {
+          // 回收失败不得掩盖导致构造失败的原始异常
+        }
       }
+      throw err;
     }
-
-    this.init();
   }
 
   private init(): void {
-    // 延迟初始化子存储以便它们可以访问 driver 等，但把初始化本身移到了 schema
-    this.configStore = new SqliteConfigStore(this.driver, this.packageId, this.dbPath, this.clock);
+    const keyProvider = resolveConfigKeyProvider(this.dbPath, this.configKeyProvider);
+
+    // 版本就绪：新库建当前版本、旧库迁移、当前库校验。
+    // 迁移先于任何正常子存储构造（当前版本实现始终假定库已是当前版本），
+    // 也先于运行记录恢复（恢复依赖子存储）。
+    ensureStorageSchema({
+      driver: this.driver,
+      dbPath: this.dbPath,
+      packageId: this.packageId,
+      declarations: this.configDeclarations ?? [],
+      keyProvider,
+      clock: this.clock,
+    });
+
+    // 构造正常子存储
+    this.configStore = new SqliteConfigStore(
+      this.driver,
+      this.packageId,
+      this.dbPath,
+      this.clock,
+      keyProvider
+    );
     this.stateStore = new SqliteStateStore(
       this.driver,
       this.packageId,
@@ -127,13 +179,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     );
     this.eventsStore = new SqliteEventsStore(this.driver, this.packageId, this.clock);
 
-    initSchema(
-      this.driver,
-      this.dbPath,
-      this.recoverOrphans,
-      () => this.recoverDeadSessionRuns(),
-      () => this.cleanExpiredRuns()
-    );
+    // 数据目录持有者语义下的遗留运行收割（与迁移无关，依赖子存储就绪）
+    if (this.recoverOrphans) {
+      this.recoverDeadSessionRuns();
+      this.cleanExpiredRuns();
+    }
 
     if (this.dbPath !== ":memory:" && existsSync(this.dbPath)) {
       try {
@@ -161,12 +211,20 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.configStore.listConfig();
   }
 
-  setConfig(key: string, value: unknown): void {
-    this.configStore.setConfig(key, value);
+  setConfig(key: string, value: unknown, options?: ConfigWriteOptions): void {
+    this.configStore.setConfig(key, value, options);
   }
 
   deleteConfig(key: string): boolean {
     return this.configStore.deleteConfig(key);
+  }
+
+  getConfigSnapshot(key: string): ConfigSnapshot | undefined {
+    return this.configStore.getConfigSnapshot(key);
+  }
+
+  getConfigProtection(key: string): readonly ConfigItemDefinition[] | undefined {
+    return this.configStore.getConfigProtection(key);
   }
 
   // --- State 状态管理 ---

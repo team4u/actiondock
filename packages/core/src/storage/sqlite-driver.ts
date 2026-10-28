@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
-import type { SqliteDriver, SqliteStatement } from "./types";
+import type { SqliteDriver, SqliteStatement, SqliteTransactionMode } from "./types";
 import { ActionDockError, ASYNC_TRANSACTION_UNSUPPORTED, STORAGE_CLOSED } from "../errors";
 
 // 基于原生 ESM Top-Level Await 在模块评估期动态加载，确保警告静默拦截器优先就绪且保持纯正 ESM 架构
@@ -86,10 +86,22 @@ export class NodeSqliteDriver implements SqliteDriver {
 
   /**
    * 执行同步事务，严格拒绝并拦截异步 Promise。
+   *
+   * mode 缺省为 deferred（历史行为）；读后写升级场景应传 immediate，
+   * 在事务开始即取得写保留锁，避免并发提交下快照升级失败。
    */
-  transaction<T>(fn: () => T extends PromiseLike<unknown> ? never : T): T {
+  transaction<T>(
+    fn: () => T extends PromiseLike<unknown> ? never : T,
+    mode?: SqliteTransactionMode
+  ): T {
     this.assertOpen();
-    this.db.exec("BEGIN");
+    const beginSql =
+      mode === "immediate"
+        ? "BEGIN IMMEDIATE"
+        : mode === "exclusive"
+          ? "BEGIN EXCLUSIVE"
+          : "BEGIN";
+    this.db.exec(beginSql);
 
     let result: any;
     try {
@@ -117,7 +129,18 @@ export class NodeSqliteDriver implements SqliteDriver {
       throw new ActionDockError(ASYNC_TRANSACTION_UNSUPPORTED, "Async transactions are not allowed in SQLite");
     }
 
-    this.db.exec("COMMIT");
+    // 提交本身也可能失败（如锁竞争下的 EXCLUSIVE 升级被拒）：必须回滚释放
+    // 事务后重抛原始错误，严禁让连接停留在未决事务内导致后续操作全部失败
+    try {
+      this.db.exec("COMMIT");
+    } catch (err) {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {
+        // 忽略回滚阶段发生的级联异常
+      }
+      throw err;
+    }
     return result;
   }
 

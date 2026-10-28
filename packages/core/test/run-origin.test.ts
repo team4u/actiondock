@@ -189,7 +189,7 @@ describe("Run origin storage", () => {
     }
   });
 
-  it("migrates a legacy table without inventing sources and preserves new sources after reopening", () => {
+  it("rejects a current-version database with dropped runs columns instead of silently patching", () => {
     const directory = mkdtempSync(join(tmpdir(), "ad-run-origin-"));
     const dbPath = join(directory, "runs.db");
     let storage: SqliteRuntimeStorage | undefined;
@@ -199,13 +199,26 @@ describe("Run origin storage", () => {
       storage.close();
       const driver = new NodeSqliteDriver(dbPath);
       try { driver.exec("ALTER TABLE runs DROP COLUMN origin_json"); } finally { driver.close(); }
-      storage = new SqliteRuntimeStorage({ packageId: "pkg.origin", dbPath });
-      assert.equal(Object.hasOwn(storage.getRun("legacy")!, "origin"), false);
-      storage.createRun(makeRecord("new", expectedOrigin));
-      storage.close();
-      storage = new SqliteRuntimeStorage({ packageId: "pkg.origin", dbPath });
-      assert.deepEqual(storage.getRun("new")?.origin, expectedOrigin);
-      assert.deepEqual(storage.listRuns().find((run) => run.id === "new")?.origin, expectedOrigin);
+      // 当前版本库缺关键列属损坏态：打开即拒绝，绝不在打开路径上静默 ALTER 修补
+      assert.throws(
+        () => {
+          storage = new SqliteRuntimeStorage({ packageId: "pkg.origin", dbPath });
+        },
+        (error: any) =>
+          error.code === "UNSUPPORTED_STORAGE_SCHEMA" &&
+          String(error.message).includes("origin_json")
+      );
+      storage = undefined;
+      // 数据与版本保持未修改：既有记录仍在，不会被修补或覆写
+      const check = new NodeSqliteDriver(dbPath);
+      try {
+        const version = check.prepare("PRAGMA user_version;").get() as any;
+        assert.equal(Number(version.user_version), 3);
+        const row = check.prepare("SELECT id FROM runs WHERE id = ?").get("legacy") as { id: string } | undefined;
+        assert.equal(row?.id, "legacy");
+      } finally {
+        check.close();
+      }
     } finally {
       storage?.close();
       rmSync(directory, { recursive: true, force: true });
@@ -229,21 +242,6 @@ describe("Run origin storage", () => {
     }
   });
 
-  it("does not swallow failures when adding the origin column", () => {
-    const driver = new NodeSqliteDriver(":memory:");
-    const storage = new SqliteRuntimeStorage({ packageId: "pkg.origin", driver });
-    driver.exec("ALTER TABLE runs DROP COLUMN origin_json");
-    const exec = driver.exec.bind(driver);
-    driver.exec = (sql: string) => {
-      if (sql.includes("ADD COLUMN origin_json")) throw new Error("Origin migration failed");
-      exec(sql);
-    };
-    try {
-      assert.throws(() => new SqliteRuntimeStorage({ packageId: "pkg.origin", driver }), /Origin migration failed/);
-    } finally {
-      storage.close();
-    }
-  });
 });
 
 describe("Run origin execution", () => {
