@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   acquireFileLock,
   acquireFileLockSync,
+  asyncLockDriver,
   isLockHeld,
   isStaleLock,
   isStaleLockSync,
+  readLockMetadataSync,
+  type FileLockHandle,
 } from "../src/storage/file-lock";
 import type { Clock } from "../src/storage/clock";
 import { ActionDockError, STORAGE_BUSY, TIMEOUT } from "../src/errors";
@@ -168,5 +171,158 @@ describe("文件锁时钟源注入与确定性测试", () => {
 
     assert.strictEqual(await isStaleLock(lockPath, 10000, { clock, mtimeFirst: true }), true);
     assert.strictEqual(isStaleLockSync(lockPath, 10000, { clock, mtimeFirst: true }), true);
+  });
+});
+
+describe("陈旧单文件回收所有权仲裁确定性测试", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "ad-file-lock-race-"));
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // 忽略临时目录清理异常
+    }
+  });
+
+  it("unlink 与 mkdir 间隙被普通创建者抢占时，未创建主锁的回收者不得覆盖赢家元数据或宣称所有权", async () => {
+    const lockPath = join(tempDir, "race.lock");
+
+    // 陈旧单文件锁：持有者进程已死亡，满足回收判定条件
+    writeFileSync(
+      lockPath,
+      JSON.stringify({ pid: 99999998, token: "stale-token", createdAt: new Date().toISOString() }, null, 2),
+      { mode: 0o600 }
+    );
+
+    const origMkdir = asyncLockDriver.mkdir;
+    const origUnlink = asyncLockDriver.unlink;
+
+    interface ParkedCreator {
+      opts?: { mode?: number; recursive?: boolean };
+      resolve: (value: unknown) => void;
+      reject: (reason: unknown) => void;
+    }
+    let parkedCreator: ParkedCreator | undefined;
+    let creatorParked = false;
+    let creatorAcquire: Promise<FileLockHandle> | undefined;
+    // 停靠信号：mkdir 屏障自身在挂起 B 时 resolve，外部直接 await，无需轮询
+    const docked = Promise.withResolvers<void>();
+    const acquiredHandles: FileLockHandle[] = [];
+    let watchdog: NodeJS.Timeout | undefined;
+
+    try {
+      // 普通创建者 B：guard 检查之后、首个针对 lockPath 的 mkdir 被屏障挂起，
+      // 模拟其被调度暂停在「已过 guard 检查、尚未创建主锁」的窗口
+      asyncLockDriver.mkdir = (path: string, opts?: { mode?: number; recursive?: boolean }) => {
+        if (path === lockPath && !creatorParked) {
+          creatorParked = true;
+          docked.resolve();
+          return new Promise((resolve, reject) => {
+            parkedCreator = { opts, resolve, reject };
+          });
+        }
+        return origMkdir(path, opts);
+      };
+
+      // 回收者 A：删除陈旧单文件后被屏障暂停，先放行 B 完成主锁创建与元数据发布，
+      // 再让 A 继续——此时 A 的 mkdir 必然撞上 B 已创建的主锁目录
+      asyncLockDriver.unlink = (path: string) => {
+        if (path === lockPath) {
+          return origUnlink(path).then(async () => {
+            const parked = parkedCreator;
+            parkedCreator = undefined;
+            if (parked) {
+              try {
+                parked.resolve(await origMkdir(lockPath, parked.opts));
+              } catch (err) {
+                parked.reject(err);
+              }
+            }
+            await creatorAcquire;
+          });
+        }
+        return origUnlink(path);
+      };
+
+      // 防御性看门狗：同时覆盖「B 未停靠 mkdir 屏障」与「A 未到达 unlink 放行」两个阶段，
+      // 任一编排失效都释放挂起方使用例快速失败，而非挂起或轮询假失败
+      watchdog = setTimeout(() => {
+        const parked = parkedCreator;
+        parkedCreator = undefined;
+        parked?.reject(new Error("watchdog: 回收者未按编排到达 unlink 屏障"));
+        docked.reject(new Error("watchdog: 普通创建者未停靠 mkdir 屏障"));
+      }, 8000);
+
+      creatorAcquire = acquireFileLock(lockPath, {
+        heartbeatMs: 0,
+        acquireTimeoutMs: 2000,
+        retryDelayMs: 5,
+      });
+
+      // 阶段一：确定性等待 B 停靠在 mkdir 屏障（屏障自身发信号，非轮询）
+      await docked.promise;
+
+      // 回收者 A：旧单文件仍在时启动，首次 mkdir 必然 EEXIST 并转入陈旧回收分支
+      const reclaimerAcquire = acquireFileLock(lockPath, {
+        heartbeatMs: 0,
+        acquireTimeoutMs: 150,
+        retryDelayMs: 10,
+      });
+
+      const [creatorOutcome, reclaimerOutcome] = await Promise.allSettled([creatorAcquire, reclaimerAcquire]);
+
+      // 先登记所有实际取得的 handle（含旧实现双成功情形），断言失败时 finally 仍可释放
+      for (const outcome of [creatorOutcome, reclaimerOutcome]) {
+        if (outcome.status === "fulfilled") {
+          acquiredHandles.push(outcome.value);
+        }
+      }
+
+      // 唯一赢家必须是真实创建主锁的 B；A 在赢家仍持锁期间始终不得获得
+      assert.strictEqual(creatorOutcome.status, "fulfilled");
+      assert.strictEqual(reclaimerOutcome.status, "rejected");
+      const reclaimerError = (reclaimerOutcome as PromiseRejectedResult).reason;
+      assert.ok(reclaimerError instanceof ActionDockError);
+      assert.strictEqual(reclaimerError.code, TIMEOUT);
+
+      const handleB = (creatorOutcome as PromiseFulfilledResult<FileLockHandle>).value;
+
+      // 输家 A 不得改写赢家元数据（旧实现会在吞掉 EEXIST 后覆写 B 的 token）
+      const onDisk = readLockMetadataSync(lockPath);
+      assert.notStrictEqual(onDisk, undefined);
+      assert.strictEqual(onDisk?.token, handleB.metadata.token);
+
+      // A 放弃回收后必须清理自己的 guard，且不得残留临时元数据文件
+      assert.strictEqual(existsSync(`${lockPath}.reclaim`), false);
+      const leftovers = readdirSync(lockPath).filter((name) => name.startsWith("meta.tmp."));
+      assert.deepStrictEqual(leftovers, []);
+
+      // 赢家按当前 token 认领释放后完全干净
+      await handleB.release();
+      assert.strictEqual(existsSync(lockPath), false);
+    } finally {
+      if (watchdog) {
+        clearTimeout(watchdog);
+      }
+      // 释放未完成屏障并恢复驱动方法，避免失败路径污染后续用例
+      const parked = parkedCreator;
+      parkedCreator = undefined;
+      parked?.reject(new Error("测试收尾：释放未完成的 mkdir 屏障"));
+      asyncLockDriver.mkdir = origMkdir;
+      asyncLockDriver.unlink = origUnlink;
+      // 释放所有实际取得的 handle（含旧实现双成功或断言失败路径），清理 activeLockPaths 残留
+      for (const handle of acquiredHandles) {
+        try {
+          await handle.release();
+        } catch {
+          // 忽略收尾释放异常
+        }
+      }
+    }
   });
 });

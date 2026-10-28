@@ -380,43 +380,57 @@ function* acquireLockMachine(
               isDir = s.isDirectory();
             } catch {}
 
+            // 所有权仲裁：陈旧目录在守卫独占保护下不可能被他人新建，可直接接管；
+            // 陈旧单文件被 unlink 后存在创建间隙，仅当本回收者亲自 mkdir 成功才可宣称所有权，
+            // 否则主锁已被他人在守卫外真实创建，严禁覆盖现存元数据或删除赢家
+            let mainLockClaimable = isDir;
             if (!isDir) {
               try {
                 yield (d: LockDriver<any>) => d.unlink(lockPath);
               } catch {}
               try {
                 yield (d: LockDriver<any>) => d.mkdir(lockPath, { mode: 0o700 });
+                mainLockClaimable = true;
               } catch (err: any) {
                 if (err.code !== "EEXIST") throw err;
               }
-            }
-
-            // 在接管守卫独占保护下写入并核验元数据，杜绝外部并发读取到残余陈旧元数据
-            token = randomUUID();
-            metadata = {
-              pid: process.pid,
-              createdAt: clock.now().toISOString(),
-              ...options?.metadata,
-              token,
-            };
-
-            const metaPath = join(lockPath, LOCK_METADATA_FILE);
-            const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
-            yield (d: LockDriver<any>) => d.writeFile(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
-            yield (d: LockDriver<any>) => d.rename(tmpPath, metaPath);
-
-            const raw = yield (d: LockDriver<any>) => d.readFile(metaPath, "utf-8");
-            const verify = JSON.parse(raw);
-            if (verify?.token !== token) {
-              if (options?.createLockError) {
-                throw options.createLockError(`Failed to verify acquired lock ownership in '${lockPath}'`);
+              if (!mainLockClaimable && !isAsync) {
+                // 同步语义：主锁已被他人真实创建，当轮快速失败，不得向调用方泄露原始 EEXIST
+                if (options?.createLockError) {
+                  throw options.createLockError(`Lock '${lockPath}' is currently held by another active process`);
+                }
+                throw new ActionDockError(STORAGE_BUSY, `Lock '${lockPath}' is currently held by another active process`);
               }
-              throw new ActionDockError(STORAGE_BUSY, `Failed to verify acquired lock ownership in '${lockPath}'`);
             }
 
-            activeLockPaths.add(resolvedPath);
-            acquired = true;
-            reclaimMetadataWritten = true;
+            if (mainLockClaimable) {
+              // 在接管守卫独占保护下写入并核验元数据，杜绝外部并发读取到残余陈旧元数据
+              token = randomUUID();
+              metadata = {
+                pid: process.pid,
+                createdAt: clock.now().toISOString(),
+                ...options?.metadata,
+                token,
+              };
+
+              const metaPath = join(lockPath, LOCK_METADATA_FILE);
+              const tmpPath = join(lockPath, `meta.tmp.${process.pid}.${randomUUID().slice(0, 8)}`);
+              yield (d: LockDriver<any>) => d.writeFile(tmpPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+              yield (d: LockDriver<any>) => d.rename(tmpPath, metaPath);
+
+              const raw = yield (d: LockDriver<any>) => d.readFile(metaPath, "utf-8");
+              const verify = JSON.parse(raw);
+              if (verify?.token !== token) {
+                if (options?.createLockError) {
+                  throw options.createLockError(`Failed to verify acquired lock ownership in '${lockPath}'`);
+                }
+                throw new ActionDockError(STORAGE_BUSY, `Failed to verify acquired lock ownership in '${lockPath}'`);
+              }
+
+              activeLockPaths.add(resolvedPath);
+              acquired = true;
+              reclaimMetadataWritten = true;
+            }
           } finally {
             try {
               yield (d: LockDriver<any>) => d.rmdir(reclaimPath, { recursive: true, force: true });
