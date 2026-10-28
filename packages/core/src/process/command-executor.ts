@@ -43,6 +43,15 @@ function cloneSlice(source: Uint8Array, length: number): Uint8Array {
   return cloned;
 }
 
+/** 一次性命令执行的中止原因分类 */
+type AbortReason =
+  | "cancelled"
+  | "timeout"
+  | "drain-timeout"
+  | "host-lost"
+  | "output-error"
+  | "fault";
+
 /**
  * 辅助将多个字节切片合并并解码为 UTF-8 文本。
  */
@@ -57,6 +66,49 @@ function decodeChunks(chunks: Uint8Array[], totalBytes: number): string {
     offset += chunk.byteLength;
   }
   return new TextDecoder("utf-8").decode(merged);
+}
+
+interface StreamBuffer {
+  push(data: Uint8Array): void;
+  decode(): string;
+  readonly truncated: boolean;
+}
+
+/**
+ * 单流有界输出缓冲。
+ *
+ * 契约：
+ * - 超出上限的切片截断保留并置 truncated，之后的数据仅标记不再累积；
+ * - 捕获字节经独立深拷贝隔离，脱离驱动底层缓冲区以防复用污染；
+ * - decode 一次性合并全部切片并按 UTF-8 解码。
+ */
+function makeStreamBuffer(maxBytes: number): StreamBuffer {
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let truncated = false;
+  return {
+    push(data: Uint8Array): void {
+      const remaining = maxBytes - totalBytes;
+      if (remaining > 0) {
+        if (data.byteLength <= remaining) {
+          chunks.push(cloneSlice(data, data.byteLength));
+          totalBytes += data.byteLength;
+        } else {
+          chunks.push(cloneSlice(data, remaining));
+          totalBytes += remaining;
+          truncated = true;
+        }
+      } else {
+        truncated = true;
+      }
+    },
+    decode(): string {
+      return decodeChunks(chunks, totalBytes);
+    },
+    get truncated(): boolean {
+      return truncated;
+    },
+  };
 }
 
 /**
@@ -144,24 +196,13 @@ export async function executeCommand(
   };
 
   const maxBytes = options?.maxOutputBytes ?? 512 * 1024;
-  let truncated = false;
-
-  let stdoutBytes = 0;
-  let stderrBytes = 0;
-  const stdoutChunks: Uint8Array[] = [];
-  const stderrChunks: Uint8Array[] = [];
+  const stdoutBuffer = makeStreamBuffer(maxBytes);
+  const stderrBuffer = makeStreamBuffer(maxBytes);
 
   const stdoutDecoder = options?.onOutput ? new TextDecoder("utf-8") : undefined;
   const stderrDecoder = options?.onOutput ? new TextDecoder("utf-8") : undefined;
 
-  let abortReason:
-    | "cancelled"
-    | "timeout"
-    | "drain-timeout"
-    | "host-lost"
-    | "output-error"
-    | "fault"
-    | null = null;
+  let abortReason: AbortReason | null = null;
   let abortCause: unknown = null;
 
   let resolveAbort: () => void;
@@ -169,16 +210,7 @@ export async function executeCommand(
     resolveAbort = r;
   });
 
-  const triggerAbort = (
-    reason:
-      | "cancelled"
-      | "timeout"
-      | "drain-timeout"
-      | "host-lost"
-      | "output-error"
-      | "fault",
-    cause?: unknown
-  ) => {
+  const triggerAbort = (reason: AbortReason, cause?: unknown) => {
     if (abortReason) return;
     abortReason = reason;
     abortCause = cause;
@@ -226,45 +258,17 @@ export async function executeCommand(
       if (state.closed || abortReason !== null) {
         return;
       }
-      if (stream === "stdout") {
-        const remaining = maxBytes - stdoutBytes;
-        if (remaining > 0) {
-          if (data.byteLength <= remaining) {
-            stdoutChunks.push(cloneSlice(data, data.byteLength));
-            stdoutBytes += data.byteLength;
-          } else {
-            stdoutChunks.push(cloneSlice(data, remaining));
-            stdoutBytes += remaining;
-            truncated = true;
-          }
-        } else {
-          truncated = true;
-        }
-        if (stdoutDecoder) {
-          const text = stdoutDecoder.decode(data, { stream: true });
-          if (text.length > 0) {
-            dispatchOutput("stdout", text);
-          }
-        }
-      } else if (stream === "stderr") {
-        const remaining = maxBytes - stderrBytes;
-        if (remaining > 0) {
-          if (data.byteLength <= remaining) {
-            stderrChunks.push(cloneSlice(data, data.byteLength));
-            stderrBytes += data.byteLength;
-          } else {
-            stderrChunks.push(cloneSlice(data, remaining));
-            stderrBytes += remaining;
-            truncated = true;
-          }
-        } else {
-          truncated = true;
-        }
-        if (stderrDecoder) {
-          const text = stderrDecoder.decode(data, { stream: true });
-          if (text.length > 0) {
-            dispatchOutput("stderr", text);
-          }
+      // pty 输出不属于一次性管道命令的捕获范围，保持与原实现一致地忽略
+      if (stream !== "stdout" && stream !== "stderr") {
+        return;
+      }
+      const buffer = stream === "stdout" ? stdoutBuffer : stderrBuffer;
+      const decoder = stream === "stdout" ? stdoutDecoder : stderrDecoder;
+      buffer.push(data);
+      if (decoder) {
+        const text = decoder.decode(data, { stream: true });
+        if (text.length > 0) {
+          dispatchOutput(stream, text);
         }
       }
     },
@@ -329,6 +333,48 @@ export async function executeCommand(
 
   let handle: ProcessHandle | undefined;
 
+  // 将当前中止原因与关联异常映射为规范的结构化 ProcessError
+  const buildAbortError = (): Error => {
+    switch (abortReason) {
+      case "output-error":
+        return abortCause as Error;
+      case "fault":
+        return new ProcessError(
+          PROCESS_SPAWN_ERROR,
+          `Process reported fault: ${state.faultError?.message ?? String(abortCause)}`,
+          { cause: abortCause, executable }
+        );
+      case "drain-timeout":
+      case "host-lost":
+        if (abortCause instanceof Error) {
+          return abortCause;
+        }
+        return abortReason === "drain-timeout"
+          ? new ProcessError(
+              PROCESS_TIMEOUT,
+              `Process output drain timed out before completion: ${executable}`,
+              { executable, args: [...args] }
+            )
+          : new ProcessError(
+              PROCESS_SPAWN_ERROR,
+              `Process host connection was lost: ${executable}`,
+              { executable, args: [...args] }
+            );
+      case "timeout":
+        return new ProcessError(
+          PROCESS_TIMEOUT,
+          `Command execution timed out after ${options?.timeoutMs}ms: ${executable}`,
+          { timeoutMs: options?.timeoutMs, executable }
+        );
+      default:
+        return new ProcessError(
+          PROCESS_CANCELLED,
+          `Command execution was cancelled: ${executable}`,
+          { cause: abortCause, executable }
+        );
+    }
+  };
+
   // 统一的中止清理与错误抛出函数：真实等待驱动终止与输出闭合，绝不吞错，绝不假放行
   const performAbortCleanupAndThrow = async (activeHandle?: ProcessHandle): Promise<never> => {
     if (activeHandle) {
@@ -336,48 +382,7 @@ export async function executeCommand(
       await outputClosedPromise;
     }
 
-    if (abortReason === "output-error") {
-      throw abortCause;
-    }
-    if (abortReason === "fault") {
-      throw new ProcessError(
-        PROCESS_SPAWN_ERROR,
-        `Process reported fault: ${state.faultError?.message ?? String(abortCause)}`,
-        { cause: abortCause, executable }
-      );
-    }
-    if (abortReason === "drain-timeout") {
-      if (abortCause instanceof Error) {
-        throw abortCause;
-      }
-      throw new ProcessError(
-        PROCESS_TIMEOUT,
-        `Process output drain timed out before completion: ${executable}`,
-        { executable, args: [...args] }
-      );
-    }
-    if (abortReason === "host-lost") {
-      if (abortCause instanceof Error) {
-        throw abortCause;
-      }
-      throw new ProcessError(
-        PROCESS_SPAWN_ERROR,
-        `Process host connection was lost: ${executable}`,
-        { executable, args: [...args] }
-      );
-    }
-    if (abortReason === "timeout") {
-      throw new ProcessError(
-        PROCESS_TIMEOUT,
-        `Command execution timed out after ${options?.timeoutMs}ms: ${executable}`,
-        { timeoutMs: options?.timeoutMs, executable }
-      );
-    }
-    throw new ProcessError(
-      PROCESS_CANCELLED,
-      `Command execution was cancelled: ${executable}`,
-      { cause: abortCause, executable }
-    );
+    throw buildAbortError();
   };
 
   try {
@@ -440,15 +445,12 @@ export async function executeCommand(
       );
     }
 
-    const stdout = decodeChunks(stdoutChunks, stdoutBytes);
-    const stderr = decodeChunks(stderrChunks, stderrBytes);
-
     return {
       status: state.exitResult?.code ?? null,
       signal: state.exitResult?.signal ?? null,
-      stdout,
-      stderr,
-      truncated,
+      stdout: stdoutBuffer.decode(),
+      stderr: stderrBuffer.decode(),
+      truncated: stdoutBuffer.truncated || stderrBuffer.truncated,
     };
   } finally {
     if (timeoutTimer) {
