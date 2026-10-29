@@ -469,7 +469,7 @@ export default defineAction({
     }
   });
 
-  it("prioritizes current project over global registry when target package ID matches current project", async () => {
+  it("rejects duplicate package ID between current project and global registry with PACKAGE_ID_CONFLICT", async () => {
     // Simulate an old linked copy in global registry
     const oldDir = mkdtempSync(join(tmpdir(), "old-pkg-"));
     const currentDir = mkdtempSync(join(tmpdir(), "current-pkg-"));
@@ -534,19 +534,38 @@ export default defineAction({
       // Link the old directory in registry
       await linkPackage(oldDir, fakeHome);
 
-      // When executing inside currentDir:
-      // 1. resolvePackageRoot should return currentDir, NOT oldDir
+      // When executing inside currentDir with conflict present:
+      // 1. resolvePackageRoot should throw PACKAGE_ID_CONFLICT
+      assert.throws(
+        () => resolvePackageRoot("team.shared", currentDir, fakeHome),
+        (err: any) => err?.code === "PACKAGE_ID_CONFLICT"
+      );
+
+      // 2. PackageDiscovery should propagate PACKAGE_ID_CONFLICT
+      const prioDiscovery = new PackageDiscovery({ currentProjectRoot: currentDir, customHome: fakeHome });
+      assert.throws(
+        () => prioDiscovery.discoverSync(),
+        (err: any) => err?.code === "PACKAGE_ID_CONFLICT"
+      );
+
+      // 3. PackageGraphBuilder should detect root conflict with devLinkMap
+      assert.throws(
+        () => new PackageGraphBuilder({ root: currentDir, customHome: fakeHome, allowDevLinks: true }).buildSync(),
+        (err: any) => err?.code === "PACKAGE_ID_CONFLICT"
+      );
+
+      // 4. Unlinking the old copy resolves the conflict cleanly
+      await unlinkPackage("team.shared", fakeHome);
+
       assert.strictEqual(resolvePackageRoot("team.shared", currentDir, fakeHome), currentDir);
 
-      const prioDiscovery = new PackageDiscovery({ currentProjectRoot: currentDir, customHome: fakeHome });
-      const prioGraph = new PackageGraphBuilder({ packages: prioDiscovery.discoverSync(), root: currentDir }).buildSync();
+      const resolvedDiscovery = new PackageDiscovery({ currentProjectRoot: currentDir, customHome: fakeHome });
+      const prioGraph = new PackageGraphBuilder({ packages: resolvedDiscovery.discoverSync(), root: currentDir }).buildSync();
       const prioCatalog = new DefaultActionCatalog(prioGraph);
 
-      // 2. resolveAction should resolve from currentDir
       const syncAct = resolveAction("team.shared/echo", { graph: prioGraph, catalog: prioCatalog });
       assert.strictEqual(prioGraph.packages.get(syncAct.package.id)?.root, currentDir);
 
-      // 3. resolvePlaybook should resolve from currentDir
       const pbRes = resolvePlaybook("team.shared/sop", { graph: prioGraph });
       assert.strictEqual(pbRes.projectRoot, currentDir);
       assert.strictEqual(pbRes.playbook.description, "Current SOP");

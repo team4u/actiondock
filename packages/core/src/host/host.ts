@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { basename } from "node:path";
 import type {
   ActionInvokeOptions,
   ActionRef,
@@ -35,7 +36,9 @@ import {
 } from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
-import { listLinkedPackages } from "../registry/registry";
+import { listLinkedPackages, loadRegistry } from "../registry/registry";
+import { collectLinkedPackageEntries } from "../registry/linked-packages";
+import { createPackageIdConflictError, isSameRealPath } from "../registry/package-conflict";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import { snapshotRunOrigin } from "../runtime/run-origin";
 import {
@@ -742,7 +745,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (
         err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
         err?.code === PROJECT_RECOVERY_REQUIRED ||
-        err?.code === PROJECT_BUSY
+        err?.code === PROJECT_BUSY ||
+        err?.code === PACKAGE_ID_CONFLICT
       ) {
         throw err;
       }
@@ -762,14 +766,34 @@ export class DefaultActionDockHost implements ActionDockHost {
    * 加载失败的链接包记录至 failedLinkedPackages 诊断并在调阅时透传精准失败原因。
    */
   private registerLinkedPackages(options: ActionDockHostOptions): void {
-    for (const linked of listLinkedPackages(options.customHome)) {
-      if (this.runtimes.has(linked.id)) {
-        continue;
-      }
+    const reg = loadRegistry(options.customHome);
+    const { packages, corrupted } = collectLinkedPackageEntries(reg);
+
+    for (const item of corrupted) {
+      const errDetail = item.error instanceof Error ? item.error.message : String(item.error);
+      const pkgId = item.id || basename(item.path);
+      this.failedLinkedPackages.set(pkgId, { path: item.path, error: errDetail });
+      options.logger?.warn?.(
+        `[Host] Failed to load linked package '${pkgId}' from '${item.path}': ${errDetail}`
+      );
+    }
+
+    for (const linked of packages) {
       if (!existsSync(linked.path)) {
         const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
         this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
         options.logger?.warn?.(`[Host] ${err}`);
+        continue;
+      }
+      if (this.runtimes.has(linked.id)) {
+        const existing = this.runtimes.get(linked.id)!;
+        const existingPath = existing.packageRoot;
+        if (!existingPath || !isSameRealPath(existingPath, linked.path)) {
+          throw createPackageIdConflictError(
+            { id: linked.id, path: existingPath || linked.id, isCurrentProject: true },
+            { id: linked.id, path: linked.path, workspaceRoot: linked.workspaceRoot }
+          );
+        }
         continue;
       }
       try {
@@ -794,6 +818,9 @@ export class DefaultActionDockHost implements ActionDockHost {
         });
         this.registerRuntimeInternal(runtime, true);
       } catch (err: any) {
+        if (err?.code === PACKAGE_ID_CONFLICT) {
+          throw err;
+        }
         const errDetail = err?.message || String(err);
         this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
         options.logger?.warn?.(

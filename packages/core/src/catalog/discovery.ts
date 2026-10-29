@@ -5,7 +5,8 @@ import { loadManifest } from "../project/manifest";
 import type { ActionDockManifest } from "../project/types";
 import { loadRegistry } from "../registry/registry";
 import { discoverProjectConfigs } from "../registry/scan";
-import { ActionDockError, PACKAGE_ID_CONFLICT } from "../errors";
+import { PACKAGE_ID_CONFLICT } from "../errors";
+import { createPackageIdConflictError } from "../registry/package-conflict";
 
 import type { PackageIdentity } from "../runtime/identity";
 
@@ -54,8 +55,11 @@ export interface PackageDiscoveryOptions {
  */
 export class PackageDiscovery {
   private readonly options: PackageDiscoveryOptions;
-  /** 包标识到物理根路径（realpath 归一）的查重映射，避免注册路径的线性全表扫描 */
-  private readonly idRealPaths = new Map<string, string>();
+  /** 包标识到物理根路径及来源元数据的查重映射，避免注册路径的线性全表扫描 */
+  private readonly idRealPaths = new Map<
+    string,
+    { realPath: string; absPath: string; workspaceRoot?: string; isCurrentProject?: boolean }
+  >();
 
   constructor(options: PackageDiscoveryOptions = {}) {
     this.options = options;
@@ -71,7 +75,7 @@ export class PackageDiscovery {
 
     const registerPackage = (
       pathOrRoot: string,
-      flags: { isCurrentProject?: boolean; isWorkspaceChild?: boolean; isLinked?: boolean }
+      flags: { isCurrentProject?: boolean; isWorkspaceChild?: boolean; isLinked?: boolean; workspaceRoot?: string }
     ) => {
       const abs = resolve(pathOrRoot);
       if (!existsSync(abs)) return;
@@ -100,14 +104,29 @@ export class PackageDiscovery {
 
       // 以 id 到物理路径的映射做常数查重，替代全表线性扫描；同物理路径重复注册静默去重
       const idRealPaths = this.idRealPaths;
-      const existingReal = idRealPaths.get(manifest.id);
-      if (existingReal !== undefined && existingReal !== real) {
-        throw new ActionDockError(
-          PACKAGE_ID_CONFLICT,
-          `PACKAGE_ID_CONFLICT: Package ID '${manifest.id}' is declared by multiple directories: '${existingReal}' and '${abs}'`
+      const existing = idRealPaths.get(manifest.id);
+      if (existing !== undefined && existing.realPath !== real) {
+        throw createPackageIdConflictError(
+          {
+            id: manifest.id,
+            path: existing.absPath,
+            workspaceRoot: existing.workspaceRoot,
+            isCurrentProject: existing.isCurrentProject,
+          },
+          {
+            id: manifest.id,
+            path: abs,
+            workspaceRoot: flags.workspaceRoot,
+            isCurrentProject: flags.isCurrentProject,
+          }
         );
       }
-      idRealPaths.set(manifest.id, real);
+      idRealPaths.set(manifest.id, {
+        realPath: real,
+        absPath: abs,
+        workspaceRoot: flags.workspaceRoot,
+        isCurrentProject: flags.isCurrentProject,
+      });
 
       packages.set(real, {
         id: manifest.id,
@@ -136,7 +155,7 @@ export class PackageDiscovery {
         if (regData.packages) {
           for (const pkg of Object.values(regData.packages)) {
             if (pkg.path) {
-              registerPackage(pkg.path, { isLinked: true });
+              registerPackage(pkg.path, { isLinked: true, workspaceRoot: pkg.workspaceRoot });
             }
           }
         }
@@ -148,12 +167,15 @@ export class PackageDiscovery {
                 this.options.workspaceScanDepth ?? 3
               );
               for (const item of configs) {
-                registerPackage(item.root, { isWorkspaceChild: true });
+                registerPackage(item.root, { isWorkspaceChild: true, workspaceRoot: wsPath });
               }
             }
           }
         }
       } catch (err: any) {
+        if (err?.code === PACKAGE_ID_CONFLICT) {
+          throw err;
+        }
         console.warn(
           `[PackageDiscovery] Failed to load registry locations: ${err?.message || String(err)}`
         );
@@ -169,7 +191,7 @@ export class PackageDiscovery {
             this.options.workspaceScanDepth ?? 3
           );
           for (const item of configs) {
-            registerPackage(item.root, { isWorkspaceChild: true });
+            registerPackage(item.root, { isWorkspaceChild: true, workspaceRoot: wsPath });
           }
         }
       }

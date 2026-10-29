@@ -7,6 +7,7 @@ import {
   checkLinkedPackageDependencies,
   checkNodeRuntime,
   checkProject,
+  checkRegistryDuplicates,
   checkUsesClosure,
   locateProject,
 } from "./checks";
@@ -14,16 +15,17 @@ import type { DoctorReport } from "./types";
 
 /**
  * 检查注册表：按诊断执行顺序排列的检查阶段。
- * 运行时 → 存储 → 注册表 → 工程定位 → 工程级详情，与报告展示顺序一一对应。
+ * 运行时 → 存储 → 注册表 → 工程定位 → 重复冲突 → 依赖闭包 → 工程级详情。
  */
 const doctorCheckRegistry: DoctorCheck[] = [
   checkNodeRuntime,
   checkCliExecutable,
   checkGlobalStorage,
   checkGlobalRegistry,
+  locateProject,
+  checkRegistryDuplicates,
   checkLinkedPackageDependencies,
   checkUsesClosure,
-  locateProject,
   checkProject,
 ];
 

@@ -6,6 +6,7 @@ import {
   MANIFEST_DIGEST_MISMATCH,
   MANIFEST_NOT_FOUND,
   MANIFEST_READ_FAILED,
+  PACKAGE_ID_CONFLICT,
   PACKAGE_NOT_FOUND,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
@@ -15,6 +16,7 @@ import { loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import type { ActionDockManifest, PlaybookDefinition } from "../project/types";
 import { listLinkedPackages } from "../registry/registry";
+import { createPackageIdConflictError, isSameRealPath } from "../registry/package-conflict";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import { parseSemVer, type SemVer } from "../utils";
 import { PackageDiscovery, type DiscoveredPackage, type PackageDiscoveryOptions } from "./discovery";
@@ -638,11 +640,20 @@ export class PackageGraphBuilder {
           const linked = listLinkedPackages(this.options.customHome);
           for (const entry of linked) {
             if (existsSync(entry.path)) {
+              if (entry.id === rootPackageId && !isSameRealPath(entry.path, absProjectRoot)) {
+                throw createPackageIdConflictError(
+                  { id: rootPackageId, path: absProjectRoot, isCurrentProject: true },
+                  { id: entry.id, path: entry.path, workspaceRoot: entry.workspaceRoot }
+                );
+              }
               devLinkMap.set(entry.id, entry.path);
             }
           }
-        } catch {
-          // 忽略扫描外部链接包异常
+        } catch (err: any) {
+          if (err?.code === PACKAGE_ID_CONFLICT) {
+            throw err;
+          }
+          // 忽略扫描外部链接包非冲突异常
         }
       }
 

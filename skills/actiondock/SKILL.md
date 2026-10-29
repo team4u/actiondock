@@ -55,7 +55,7 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位；同�
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
 | **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use`、`ad profile update` | 管理远端 Runner 服务的连接凭证、内网证书忽略与当前切换目标 | [cli.md](references/cli.md) |
 | **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离、`packageAllowlist` 与 `actionAllowlist` 并集授权及 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
-| **本地注册与开发挂载** | `ad link [path]`、`ad unlink [id|path]` | 将本地源码目录登记至本机注册表；不注册远端 Profile，也不代替工程正式依赖 | [cli.md](references/cli.md) |
+| **本地注册与开发挂载** | `ad link [path]`、`ad unlink [id|path]` | 登记本机源码，不注册远端 Profile 或替代正式依赖；同 ID 不同目录拒绝，先解除多余来源再链接 | [cli.md](references/cli.md) |
 | **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 
 ---
@@ -163,6 +163,8 @@ Windows 下的工程包管理器命令依据 `PATH` 与 `PATHEXT` 定位；同�
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。
 - 严格契约原则：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`，推荐为复杂参数补充 `examples` 示例以消除智能体理解歧义与幻觉。
 - 严格调用原则：`ctx.actions.invoke` 首参数仅接受动作标识符字符串或 ActionRef 引用对象，严禁传入动作定义对象或裸函数；第三参数仅接受可选的 `binding`，不得写入 Profile、URL 或凭证。
+- 本地包身份边界：身份冲突比较有效完整包 ID 与真实目录，完整 ID 精确匹配优先于短名称；同短名称但不同完整 ID 不构成 `PACKAGE_ID_CONFLICT`，按短名匹配到当前包时仍校验其完整 ID 冲突。失效路径与损坏清单不作为有效身份参与冲突。独立包改名或交换 ID 不会覆盖其他有效来源；`ad unlink` 支持当前完整 ID 或物理路径，清除同来源旧别名且不误删其他有效来源，在冲突状态下按独立包目录或工作区根路径仍能解除。若重复 ID 来自同一工作区内部，应修正子包清单 ID 或移出多余目录，只重新链接同一工作区无法消除内部重复。详见 [排查指南](references/troubleshooting.md)。
+- 诊断与授权安全边界：`ad doctor` 授权范围仅控制报告对象，默认不扩大对外授权；已链接依赖在白名单外不等于缺失，依赖按完整引用定向确认，无关包冲突不干扰。失效来源保留清理诊断，损坏清单（含新扫描出的无缓存坏清单）通过宿主告警与 `registry.global` 报告，受限诊断不能确认归属时不暴露未授权物理路径。
 - 目标选择边界：CLI 的 `--profile` 选择整条命令的宿主，内部依赖由该宿主的命名绑定选择；没有 `--binding` CLI 参数。未指定绑定只查 `default`，没有则保持本地；显式绑定不存在直接报错，禁止猜测目标。
 - 降级安全边界：框架不自动重试或回退。父任务取消后停止调用；网络断链与 `SERVICE_RESULT_UNKNOWN` 不代表远端未执行，不能盲目重跑有副作用的 Action。
 - 交付隔离边界：`.actiondock/bindings.json` 与 Profile 凭据不进入构建或导出产物，目标宿主需独立配置；远端运行记录必须在对应 Profile 查询。

@@ -2,9 +2,21 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
+import type { ProjectConfig } from "../project/types";
 import { getActionDockHome, getPackageSlug } from "../utils";
 import { ActionDockError, MANIFEST_NOT_FOUND, REGISTRY_CORRUPTED } from "../errors";
 import { withRegistryLock } from "./lock";
+import {
+  createPackageIdConflictError,
+  isSameRealPath,
+  safeRealPath,
+  type PackageLocationInfo,
+} from "./package-conflict";
+import { getEffectiveLinkedPackages } from "./linked-packages";
+import {
+  resolveDirectProjectPath,
+  resolvePackageRootWithCandidates,
+} from "./resolve-package";
 import {
   buildLinkedPackageEntry,
   discoverProjectConfigs,
@@ -236,6 +248,142 @@ function ensureRegistryDir(filePath: string): void {
   }
 }
 
+/**
+ * 链接候选与已有有效链接条目排他性断言。
+ * 使用常数复杂度 Map 登记并核对候选之间、候选与已有条目间的身份唯一性。
+ */
+function assertNoLinkConflicts(
+  effective: LinkedPackageEntry[],
+  candidates: PackageLocationInfo[]
+): void {
+  const map = new Map<string, PackageLocationInfo>();
+  for (const item of effective) {
+    if (item && item.id && item.path && existsSync(item.path)) {
+      map.set(item.id, {
+        id: item.id,
+        path: item.path,
+        workspaceRoot: item.workspaceRoot,
+      });
+    }
+  }
+
+  for (const candidate of candidates) {
+    const existing = map.get(candidate.id);
+    if (existing) {
+      if (!isSameRealPath(existing.path, candidate.path)) {
+        throw createPackageIdConflictError(existing, candidate);
+      }
+    } else {
+      map.set(candidate.id, candidate);
+    }
+  }
+}
+
+/**
+ * 在锁内同步独立包存储索引：
+ * 基于完整旧快照先计算规范化有效记录，再一次性替换新索引；
+ * 有效记录优先失效记录，不能顺序覆盖；
+ * 工作区派生缓存不要恢复旧身份；
+ * 冲突校验仍须先完成，再原子写盘。
+ */
+function syncRegistryPackagesIndexInLock(registry: GlobalRegistryData): void {
+  if (!registry.packages) return;
+
+  const oldEntries = Object.entries(registry.packages);
+  const activeWorkspaceRoots = new Set<string>();
+  if (registry.workspaces) {
+    for (const ws of Object.values(registry.workspaces)) {
+      if (ws && ws.path && existsSync(ws.path)) {
+        activeWorkspaceRoots.add(safeRealPath(ws.path));
+      }
+    }
+  }
+
+  // 收集并规范化所有条目（分离存活有效记录与失效/损坏记录）
+  const liveRecords: LinkedPackageEntry[] = [];
+  const staleOrCorruptRecords: LinkedPackageEntry[] = [];
+
+  for (const [key, entry] of oldEntries) {
+    if (!entry || !entry.path) continue;
+
+    // 工作区派生缓存：若属于存活工作区
+    const isUnderActiveWorkspace = Boolean(
+      (entry.workspaceRoot && activeWorkspaceRoots.has(safeRealPath(entry.workspaceRoot))) ||
+      (entry.path && [...activeWorkspaceRoots].some((wsPath) => isPathWithin(entry.path, wsPath)))
+    );
+
+    if (isUnderActiveWorkspace) {
+      // 工作区派生缓存不要恢复旧身份：
+      // 如果子路径在磁盘上已不存在，或者配置损坏/改名，不作为独立陈旧记录保留
+      if (!existsSync(entry.path)) {
+        continue;
+      }
+      try {
+        const live = loadProjectConfig(entry.path);
+        liveRecords.push({
+          ...entry,
+          id: live.id,
+          name: live.name || live.id,
+          version: live.version || entry.version,
+        });
+      } catch {
+        // 配置损坏时保留为诊断元数据，供白名单与受限诊断确认旧身份，不进入 liveRecords，
+        // 全局收集依旧通过工作区动态扫描处理其有效性，不会恢复陈旧有效身份
+        staleOrCorruptRecords.push(entry);
+      }
+      continue;
+    }
+
+    // 独立包处理
+    if (existsSync(entry.path)) {
+      try {
+        const live = loadProjectConfig(entry.path);
+        liveRecords.push({
+          ...entry,
+          id: live.id,
+          name: live.name || live.id,
+          version: live.version || entry.version,
+        });
+      } catch {
+        // 清单损坏时保留原样供诊断
+        staleOrCorruptRecords.push(entry);
+      }
+    } else {
+      // 路径已不存在：陈旧记录
+      staleOrCorruptRecords.push(entry);
+    }
+  }
+
+  // 一次性构建新索引：有效记录优先失效记录，同物理真实路径去重
+  const newPackages: Record<string, LinkedPackageEntry> = {};
+
+  // 1. 先放入失效/损坏记录
+  for (const entry of staleOrCorruptRecords) {
+    newPackages[entry.id] = entry;
+  }
+
+  // 2. 存活有效记录优先覆盖（同一物理路径只保留最新的有效记录）
+  const livePathToId = new Map<string, string>();
+  for (const entry of liveRecords) {
+    const realPath = safeRealPath(entry.path);
+    newPackages[entry.id] = entry;
+    livePathToId.set(realPath, entry.id);
+  }
+
+  // 3. 清理陈旧记录中指向已存活路径但键不是当前有效 ID 的多余别名
+  for (const [key, entry] of Object.entries(newPackages)) {
+    if (entry.path && existsSync(entry.path)) {
+      const realPath = safeRealPath(entry.path);
+      const currentEffectiveId = livePathToId.get(realPath);
+      if (currentEffectiveId && key !== currentEffectiveId) {
+        delete newPackages[key];
+      }
+    }
+  }
+
+  registry.packages = newPackages;
+}
+
 export async function linkPackage(
   targetPath: string = process.cwd(),
   customHome?: string,
@@ -251,8 +399,20 @@ export async function linkPackage(
     const config = loadProjectConfig(absPath);
     return await withRegistryLock(filePath, async () => {
       const registry = await loadRegistryAsync(customHome);
-      const entry = buildLinkedPackageEntry(config, absPath, new Date().toISOString());
+      // 冲突核对必须在修改数据结构前执行，排查失败时注册表保持完全不变
+      const effective = getEffectiveLinkedPackages(registry);
+      assertNoLinkConflicts(effective, [{ id: config.id, path: absPath }]);
 
+      syncRegistryPackagesIndexInLock(registry);
+
+      // 清理原先指向 absPath 的旧别名或旧登记键（避免重命名后残留旧别名索引）
+      for (const [id, oldEntry] of Object.entries(registry.packages)) {
+        if (oldEntry && oldEntry.path && isSameRealPath(oldEntry.path, absPath)) {
+          delete registry.packages[id];
+        }
+      }
+
+      const entry = buildLinkedPackageEntry(config, absPath, new Date().toISOString());
       registry.packages[config.id] = entry;
       await writeRegistryLocked(registry, customHome);
 
@@ -276,6 +436,29 @@ export async function linkPackage(
   if (discoveredRoots.length > 0) {
     return await withRegistryLock(filePath, async () => {
       const registry = await loadRegistryAsync(customHome);
+      const candidates: Array<{ config: ProjectConfig; root: string }> = [];
+      for (const root of discoveredRoots) {
+        try {
+          const config = loadProjectConfig(root);
+          candidates.push({ config, root });
+        } catch (err: any) {
+          // 子项目配置损坏：跳过该子项目条目不影响 workspace 注册本身，但必须输出告警含包路径，杜绝链接无声消失
+          console.warn(
+            `[Registry] Skipping corrupted workspace child package during link: '${root}' (${err?.message || String(err)})`
+          );
+        }
+      }
+
+      // 在锁内、写入前统一核对候选与已有链接包排他性（O(1) 查重，包含工作区内部重复 ID 拒绝）
+      const effective = getEffectiveLinkedPackages(registry);
+      assertNoLinkConflicts(
+        effective,
+        candidates.map((c) => ({ id: c.config.id, path: c.root, workspaceRoot: absPath }))
+      );
+
+      syncRegistryPackagesIndexInLock(registry);
+
+      // 全部检查通过后才写入变更
       const now = new Date().toISOString();
       const wsEntry: LinkedWorkspaceEntry = {
         path: absPath,
@@ -285,19 +468,22 @@ export async function linkPackage(
       registry.workspaces = registry.workspaces || {};
       registry.workspaces[absPath] = wsEntry;
 
-      const linkedEntries: LinkedPackageEntry[] = [];
-      for (const root of discoveredRoots) {
-        try {
-          const config = loadProjectConfig(root);
-          const entry = buildLinkedPackageEntry(config, root, now, absPath);
-          registry.packages[config.id] = entry;
-          linkedEntries.push(entry);
-        } catch (err: any) {
-          // 子项目配置损坏：跳过该子项目条目不影响 workspace 注册本身，但必须输出告警含包路径，杜绝链接无声消失
-          console.warn(
-            `[Registry] Skipping corrupted workspace child package during link: '${root}' (${err?.message || String(err)})`
-          );
+      // 清理 absPath 下旧的子包键
+      for (const [id, oldEntry] of Object.entries(registry.packages)) {
+        if (
+          oldEntry &&
+          oldEntry.path &&
+          (isPathWithin(oldEntry.path, absPath) || (oldEntry.workspaceRoot && isSameRealPath(oldEntry.workspaceRoot, absPath)))
+        ) {
+          delete registry.packages[id];
         }
+      }
+
+      const linkedEntries: LinkedPackageEntry[] = [];
+      for (const { config, root } of candidates) {
+        const entry = buildLinkedPackageEntry(config, root, now, absPath);
+        registry.packages[config.id] = entry;
+        linkedEntries.push(entry);
       }
 
       await writeRegistryLocked(registry, customHome);
@@ -322,6 +508,17 @@ export async function linkPackage(
     const config = loadProjectConfig(parentRoot);
     return await withRegistryLock(filePath, async () => {
       const registry = await loadRegistryAsync(customHome);
+      const effective = getEffectiveLinkedPackages(registry);
+      assertNoLinkConflicts(effective, [{ id: config.id, path: parentRoot }]);
+
+      syncRegistryPackagesIndexInLock(registry);
+
+      for (const [id, oldEntry] of Object.entries(registry.packages)) {
+        if (oldEntry && oldEntry.path && isSameRealPath(oldEntry.path, parentRoot)) {
+          delete registry.packages[id];
+        }
+      }
+
       const entry = buildLinkedPackageEntry(config, parentRoot, new Date().toISOString());
 
       registry.packages[config.id] = entry;
@@ -356,106 +553,176 @@ export async function unlinkPackage(
     const registry = await loadRegistryAsync(customHome);
     const absPath = resolve(identifier);
 
-    // 检查是否匹配 Workspace 绝对路径
-    if (registry.workspaces && registry.workspaces[absPath]) {
-      const removedWs = registry.workspaces[absPath];
-      delete registry.workspaces[absPath];
+    // 检查是否匹配 Workspace 绝对路径或别名
+    let matchedWsPath: string | undefined;
+    if (registry.workspaces) {
+      if (registry.workspaces[absPath]) {
+        matchedWsPath = absPath;
+      } else {
+        for (const [wsPath] of Object.entries(registry.workspaces)) {
+          if (basename(wsPath) === identifier || isSameRealPath(wsPath, absPath)) {
+            matchedWsPath = wsPath;
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchedWsPath && registry.workspaces) {
+      const removedWs = registry.workspaces[matchedWsPath];
+      delete registry.workspaces[matchedWsPath];
 
       let removedCount = 0;
-      for (const [id, entry] of Object.entries(registry.packages)) {
-        // 路径前缀匹配必须携带分隔符边界，避免 /home/ws 误删 /home/ws2 的记录
-        if (isPathWithin(entry.path, absPath) || entry.workspaceRoot === absPath) {
-          delete registry.packages[id];
-          removedCount++;
+      if (registry.packages) {
+        for (const [id, entry] of Object.entries(registry.packages)) {
+          if (
+            isPathWithin(entry.path, matchedWsPath) ||
+            entry.workspaceRoot === matchedWsPath ||
+            (entry.workspaceRoot && isSameRealPath(entry.workspaceRoot, matchedWsPath))
+          ) {
+            delete registry.packages[id];
+            removedCount++;
+          }
         }
       }
       await writeRegistryLocked(registry, customHome);
       return {
         type: "workspace",
-        id: basename(absPath),
-        path: absPath,
+        id: basename(matchedWsPath),
+        path: matchedWsPath,
         packagesCount: removedCount,
         removedWorkspace: removedWs,
       };
     }
 
-    // 检查是否匹配 Workspace 目录别名
-    if (registry.workspaces) {
-      for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
-        if (basename(wsPath) === identifier) {
-          delete registry.workspaces[wsPath];
-          let removedCount = 0;
-          for (const [id, entry] of Object.entries(registry.packages)) {
-            // 路径前缀匹配必须携带分隔符边界，避免 /home/ws 误删 /home/ws2 的记录
-            if (isPathWithin(entry.path, wsPath) || entry.workspaceRoot === wsPath) {
-              delete registry.packages[id];
-              removedCount++;
-            }
-          }
-          await writeRegistryLocked(registry, customHome);
-          return {
-            type: "workspace",
-            id: basename(wsPath),
-            path: wsPath,
-            packagesCount: removedCount,
-            removedWorkspace: wsEntry,
-          };
-        }
-      }
-    }
+    // 检查是否直接匹配 Package
+    // 优先级：
+    // 1. 精确物理路径匹配（直接命中已登记条目的真实物理路径）
+    // 2. 当前存活项目的有效完整 ID（处理改名后通过新 ID 解除，优先于旧 key）
+    // 3. 已登记的原始 ID 或 key（保留坏清单/失效来源通过旧 id 恢复/解除能力）
+    // 4. 当前存活项目短名（slug）匹配
+    // 5. 已登记条目短名（slug）匹配
+    let targetEntry: LinkedPackageEntry | undefined;
 
-    // 检查是否直接匹配 Package ID
-    let targetKey: string | undefined;
-    if (registry.packages[identifier]) {
-      targetKey = identifier;
-    } else {
-      // 匹配路径或短 slug
-      for (const [id, entry] of Object.entries(registry.packages)) {
-        if (
-          entry.path === absPath ||
-          entry.id === identifier ||
-          getPackageSlug(entry.id) === identifier
-        ) {
-          targetKey = id;
+    if (registry.packages) {
+      // 1. 优先精确物理路径匹配
+      for (const entry of Object.values(registry.packages)) {
+        if (entry && entry.path && (entry.path === absPath || isSameRealPath(entry.path, absPath))) {
+          if (existsSync(entry.path)) {
+            try {
+              const live = loadProjectConfig(entry.path);
+              targetEntry = { ...entry, id: live.id, name: live.name || live.id, version: live.version || entry.version };
+            } catch {
+              targetEntry = entry;
+            }
+          } else {
+            targetEntry = entry;
+          }
           break;
         }
       }
+
+      // 2. 匹配当前存活项目的有效完整 ID
+      if (!targetEntry) {
+        for (const entry of Object.values(registry.packages)) {
+          if (entry && entry.path && existsSync(entry.path)) {
+            try {
+              const live = loadProjectConfig(entry.path);
+              if (live.id === identifier) {
+                targetEntry = {
+                  ...entry,
+                  id: live.id,
+                  name: live.name || live.id,
+                  version: live.version || entry.version,
+                };
+                break;
+              }
+            } catch {
+              // 清单损坏忽略
+            }
+          }
+        }
+      }
+
+      // 3. 匹配已登记的原始 ID 或 key（坏清单或失效来源）
+      if (!targetEntry) {
+        if (registry.packages[identifier]) {
+          targetEntry = registry.packages[identifier];
+        } else {
+          for (const entry of Object.values(registry.packages)) {
+            if (entry && entry.id === identifier) {
+              targetEntry = entry;
+              break;
+            }
+          }
+        }
+      }
+
+      // 4. 匹配当前存活项目的短名（slug）
+      if (!targetEntry) {
+        for (const entry of Object.values(registry.packages)) {
+          if (entry && entry.path && existsSync(entry.path)) {
+            try {
+              const live = loadProjectConfig(entry.path);
+              if (getPackageSlug(live.id) === identifier) {
+                targetEntry = {
+                  ...entry,
+                  id: live.id,
+                  name: live.name || live.id,
+                  version: live.version || entry.version,
+                };
+                break;
+              }
+            } catch {
+              // 忽略
+            }
+          }
+        }
+      }
+
+      // 5. 匹配已登记条目的短名（slug）
+      if (!targetEntry) {
+        for (const entry of Object.values(registry.packages)) {
+          if (entry && getPackageSlug(entry.id) === identifier) {
+            targetEntry = entry;
+            break;
+          }
+        }
+      }
     }
 
-    if (!targetKey) {
+    if (!targetEntry) {
       return null;
     }
 
-    const removed = registry.packages[targetKey];
-    delete registry.packages[targetKey];
+    const removedPath = targetEntry.path;
+    const removedId = targetEntry.id;
+    let removedCount = 0;
+
+    // 清理所有指向该物理路径的旧条目与别名，彻底杜绝死灰复燃；删除只针对选定物理来源
+    if (registry.packages) {
+      for (const [key, entry] of Object.entries(registry.packages)) {
+        if (entry && entry.path && (entry.path === removedPath || isSameRealPath(entry.path, removedPath))) {
+          delete registry.packages[key];
+          removedCount++;
+        }
+      }
+    }
+
     await writeRegistryLocked(registry, customHome);
     return {
       type: "package",
-      id: removed.id,
-      path: removed.path,
-      packagesCount: 1,
-      removedPackage: removed,
+      id: removedId,
+      path: removedPath,
+      packagesCount: removedCount,
+      removedPackage: targetEntry,
     };
   });
 }
 
 export function listLinkedPackages(customHome?: string): LinkedPackageEntry[] {
   const registry = loadRegistry(customHome);
-  const result: Record<string, LinkedPackageEntry> = { ...registry.packages };
-
-  // 动态扫描已挂载的 Workspace 目录，确保新拉取/新建的子包即时感知
-  if (registry.workspaces) {
-    for (const ws of Object.values(registry.workspaces)) {
-      if (!existsSync(ws.path)) continue;
-      for (const { root, config } of discoverProjectConfigs(ws.path)) {
-        if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
-          result[config.id] = buildLinkedPackageEntry(config, root, ws.linkedAt, ws.path);
-        }
-      }
-    }
-  }
-
-  return Object.values(result);
+  return getEffectiveLinkedPackages(registry);
 }
 
 export function listLinkedWorkspaces(customHome?: string): LinkedWorkspaceEntry[] {
@@ -470,72 +737,14 @@ export function resolvePackageRoot(
   cwd?: string,
   customHome?: string
 ): string | null {
-  if (!packageIdOrPath) {
-    return findProjectRoot(cwd);
+  // 共享解析规则：若为无参数、现存物理路径或显式文件系统路径，直接早返回，跳过全局候选检索以隔离无关全局冲突
+  const direct = resolveDirectProjectPath(packageIdOrPath, cwd);
+  if (direct.resolved) {
+    return direct.root;
   }
 
-  const baseDir = cwd || process.cwd();
-  const resolvedPath = resolve(baseDir, packageIdOrPath);
-
-  // 检查 packageIdOrPath 是否为磁盘上现存的目录或文件路径
-  if (existsSync(resolvedPath)) {
-    try {
-      const info = statSync(resolvedPath);
-      const targetDir = info.isDirectory() ? resolvedPath : dirname(resolvedPath);
-      if (existsSync(join(targetDir, "actiondock.json"))) {
-        return targetDir;
-      }
-      const parentRoot = findProjectRoot(targetDir);
-      if (parentRoot) {
-        return parentRoot;
-      }
-    } catch {
-      // stat 失败（如并发删除）：忽略并继续走标识符解析路径
-    }
-  }
-
-  // 显式路径形态但未解析成功的场景：
-  // scoped package 标识符（如 @team/tools）虽含 '/' 但属于包 ID 而非文件路径
-  const isScopedPackage = packageIdOrPath.startsWith("@");
-  const isExplicitPath =
-    !isScopedPackage &&
-    (packageIdOrPath.startsWith(".") ||
-      packageIdOrPath.startsWith("/") ||
-      packageIdOrPath.startsWith("~") ||
-      packageIdOrPath.includes("/") ||
-      packageIdOrPath.includes("\\"));
-
-  if (isExplicitPath) {
-    // 显式路径不存在或不是 ActionDock 项目时必须失败，禁止静默回退
-    return null;
-  }
-
-  // 检查当前项目（自 cwd 向上探测）
-  const currentRoot = findProjectRoot(cwd);
-  if (currentRoot) {
-    try {
-      const config = loadProjectConfig(currentRoot);
-      if (config.id === packageIdOrPath || getPackageSlug(config.id) === packageIdOrPath) {
-        return currentRoot;
-      }
-    } catch {
-      // 当前项目配置损坏：忽略，继续注册表匹配
-    }
-  }
-
-  // 检查注册表中的链接包
   const linkedList = listLinkedPackages(customHome);
-  const found = linkedList.find(
-    (p) =>
-      p.id === packageIdOrPath ||
-      getPackageSlug(p.id) === packageIdOrPath ||
-      p.path === resolvedPath
-  );
-  if (found) {
-    return found.path;
-  }
-
-  return null;
+  return resolvePackageRootWithCandidates(packageIdOrPath, cwd, linkedList);
 }
 
 export function getRegistryStatus(customHome?: string): RegistryStatusReport {

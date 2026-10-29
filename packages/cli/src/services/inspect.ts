@@ -5,6 +5,7 @@ import {
 } from "@actiondock/core";
 import {
   listLinkedPackages,
+  resolvePackageRoot,
 } from "@actiondock/core/registry";
 import {
   loadManifest,
@@ -90,11 +91,18 @@ export function scanLocalAggregatedPackages(context?: CliContext): {
   const aggregated: AggregatedPackage[] = [];
   const seenPaths = new Set<string>();
 
+  let currentPkg: AggregatedPackage | undefined;
   if (currentRoot) {
     try {
-      aggregated.push(getPackageSummary(currentRoot));
+      currentPkg = getPackageSummary(currentRoot);
+      aggregated.push(currentPkg);
       seenPaths.add(currentRoot);
-    } catch {
+      // 利用 resolvePackageRoot 检查当前工程与已链接同 ID 来源是否存在冲突
+      resolvePackageRoot(currentPkg.id, currentRoot, context?.customHome);
+    } catch (err: any) {
+      if (err?.code === "PACKAGE_ID_CONFLICT") {
+        throw err;
+      }
       // 忽略异常工程根目录（清单损坏）
     }
   }
@@ -102,6 +110,12 @@ export function scanLocalAggregatedPackages(context?: CliContext): {
   for (const pkg of linkedList) {
     if (!existsSync(pkg.path)) continue;
     if (seenPaths.has(pkg.path)) continue;
+
+    if (currentPkg && currentPkg.id === pkg.id) {
+      // 同 ID 已由 resolvePackageRoot 检查，若未抛冲突则为同物理路径别名，去重跳过
+      continue;
+    }
+
     try {
       aggregated.push(getPackageSummary(pkg.path));
       seenPaths.add(pkg.path);

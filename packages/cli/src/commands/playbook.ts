@@ -21,6 +21,7 @@ import {
 } from "@actiondock/core/profile";
 import {
   loadProjectConfig,
+  PACKAGE_ID_CONFLICT,
 } from "@actiondock/core";
 import {
   listLinkedPackages,
@@ -320,6 +321,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           });
           return;
         } catch (err: any) {
+          if (err?.code === PACKAGE_ID_CONFLICT) {
+            throw err;
+          }
           const hint = "Tip: Run 'ad playbook list' to discover available playbooks.";
           throw new ArgumentError(`${err.message}\n${hint}`, err?.details, err?.code, hint);
         }
@@ -341,6 +345,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         }).buildSync();
         resolved = resolvePlaybook(showTarget, { graph });
       } catch (err: any) {
+        if (err?.code === PACKAGE_ID_CONFLICT) {
+          throw err;
+        }
         const hint = "Tip: Run 'ad playbook list' to discover available playbooks.";
         throw new ArgumentError(`${err.message}\n${hint}`, err?.details, err?.code, hint);
       }
@@ -403,6 +410,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           }).buildSync();
           resolved = resolvePlaybook(id, { graph });
         } catch (err: any) {
+          if (err?.code === PACKAGE_ID_CONFLICT) {
+            throw err;
+          }
           throw new ArgumentError(err.message);
         }
         targets.push({

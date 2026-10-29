@@ -1,21 +1,36 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
 import { parseActionRef } from "../../catalog/resolve-action";
+import { PACKAGE_ID_CONFLICT } from "../../errors";
 import { findProjectRoot, loadProjectConfig } from "../../project/loader";
 import { loadManifest } from "../../project/manifest";
-import { getRegistryStatus, listLinkedPackages, resolvePackageRoot } from "../../registry/registry";
+import {
+  getRegistryStatus,
+  listLinkedPackages,
+  loadRegistry,
+  resolvePackageRoot,
+} from "../../registry/registry";
+import {
+  collectLinkedPackageEntries,
+  getEffectiveLinkedPackages,
+} from "../../registry/linked-packages";
+import { resolvePackageRootWithCandidates } from "../../registry/resolve-package";
+import {
+  createPackageIdConflictError,
+  isSameRealPath,
+} from "../../registry/package-conflict";
 import type { DoctorCheck, DoctorCheckContext } from "../context";
 
 /**
- * 按白名单过滤已链接包列表（白名单为空时保留全部）。
+ * 按白名单过滤已链接包列表（白名单模式使用受限已过滤集合，不吞没读取异常）。
  */
 function filterLinkedList(ctx: DoctorCheckContext) {
-  let linkedList = listLinkedPackages(ctx.customHome);
   if (ctx.packageAllowlist && ctx.packageAllowlist.length > 0) {
-    linkedList = linkedList.filter((pkg) => ctx.packageAllowlist!.includes(pkg.id));
+    const reg = loadRegistry(ctx.customHome);
+    return getEffectiveLinkedPackages(reg, { allowlist: ctx.packageAllowlist });
   }
-  return linkedList;
+  return listLinkedPackages(ctx.customHome);
 }
 
 /**
@@ -25,14 +40,37 @@ export const checkGlobalRegistry: DoctorCheck = {
   id: "registry.global",
   run: (ctx) => {
     try {
+      const reg = loadRegistry(ctx.customHome);
+      const { corrupted, stale } = collectLinkedPackageEntries(reg, {
+        allowlist: ctx.packageAllowlist,
+      });
+
+      if (corrupted.length > 0) {
+        ctx.checks.push({
+          id: "registry.global",
+          category: "registry",
+          name: "Global Registry",
+          status: "error",
+          message: `${corrupted.length} corrupted package manifest(s) detected in registered packages and workspaces: ${corrupted
+            .map((c) => {
+              const errDetail = c.error?.message || String(c.error);
+              return c.id ? `${c.id} ('${c.path}': ${errDetail})` : `'${c.path}': ${errDetail}`;
+            })
+            .join(", ")}`,
+          fix: "Correct the corrupted actiondock.json files or unlink the affected sources",
+        });
+        return;
+      }
+
       const regStatus = getRegistryStatus(ctx.customHome);
-      if (regStatus.staleCount > 0) {
+      if (stale.length > 0 || regStatus.staleCount > 0) {
+        const staleCount = Math.max(stale.length, regStatus.staleCount);
         ctx.checks.push({
           id: "registry.global",
           category: "registry",
           name: "Global Registry",
           status: "warn",
-          message: `${regStatus.totalPackagesCount} package(s), ${regStatus.workspaces.length} workspace(s), but ${regStatus.staleCount} stale path(s) detected`,
+          message: `${regStatus.totalPackagesCount} package(s), ${regStatus.workspaces.length} workspace(s), but ${staleCount} stale path(s) detected`,
           fix: "Run 'ad unlink --prune' to clean up stale entries from registry",
         });
       } else {
@@ -51,6 +89,68 @@ export const checkGlobalRegistry: DoctorCheck = {
         name: "Global Registry",
         status: "error",
         message: `Failed to read registry: ${err.message}`,
+      });
+    }
+  },
+};
+
+/**
+ * 检查全局注册表与当前工程中是否存在重复的包标识冲突（PACKAGE_ID_CONFLICT）。
+ * 复用 getEffectiveLinkedPackages 规则完成工作区扫描与有效项判重；
+ * 受限白名单模式下提前过滤，工程定位使用局部解析，杜绝泄漏未授权路径。
+ */
+export const checkRegistryDuplicates: DoctorCheck = {
+  id: "registry.duplicates",
+  run: (ctx) => {
+    try {
+      const reg = loadRegistry(ctx.customHome);
+      const allowlist =
+        ctx.packageAllowlist && ctx.packageAllowlist.length > 0
+          ? ctx.packageAllowlist
+          : undefined;
+
+      // 1. 复用内部唯一事实源规则收集有效链接包（含存活工作区动态扫描及重复冲突检测）
+      const effectiveLinked = getEffectiveLinkedPackages(reg, { allowlist });
+
+      // 2. 当前工程：优先使用 locateProject 已解析的 projectRoot 或根据 cwd 向上探测
+      const curProjectRoot = ctx.projectRoot || findProjectRoot(ctx.cwd);
+
+      if (curProjectRoot && existsSync(curProjectRoot)) {
+        try {
+          const cfg = loadProjectConfig(curProjectRoot);
+          const allowlistSet = allowlist ? new Set(allowlist) : null;
+          if (!allowlistSet || allowlistSet.has(cfg.id)) {
+            const matched = effectiveLinked.find((p) => p.id === cfg.id);
+            if (matched && existsSync(matched.path) && !isSameRealPath(matched.path, curProjectRoot)) {
+              throw createPackageIdConflictError(
+                { id: matched.id, path: matched.path, workspaceRoot: matched.workspaceRoot },
+                { id: cfg.id, path: curProjectRoot, isCurrentProject: true }
+              );
+            }
+          }
+        } catch (err: any) {
+          if (err?.code === PACKAGE_ID_CONFLICT) {
+            throw err;
+          }
+          // 当前工程配置损坏由其他检查报告
+        }
+      }
+
+      ctx.checks.push({
+        id: "registry.duplicates",
+        category: "registry",
+        name: "Package ID Duplicates",
+        status: "ok",
+        message: "No package ID conflicts detected in registered packages and workspaces",
+      });
+    } catch (err: any) {
+      ctx.checks.push({
+        id: "registry.duplicates",
+        category: "registry",
+        name: "Package ID Duplicates",
+        status: "error",
+        message: err.message,
+        fix: err.hint,
       });
     }
   },
@@ -125,21 +225,24 @@ export const checkUsesClosure: DoctorCheck = {
   id: "registry.uses_closure",
   run: (ctx) => {
     try {
-      const linkedList = filterLinkedList(ctx);
+      // 至少 loadRegistry 每个 check 一次，后续引用定向收集复用此全局快照
+      const reg = loadRegistry(ctx.customHome);
+
+      const linkedList = ctx.packageAllowlist && ctx.packageAllowlist.length > 0
+        ? getEffectiveLinkedPackages(reg, { allowlist: ctx.packageAllowlist })
+        : getEffectiveLinkedPackages(reg);
+
       let packagesToCheck: Array<{ id: string; root: string }> = linkedList.map((p) => ({
         id: p.id,
         root: p.path,
       }));
 
-      const curProjectRoot = ctx.packageIdOrPath
-        ? resolvePackageRoot(ctx.packageIdOrPath, ctx.cwd, ctx.customHome) || findProjectRoot(ctx.packageIdOrPath)
-        : findProjectRoot(ctx.cwd);
+      const curProjectRoot: string | null = ctx.projectRoot || findProjectRoot(ctx.cwd);
       if (curProjectRoot && !packagesToCheck.some((p) => p.root === curProjectRoot)) {
         try {
           const cfg = loadProjectConfig(curProjectRoot);
           packagesToCheck.push({ id: cfg.id, root: curProjectRoot });
         } catch (err: any) {
-          // 当前工程配置损坏：无法纳入闭包检查范围，输出告警而非无声跳过
           console.warn(
             `[Doctor] Skipping corrupted current project in uses-closure check: '${curProjectRoot}' (${err?.message || String(err)})`
           );
@@ -170,8 +273,45 @@ export const checkUsesClosure: DoctorCheck = {
             }
 
             if (parsed.packageId) {
-              const depRoot = resolvePackageRoot(parsed.packageId, pkg.root, ctx.customHome);
-              if (!depRoot || !existsSync(depRoot)) {
+              const depPackageId = parsed.packageId;
+              let isAvailable = false;
+
+              // 1. 检查是否为同包或本地相对路径
+              try {
+                const localResolved = resolvePackageRootWithCandidates(depPackageId, pkg.root, []);
+                if (localResolved && existsSync(localResolved)) {
+                  isAvailable = true;
+                }
+              } catch {
+                // 忽略本地判定错误
+              }
+
+              // 2. 超出当前包：针对依赖完整 ID 定向收集
+              if (!isAvailable) {
+                try {
+                  const depCollection = collectLinkedPackageEntries(reg, {
+                    allowlist: [depPackageId],
+                  });
+
+                  if (depCollection.corrupted.length > 0) {
+                    isAvailable = false;
+                  } else {
+                    const resolved = resolvePackageRootWithCandidates(
+                      depPackageId,
+                      pkg.root,
+                      depCollection.packages
+                    );
+                    if (resolved && existsSync(resolved)) {
+                      isAvailable = true;
+                    }
+                  }
+                } catch {
+                  // 未授权依赖冲突/损坏时输出受限结果，不能吞错返回 true 或泄漏未授权路径
+                  isAvailable = false;
+                }
+              }
+
+              if (!isAvailable) {
                 unresolvableUses.push(`${pkg.id}/${actionId} -> '${rawRef}'`);
               }
             }
@@ -198,7 +338,6 @@ export const checkUsesClosure: DoctorCheck = {
         });
       }
     } catch (err: any) {
-      // 闭包检查整体失败：转为 error 检查项呈现在报告中，而非无声跳过
       ctx.checks.push({
         id: "registry.uses_closure",
         category: "registry",
