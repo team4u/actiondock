@@ -20,6 +20,16 @@ import { PackageGraphBuilder } from "../src/catalog/graph";
 import { quotePathForCli } from "../src/registry/package-conflict";
 import { runDoctorChecks } from "../src/doctor";
 
+/**
+ * 判断诊断报告文本是否提及指定目录。
+ * Windows 路径反斜杠在 JSON 序列化中会被转义，需同时匹配原始与转义形式，
+ * 确保正反两类断言在双平台都真实生效。
+ */
+function reportMentionsPath(report: unknown, dir: string): boolean {
+  const text = JSON.stringify(report) || "";
+  return text.includes(dir) || text.includes(JSON.stringify(dir).slice(1, -1));
+}
+
 describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () => {
   let fakeHome: string;
   let testBaseDir: string;
@@ -866,7 +876,7 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
       customHome: fakeHome,
       packageAllowlist: ["valid.pkg"],
     });
-    assert.ok(!JSON.stringify(reportLimited).includes(brokenChild));
+    assert.ok(!reportMentionsPath(reportLimited, brokenChild));
 
     // 4. 损坏的独立包不冒充有效身份触发与存活工程的 PACKAGE_ID_CONFLICT
     const standaloneBroken = join(testBaseDir, "standalone-broken");
@@ -948,7 +958,7 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
     });
     const usesCheck = report.checks.find((c) => c.id === "registry.uses_closure");
     assert.strictEqual(usesCheck?.status, "ok");
-    assert.ok(!JSON.stringify(report).includes(dirDep));
+    assert.ok(!reportMentionsPath(report, dirDep));
   });
 
   it("sequential renaming preserves all sources across multiple packages without dropping records", async () => {
@@ -1199,7 +1209,7 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
 
     const usesCheck = report.checks.find((c) => c.id === "registry.uses_closure");
     assert.strictEqual(usesCheck?.status, "ok");
-    assert.ok(!JSON.stringify(report).includes(dirDep));
+    assert.ok(!reportMentionsPath(report, dirDep));
   });
 
   it("new corrupted workspace child without cache triggers global doctor error while allowlist prevents path leakage", async () => {
@@ -1231,7 +1241,7 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
       customHome: fakeHome,
       packageAllowlist: ["known.id"],
     });
-    assert.ok(!JSON.stringify(reportLimited).includes(childBroken));
+    assert.ok(!reportMentionsPath(reportLimited, childBroken));
   });
 
   it("HTTP doctor route confirms live dependency without false missing warning or path leakage under restricted allowlist", async () => {
@@ -1338,7 +1348,7 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
       packageAllowlist: ["broken.id"],
     });
     assert.strictEqual(report1.ok, false);
-    assert.ok(JSON.stringify(report1).includes(childDir));
+    assert.ok(reportMentionsPath(report1, childDir));
 
     // link 无关 standalone 包
     const unrelatedDir = join(testBaseDir, "standalone-unrelated");
@@ -1353,6 +1363,6 @@ describe("Package ID Conflict Resolution & Identity Uniqueness Regressions", () 
       packageAllowlist: ["broken.id"],
     });
     assert.strictEqual(report2.ok, false);
-    assert.ok(JSON.stringify(report2).includes(childDir));
+    assert.ok(reportMentionsPath(report2, childDir));
   });
 });
