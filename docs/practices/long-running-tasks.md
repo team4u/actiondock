@@ -1,16 +1,16 @@
 # 实战指南：长时间异步任务与进度上报
 
-在执行大规模数据同步、多文件扫描、批处理分析或模型微调等长时间运行任务时，简单的单次阻塞调用会导致客户端连接超时，且无法获取任务当前的执行阶段。
+执行大规模数据同步、扫描或微调等长时间任务时，单次阻塞调用会导致客户端超时。客户端也无法获取执行进度。
 
-本指南指导开发者如何使用 `ctx.progress`、`ctx.state` 以及结合 MCP Tasks 规范，实现具备进度可观测、断点标记与协作式取消的长时间异步任务。
+本指南说明如何使用 `ctx.progress`、`ctx.state` 与 MCP Tasks 规范。开发者可实现具备进度可观测、断点标记与取消的异步任务。
 
 ---
 
 ## 异步长任务的核心挑战
 
-- 传输层连接超时：标准的 HTTP 请求或客户端交互通常具备 30 秒至 60 秒的超时阈值。未设计异步模式的任务极易被网络中间件强行切断。
-- 过程黑盒无反馈：调用方无法获知任务执行到哪一步、处理了多少百分比，无法做出人机交互反馈。
-- 取消响应迟缓：当调用端主动中断任务时，服务端若未监听取消信号，仍将无谓耗尽计算资源。
+- 传输层连接超时：HTTP 请求或交互通常有 30 秒至 60 秒的超时阈值。未设计异步模式的任务，网络中间件容易切断连接。
+- 过程黑盒无反馈：调用方无法获知任务执行阶段与完成百分比，无法及时交互。
+- 取消响应迟缓：调用端主动中断任务时，服务端若未监听取消信号，仍将无谓耗尽计算资源。
 
 ---
 
@@ -78,7 +78,7 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
 
 ## 异步调度与状态管理
 
-对于耗时极长的任务，ActionDock 支持通过远程微服务模式、MCP Tasks 协议或本地标准后台方式进行调度：
+对于耗时极长的任务，ActionDock 支持通过远程微服务、MCP Tasks 协议或本地后台方式调度：
 
 - 远程异步启动长任务：
   ```bash
@@ -87,7 +87,7 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
   # 复杂或批量数据可通过文件传递（与扁平参数互斥）：
   # ad run data.batch-process --profile prod --async --input-file ./batch.json
   ```
-  命令立即返回运行标识（`runId`），而不会在终端中长时间等待。`--async` 选项专用于远程服务或环境配置模式，独立的本地命令行执行不支持该选项。
+  命令立即返回执行标识（`runId`），而不会长时间阻塞。`--async` 专用于远程服务或环境配置模式，独立本地命令不支持该选项。
 
 - 本地后台启动长任务：
   ```bash
@@ -97,19 +97,19 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
   nohup ad run data.batch-process --request-id batch-main --input-file ./batch.json >/dev/null 2>&1 &
   ```
 
-- 查询任务当前状态与进度：
+- 查询任务状态与进度：
   ```bash
   ad runs show <runId>
   ```
-  返回包含当前状态（`running`、`success` 等）及进度历史的详细信息。
+  命令返回当前状态（`running`、`success` 等）及进度历史。
 
-- 取消正在运行的任务：
+- 取消正在执行的任务：
   ```bash
   ad runs cancel <runId> --reason "用户主动终止"
   ```
-  执行服务会向对应运行实例发射 `ctx.signal`，业务函数感知后退出。
+  服务向对应执行实例发射 `ctx.signal`，业务函数感知后退出。
 
-- 阻塞等待多个运行终态聚合退出：
+- 阻塞等待多个执行终态聚合退出：
   ```bash
   # 本地并行派工后统一收结果（通过标准后台方式 & 启动本地独立进程）
   ad run data.batch-process --input-file ./batch-1.json &
@@ -120,11 +120,11 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
   nohup ad run data.batch-process --request-id batch-main --input-file ./batch.json >/dev/null 2>&1 &
   ad runs watch --request-id batch-main --timeout 30m --json
   ```
-  watch 只读旁观，不取消不收割；超时或中断信号仅退出等待并输出当前状态，不会终止任务；退出码仅在全部终态且全部执行成功时为 0。
+  `watch` 只读旁观，不取消不收割。超时或中断仅退出等待并输出状态，不会终止任务。退出码仅在全部执行成功时为 0。
 
 - 幂等请求标识的作用域说明：
-  - 在统一服务实例与远程常驻服务模式（如 `ad serve` 或远程服务）下，支持相同入参请求的幂等去重重放。若传入相同的 `--request-id` 与相同入参，服务端会拦截重复调度并直接返回先前的执行结果。
-  - 在独立的本地命令行进程模式下，`--request-id` 主要作为关联标识与状态反查凭据（供 `ad runs list` 过滤与 `ad runs watch` 精准对因反查）。由于不同独立本地命令行进程分属独立的进程实例，各进程直接执行并落库，不会跨进程自动拦截重放。
+  - 常驻服务模式：在 `ad serve` 或远程服务下，系统支持幂等去重重放。若传入相同 `--request-id` 与相同入参，服务端会拦截重复调度并返回历史结果。
+  - 本地独立进程模式：`--request-id` 作为关联标识与状态反查凭据。它供 `ad runs list` 过滤与 `ad runs watch` 精准反查。本地进程分属独立实例，各进程直接执行并落库，不会跨进程拦截重放。
 
 ---
 

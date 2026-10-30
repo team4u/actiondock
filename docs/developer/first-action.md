@@ -1,27 +1,32 @@
 # Action 核心模型与开发指南
 
 Action 是 ActionDock 体系中最基础的原子能力单元。
-
-它封装了一个具体的、确定性的任务（如查询数据库、调用外部接口、处理文本、执行受管外部命令等），并通过强类型与模式规范严格约束其输入和输出。本文档系统介绍 Action 的契约设计理念、`ActionContext` 上下文能力认知分层，以及基于单一事实源的端到端业务开发流程。
+它封装具体的确定性任务。
+任务包括查询数据库、调用外部接口、处理文本或执行受管外部命令。
+Action 通过类型与模式规范严格约束输入和输出。
+本文档系统介绍 Action 的契约设计理念。
+文档说明 `ActionContext` 上下文能力与基于单一事实源的开发流程。
 
 ---
 
 ## Action 定义契约与单一事实源
 
-在 ActionDock 2.x 中，`actiondock.json` 是元数据与契约模式的唯一事实源。每个 Action 的标识、描述、模式校验及依赖均在清单中声明，源码专注于纯粹的业务执行逻辑。
+在 ActionDock 2.x 中，`actiondock.json` 是元数据与契约模式的唯一事实源。
+每个 Action 的标识、描述、模式校验及依赖均在清单中声明。
+源码专注于纯粹的业务执行逻辑。
 
 ### 标准类型驱动开发路径
 
-为避免模式定义与本地类型的重复编写，ActionDock 建立了从清单到代码的单向数据流与单一事实源开发闭环：
+为避免模式与本地类型的重复编写，ActionDock 采用从清单到代码的单向数据流：
 
-- 脚手架快速起步：执行 `ad action create <id> --input ... --output ...` 命令快速生成初始源码与基础清单条目。
-- 清单声明契约：在 `actiondock.json` 的 `actions` 字典中完善 Action 输入与输出的完整 JSON Schema 模式规范（支持字段描述、枚举、嵌套结构与范围约束）。
-- 自动生成类型：执行 `ad generate types` 命令行指令，工具链自动将模式规范编译为强类型的 TypeScript 声明文件 `.actiondock/generated/actions.d.ts`。
-- 导入类型开发：在业务源码中导入 `ActionInput<"action-id">` 与 `ActionOutput<"action-id">` 泛型工具类型，直接约束业务执行函数，彻底消除重复手写接口的冗余。
+- 脚手架快速起步：执行 `ad action create <id> --input ... --output ...` 命令生成初始源码与清单条目。
+- 清单声明契约：在 `actiondock.json` 的 `actions` 字典中完善输入与输出的 JSON Schema 规范。
+- 自动生成类型：执行 `ad generate types` 指令，工具链自动将模式规范编译为 TypeScript 声明文件 `.actiondock/generated/actions.d.ts`。
+- 导入类型开发：在业务源码中导入 `ActionInput<"action-id">` 与 `ActionOutput<"action-id">` 类型约束执行函数。
 
 ### 动作声明形式
 
-使用 `@actiondock/sdk` 的 `defineAction` 声明业务执行函数，配合生成的类型定义实现端到端强类型约束。
+使用 `@actiondock/sdk` 的 `defineAction` 声明业务执行函数，配合生成的类型定义实现强类型约束。
 
 函数式声明（推荐）：
 
@@ -57,17 +62,19 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
 
 ## ActionContext 运行时上下文能力
 
-每次执行 Action 时，底层运行时引擎均向业务函数注入全新的 `ActionContext` 实例。为了降低认知负荷，`ActionContext` 的能力划分为高频的基础核心能力与面向复杂治理的高级深水区能力两层。
+执行 Action 时，底层引擎向业务函数注入全新的 `ActionContext` 实例。
+`ActionContext` 的能力划分为基础核心能力与高级深水区能力两层。
 
 ### 基础核心能力
 
-基础核心能力覆盖约百分之九十的日常业务开发场景，涵盖分层配置读取、键值状态持久化、动作级联调用以及结构化日志记录。
+基础核心能力覆盖日常业务开发场景。
+能力包括分层配置读取、键值状态持久化、动作级联调用与结构化日志记录。
 
 - 分层配置读取 `ctx.config`：
-  - 职责与机制：提供多级回退的配置读取能力。依次从运行期覆盖参数、内置 SQLite 配置存储、系统环境变量以及清单默认值中解析配置。
+  - 职责与机制：提供多级回退的配置读取能力。依次从执行期覆盖参数、内置 SQLite 配置存储、环境变量与清单默认值解析配置。
   - 常用方法：
-    - `ctx.config.get<T>(key: string): T | undefined`：读取指定配置，未设置时返回 `undefined`。
-    - `ctx.config.get<T>(key: string, defaultValue: T): T`：读取指定配置，未设置时回退至指定默认值。
+    - `ctx.config.get<T>(key: string): T | undefined`：读取指定配置，未配置时返回 `undefined`。
+    - `ctx.config.get<T>(key: string, defaultValue: T): T`：读取指定配置，未配置时回退至指定默认值。
     - `ctx.config.has(key: string): boolean`：判断指定配置键是否存在。
   - 使用示例：
     ```ts
@@ -76,14 +83,14 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     ```
 
 - 键值状态持久化 `ctx.state`：
-  - 职责与机制：提供轻量级持久化键值存储，基于当前 Action Package 命名空间进行物理隔离，支持设置存活时间自动失效。
+  - 职责与机制：提供轻量级持久化键值存储。存储按 Action Package 命名空间隔离，支持存活时间自动失效。
   - 常用方法：
     - `ctx.state.get<T>(key: string): Promise<T | undefined>`：获取键对应的数据，若已过期或不存在则返回 `undefined`。
     - `ctx.state.set<T>(key: string, value: T, ttl?: number): Promise<void>`：存储键值对，可选传入秒级存活时间。
     - `ctx.state.delete(key: string): Promise<boolean>`：删除指定键名的数据。
     - `ctx.state.clear(prefix?: string): Promise<number>`：批量清空当前命名空间下的状态，支持前缀过滤。
     - `ctx.state.keys(prefix?: string): Promise<string[]>`：枚举当前命名空间下匹配前缀的状态键名。
-    - `ctx.state.scope(namespace: string): StateStore`：创建具有独立二级命名空间隔离的子存储实例。
+    - `ctx.state.scope(namespace: string): StateStore`：生成具有独立二级命名空间隔离的子存储实例。
   - 使用示例：
     ```ts
     // 缓存数据，存活时间设置为 3600 秒
@@ -92,11 +99,11 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     ```
 
 - 动作级联调度 `ctx.actions`：
-  - 职责与机制：支持当前 Action 调度执行下游其他 Action，实现能力的细粒度原子化与高阶组合。底层运行时内置递归调用栈深度保护与环路死锁阻断检测。同时支持命名绑定路由，实现本地与远端拓扑解耦与显式降级。
+  - 职责与机制：支持当前 Action 调度执行下游 Action。底层运行时内置递归调用栈深度保护与环路死锁阻断检测。同时支持命名绑定路由与显式降级。
   - 常用方法：
     - `ctx.actions.invoke<I, O>(actionId: string | ActionRef, input?: I, options?: ActionInvokeOptions): Promise<O>`：通过动作标识显式调用目标 Action 并返回类型化结果，支持通过第三参数 options.binding 指定命名路由绑定。
     - `ctx.actions(actionId: string | ActionRef, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>`：直接以函数形式执行下游 Action，同样支持在第三参数中传入 options 配置。
-  - 绑定路由规则：未指定 binding 选项时仅检索 default 绑定，若未配置 default 则保持当前宿主默认本地解析；显式指定 binding 时若对应条目缺失，系统直接抛出 NOT_FOUND 错误，严禁隐式回退。
+  - 绑定路由规则：未指定 binding 选项时仅检索 default 绑定。若未配置 default 则保持当前宿主默认本地解析。显式指定 binding 时若条目缺失，系统直接抛出 NOT_FOUND 错误，严禁隐式回退。
   - 权限声明契约：清单中的 uses 权限声明保持逻辑动作标识（如 `pricing/quote`）。更多详情与跨环境多目标降级实践参见 [动作命名绑定与路由机制](/developer/action-bindings.md)。
   - 使用示例：
     ```ts
@@ -123,10 +130,10 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
 
 ### 高级深水区能力
 
-高级深水区能力面向受管外部进程治理、长任务进度汇报、协作式取消协同及全流程链路追踪等系统级工程场景。
+高级能力面向受管外部进程治理、长任务进度汇报、协作式取消协同及链路追踪。
 
 - 统一受管进程治理 `ctx.process`：
-  - 职责与机制：提供跨平台受管的操作系统外部子进程生命周期治理，严禁静默衍生无管辖僵尸进程。提供短时命令一次性执行与长期常驻进程全生命周期受管治理能力。
+  - 职责与机制：提供跨平台受管的外部子进程治理，严禁静默衍生僵尸进程。提供短时命令一次性执行与长期常驻进程受管治理能力。
   - 常用方法：
     - `ctx.process.run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>`：一次性执行命令并等待退出，内置超时中断与输出缓冲区截断保护。
     - `ctx.process.start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>`：拉起长期受管进程，返回元数据快照与输出流游标。
@@ -147,7 +154,7 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     ```
 
 - 阶段进度报告 `ctx.progress`：
-  - 职责与机制：长耗时或多步骤批处理任务通过进度报告器向调用端实时推送执行进度，便于智能体客户端或前端界面展示进度反馈与当前阶段说明。
+  - 职责与机制：长耗时任务通过进度报告器向调用端实时推送执行进度。这便于智能体或前端界面展示进度与当前阶段说明。
   - 常用方法：
     - `ctx.progress.report(current: number, total?: number, message?: string): void`：汇报已完成量、总工作量与阶段说明。
   - 使用示例：
@@ -165,11 +172,11 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     ```
 
 - 调用链路追踪元数据 `ctx.run`：
-  - 职责与机制：提供全链路因果关联追踪上下文，包括当前执行标识、根调用标识与父级调用标识。通过该元数据可以精确串联级联调用的树状执行轨迹，便于排查与审计。
+  - 职责与机制：提供全链路因果关联追踪上下文，包括当前执行标识、根调用标识与父级调用标识。通过该元数据可以串联级联调用的树状轨迹，便于排查与审计。
   - 核心属性：
-    - `ctx.run.id`：当前 Action 单次执行的唯一运行标识。
-    - `ctx.run.rootId`：触发该次级联调用链路的根任务运行标识。
-    - `ctx.run.parentId`：直接触发本次执行的父级 Action 运行标识，根调用时缺省。
+    - `ctx.run.id`：当前 Action 单次执行的唯一标识。
+    - `ctx.run.rootId`：触发该次级联调用链路的根任务标识。
+    - `ctx.run.parentId`：直接触发本次执行的父级 Action 标识，根调用时缺省。
   - 使用示例：
     ```ts
     ctx.log.info("执行链路信息", {
@@ -182,19 +189,21 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
 
 ## 业务 Action 实战开发
 
-以实现 GitHub Pull Request 查询动作 `github.get-pr` 为例，体验基于单一事实源的标准开发流程。
+以实现 GitHub Pull Request 查询动作 `github.get-pr` 为例，说明标准开发流程。
 
 ### 脚手架初始化与清单契约深化
 
-推荐首先使用脚手架命令生成 Action 初始代码骨架与清单基础条目：
+使用脚手架命令生成 Action 初始代码骨架与清单基础条目：
 
 ```bash
 ad action create github.get-pr -d "获取指定 GitHub 仓库的 Pull Request 详细信息" -i "repo:string, prNumber:number" -o "id:number, number:number, title:string, state:string, url:string, lastQueriedAt:string"
 ```
 
-命令行参数 `--input` 与 `--output` 提供了基础类型的简写语法（支持 `string`、`number`、`boolean`、`array`、`object` 以及以问号结尾的可选标记）。
+命令行参数 `--input` 与 `--output` 提供基础类型简写语法。
+语法支持 `string`、`number`、`boolean`、`array`、`object` 以及可选标记。
 
-为了让智能体精准理解各个参数的语义和约束，需要在作为唯一事实源的 `actiondock.json` 中深化模式规范，补充字段描述（`description`）、取值示例（`examples`）以及必填项列表：
+为让智能体理解参数语义和约束，需在清单中完善模式规范。
+在 `actiondock.json` 中补充字段描述（`description`）、取值示例与必填项：
 
 ```json
 {
@@ -253,21 +262,21 @@ ad action create github.get-pr -d "获取指定 GitHub 仓库的 Pull Request �
 ```
 
 > [!TIP]
-> 推荐在模式中通过 `examples` 字段提供具体取值样例，帮助智能体精准掌握参数格式与类型预期。
+> 推荐在模式中通过 `examples` 字段提供取值样例，帮助智能体掌握参数格式。
 
 ### 自动生成 TypeScript 类型声明
 
-在清单中完成契约定义后，在项目根目录运行代码生成指令：
+在清单中完成契约定义后，在项目根目录执行代码生成指令：
 
 ```bash
 ad generate types
 ```
 
-该命令读取 `actiondock.json`，在 `.actiondock/generated/actions.d.ts` 中生成强类型的 TypeScript 类型映射。生成的类型文件由 ActionDock 框架统一托管，无需手工维护。
+该命令读取 `actiondock.json`，在 `.actiondock/generated/actions.d.ts` 中生成强类型映射。生成的类型文件由 ActionDock 框架统一托管，无需手工维护。
 
 ### 导入类型并编写业务实现
 
-在 `actions/get-pr.ts` 中直接导入 `ActionInput<"github.get-pr">` 与 `ActionOutput<"github.get-pr">`，无需手工重复定义接口：
+在 `actions/get-pr.ts` 中直接导入 `ActionInput<"github.get-pr">` 与 `ActionOutput<"github.get-pr">`，无需手工定义接口：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
@@ -317,7 +326,7 @@ export default defineAction<
 
 ## 编写确定性单元测试
 
-使用 `@actiondock/testing` 提供的纯内存测试运行时进行无外部依赖的确定性验证。在 `tests/get-pr.test.ts` 中编写测试用例：
+使用 `@actiondock/testing` 提供的纯内存测试运行时做确定性验证。在 `tests/get-pr.test.ts` 中编写测试用例：
 
 ```ts
 import { describe, it } from "node:test";
@@ -375,20 +384,20 @@ describe("github.get-pr 动作测试", () => {
   ```bash
   ad describe github.get-pr
   ```
-  查看字段模式、Flat 编码指引、赋值样例与输出选择契约。可在清单的 `annotations` 中声明 `"actiondock.cli": { "textField": "<field>" }`，指定普通 CLI 默认同步正文；推荐对应返回字段为必填字符串。
+  查看字段模式、Flat 编码指引、赋值样例与输出选择契约。清单 annotations 可配置默认同步正文。推荐对应返回字段为必填字符串。
 
 - 校验清单、入口与输出契约：
   ```bash
   ad validate github.get-pr
   ```
-  新增输出契约分析只读取元数据；命令的其他检查仍加载动作定义，但不调用业务 `run`。确定矛盾会阻断校验，可选字段或未知类型等风险以警告报告。
+  新增输出契约分析只读取元数据。命令的其他校验仍加载动作定义，但不调用业务 run。确定矛盾会阻断校验，可选字段或未知类型等风险以警告报告。
 
-- 运行测试用例：
+- 执行测试用例：
   ```bash
   ad test
   ```
 
-- 本地直接运行 Action：
+- 本地直接执行 Action：
   ```bash
   # 规范扁平参数调用（推荐）
   ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
@@ -396,11 +405,13 @@ describe("github.get-pr 动作测试", () => {
   # 复杂参数或多行文本通过文件传参（与扁平参数严格互斥）
   ad run github.get-pr --input-file input.json
   ```
-  - 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir` 等）与数据平面（Action 入参）的协议边界。
-  - 赋值操作符：`repo=team4u/actiondock` 严格保留为字符串，不执行类型猜测；`prNumber:=1` 严格解析为 JSON 格式数值，递归校验所有数值为有限数（`Number.isFinite`）。
-  - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
-  - 原有三种输入方式互斥：扁平参数、`--input` 与 `--input-file` 不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-  - 原始文本入参：具有字符串参数的动作可使用 `--stdin-field <field>` 绑定 stdin 正文，并用扁平赋值补充其他字段；不与内联或文件 JSON 混用。字段名来自入参契约，正文不解析类型、不剥 BOM、不修剪空白。源字节与最终入参序列化大小各有默认 10MiB 上限。
-  - 输出选择：普通 CLI 默认输出标量或完整对象 JSON；声明默认正文或指定 `--text-field` 时提取该字符串字段。需要完整执行信封时才使用 `--json`；参数解析失败以退出码 2 退出。
+  - 协议边界：`--` 分隔符作为控制平面选项与数据平面的协议边界。
+  - 赋值操作符：`repo=team4u/actiondock` 保留为字符串，不执行类型猜测。`prNumber:=1` 解析为 JSON 数值，递归校验数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引。根节点物化为对象。系统拒绝路径冲突（`INPUT_PATH_CONFLICT`）并拦截原型污染。
+  - 三种输入方式互斥：扁平参数、`--input` 与 `--input-file` 不可混用（`INPUT_CONFLICT`）。未指定输入时默认为 `{}`。
+  - 原始文本入参：支持字符串参数的动作可使用 `--stdin-field <field>` 绑定标准输入。该选项不与 JSON 混用。源字节与序列化大小各有 10MiB 上限。
+  - 输出选择：CLI 默认输出标量或完整 JSON。指定 `--text-field` 时提取字符串字段。需要完整执行信封时使用 `--json`。解析失败时退出码为 2。
 
-业务日志、元数据和诊断写入 stderr。正文提取失败不改写已完成的业务运行记录，不应因此重跑有副作用的动作；高风险管道写入应先完整生成并校验，再提交。
+业务日志、元数据和诊断写入 stderr。
+正文提取失败不改写已完成的业务记录，不应因此重跑有副作用的动作。
+高风险管道写入应先完整生成并校验，再提交。

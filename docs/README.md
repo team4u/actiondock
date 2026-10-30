@@ -9,11 +9,11 @@
 
 ActionDock 2.x 面向智能体动作与技能的工程化开发与交付工具链。
 
-把 Agent 写出来的工具代码，变成可测试、可约束、可复现、可交付的生产级软件资产。践行人定规程、Agent 写实现的分工模式，依托纯内存沙箱实现毫秒级自动化测试与自愈闭环，原生交付为 MCP 协议服务、Agent 技能包、HTTP 微服务与自包含 Node.js 目录交付产物。
+把 Agent 编写的工具代码，转为可测试、可约束、可交付的软件资产。ActionDock 践行人定规程、智能体写实现的分工模式。纯内存沙箱支持毫秒级测试与自愈。产物原生交付为 MCP 服务、Agent 技能包、HTTP 服务与 Node.js 交付目录。
 
 ---
 
-## 智能体极速上手
+## 智能体快速上手
 
 智能体客户端可使用技能管理器从代码仓库直接安装 ActionDock 技能资产：
 
@@ -25,13 +25,13 @@ npx skills add team4u/actiondock -g -y
 npx skills add <owner/repo> -g -y
 ```
 
-安装完成后，智能体即可自动识别 SKILL.md 与操作规程，并在执行任务时自主调度底层原子能力。
+安装完成后，智能体即可自动识别 SKILL.md 与操作规程，并在运行任务时自主调度底层能力。
 
 ---
 
 ## 文档体系全景
 
-ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
+ActionDock 文档中心采用紧凑的六大模块设计：
 
 ```text
 文档中心架构
@@ -73,16 +73,16 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 面向真实工程高频场景的工业级即用方案：
 
 - [高可用外部 API 接入](practices/external-apis.md)：网络请求、密钥防护、指数退避重试与取消信号透传。
-- [受控系统命令与子进程执行](practices/process-execution.md)：物理管道隔离、输出容量防御性截断与进程树跨平台清理。
+- [受控系统命令与子进程调用](practices/process-execution.md)：物理管道隔离、输出容量防御性截断与进程树跨平台清理。
 - [长时间异步任务与进度上报](practices/long-running-tasks.md)：阶段进度同步与异步任务协议集成。
 - [多 Action 组合编排与防死锁](practices/composing-actions.md)：级联调用深度限制与环路死锁阻断机制。
-- [智能体协同开发与自愈闭环](practices/ai-agent-development.md)：大模型自主阅读规程、编写代码与闭环自愈指南。
+- [智能体协同开发与自愈流程](practices/ai-agent-development.md)：大模型自主阅读规程、编写代码与自愈指南。
 
 ---
 
 ### 消费接入指南
 
-面向从代码仓库拉取项目源码、获取导出的技能包或运行交付产物的使用者与智能体操作端：
+面向获取技能包或运行交付产物的使用者与智能体：
 
 - [消费与接入总览](consumer/overview.md)：四大选型入口（Agent Skill、MCP 服务、独立 Node/HTTP 微服务、工程依赖）与接入指南。
 - [Agent Skill 使用指南](consumer/use-as-skill.md)：通过技能管理器一键安装、智能体装载路径与规程调用规范。
@@ -101,11 +101,11 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 - [Testing 测试框架 API 参考](reference/testing-api.md)：独立测试包导出的测试运行时、虚拟时钟与模拟组件参考。
 - [HTTP API 接口契约](reference/http-api.md)：完整的 RESTful 端点规范、请求响应 Schema、SSE 流与错误码。
 - [配置解析回退机制](reference/config.md)：配置多级回退规则、环境变量转换与类型强转。
-- [错误代码速查手册](reference/error-codes.md)：标准 JSON 错误信封与故障自愈决策表。
+- [错误代码速查手册](reference/error-codes.md)：标准 JSON 错误信封与错误自愈决策表。
 
 ---
 
 ### 底层架构解密
 
-- [Runtime 执行引擎与分层架构](architecture/runtime.md)：统一执行主链、标准服务端口体系、原生运行时驱动与通道隔离。
+- [Runtime 运行引擎与分层架构](architecture/runtime.md)：统一主链、标准服务端口体系、原生运行时驱动与通道隔离。
 - [安全加固与防御模型](architecture/security.md)：非回环鉴权、常数时间比对与原型污染防护。

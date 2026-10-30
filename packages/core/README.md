@@ -6,7 +6,10 @@ ActionDock 2.x Node-first 原生运行时与核心领域。
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。统一暴露最小化核心服务门面（`createActionDock`、`connectActionDock`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`）、统一错误模型（`ActionDockError`）、原生平台装配（`createNodePlatform`）、服务启动（`startActionDockServer`）与包图依赖契约（`PackageGraph`），内部驱动存储引擎、受管进程与 HTTP 网络服务。
+`@actiondock/core` 是 ActionDock 2.x 核心领域内核与 Node-first 原生运行时。
+模块暴露核心服务门面（`createActionDock`、`connectActionDock`）与标准服务端口（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`）。
+模块提供统一错误模型 `ActionDockError`、平台装配 `createNodePlatform`、服务启动 `startActionDockServer` 与包图契约 `PackageGraph`。
+底层驱动存储引擎、受管进程与 HTTP 网络服务。
 
 ---
 
@@ -45,10 +48,10 @@ Service -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> A
 
 ### 统一服务门面
 
-通过顶层工厂函数提供无缝屏蔽本地与远程拓扑差异的服务门面：
+顶层工厂函数屏蔽本地与远程拓扑差异，提供统一服务门面：
 
 - 本地服务门面 `createActionDock`：创建本地 `ActionDockService` 服务端口实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
-- 远端服务门面 `connectActionDock`：创建远端 `ActionDockService` 服务端口实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
+- 远端服务门面 `connectActionDock`：创建远端 `ActionDockService` 服务端口实例。实例通过 HTTP 与远端通信，支持鉴权令牌、超时控制与证书安全校验。
 
 ### 标准服务端口体系
 
@@ -56,7 +59,7 @@ Service -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> A
 
 - 发现端口 `DiscoveryPort`：负责包与动作的元数据发现、清单检索、全文过滤与规程查询。
 - 执行端口 `ExecutionPort`：负责动作的同步阻塞执行（`run`）与异步启动执行（`start`）。
-- 运行端口 `RunsPort`：负责任务运行历史列表（含幂等请求标识反查）、单次详情查询、读取链路取消信号（`signal`）、协同取消（`cancel`）以及历史记录清理与保留策略淘汰（`clearRuns`、`cleanExpiredRuns`）。
+- 任务端口 `RunsPort`：负责任务执行历史列表（含请求标识反查）与单次详情查询。支持读取取消信号（`signal`）、协同取消（`cancel`）以及按策略清理历史记录（`clearRuns`、`cleanExpiredRuns`）。
 - 事件端口 `EventsPort`：负责任务执行实时事件流订阅。
 - 配置端口 `ConfigPort`：负责运行时分层配置读取、持久化配置管理与环境变量满足度体检。
 - 状态端口 `StatePort`：负责包级与动作级持久化键值存取、前缀列举与过期清理。
@@ -67,11 +70,11 @@ Service -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> A
 
 ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
 
-- 包图发现单一事实源 `PackageDiscovery`：自顶向下扫描工作区与全局注册表，建立包目录索引。
+- 包图发现单一事实源 `PackageDiscovery`：自顶向下扫描工作区与全局注册表，创建包目录索引。
 - 包拓扑图单一事实源 `PackageGraph`：维护包节点身份标识、实例版本与拓扑依赖关系。
 - 动作目录单一事实源 `ActionCatalog`：统一聚合索引所有已加载包的动作元数据，提供确定性的多维检索能力。
-- 动作解析单一事实源 `resolveAction`：作为全系统动作引用的唯一解析函数。优先支持包限定斜杠语法（`<package-id>/<action-id>`）与当前调用方所属包优先匹配；严格禁止冒号历史语法（`pkg:action`）。
-- 调用治理策略单一事实源 `InvocationPolicy`：统筹管理根任务最大并发配额（默认 32）、子任务并发上限（默认 64）与最大调用嵌套深度（默认 16）。
+- 动作解析单一事实源 `resolveAction`：全系统动作引用的唯一解析函数。系统支持包限定斜杠语法（`<package-id>/<action-id>`）并优先匹配调用方所属包。严格禁止冒号历史语法（`pkg:action`）。
+- 调用治理策略单一事实源 `InvocationPolicy`：统筹管理并发配额与调用深度。根任务并发上限默认 32，子任务并发上限默认 64，最大嵌套深度默认 16。
 
 ---
 
@@ -79,8 +82,8 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 
 `@actiondock/core` 深度集成 Node.js 24 原生能力，无需编译外部二进制扩展：
 
-- 原生存储驱动 `NodeSqliteDriver`：基于 Node.js 原生 `node:sqlite`（`DatabaseSync`）构建同步存储驱动。默认启用预写日志模式（WAL）、外键约束检查与忙等待超时。
-- 受管进程平台驱动 `NodeProcessDriver`：实现完整的受管进程治理体系。基于管道彻底切断子进程与宿主标准流的物理连通；支持跨平台独立进程组管理与信号派发；提供独占控制权租约、逐流增量读取与优雅终止。
+- 原生存储驱动 `NodeSqliteDriver`：基于 Node.js 原生 `node:sqlite`（`DatabaseSync`）构建同步存储驱动。默认启用预写日志模式（WAL）、外键约束校验与忙等待超时。
+- 受管进程平台驱动 `NodeProcessDriver`：实现受管进程治理体系。驱动基于管道切断子进程与宿主标准流的连通。驱动支持跨平台独立进程组管理与信号派发。系统提供独占控制权租约、逐流增量读取与优雅终止。
 - 原生网络服务容器 `NodeHttpServer`：基于 Node.js 原生 `node:http` 承载 RESTful 微服务与 Server-Sent Events 事件流。
 - 原生模块加载器 `NodeModuleLoader`：基于 Node.js 原生类型擦除机制直接加载 TypeScript 源码，免除前置编译转译开销。
 
@@ -100,19 +103,19 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
   - `corsOrigins`：允许的跨域来源白名单。
 - 权限交集与安全拦截：
   - 同时配置 `packageAllowlist` 与 `actionAllowlist` 时取两者交集。
-  - 未在白名单中的动作详情调阅与执行请求均被严格拦截，返回 HTTP 403 状态码与 `ACTION_FORBIDDEN` 结构化错误。
-  - 历史运行记录查询、单次详情与取消操作同步实施白名单校验。
+  - 服务端拦截未授权动作的详情调阅与执行请求，返回 HTTP 403 状态码与 `ACTION_FORBIDDEN` 结构化错误。
+  - 历史执行记录查询、单次详情与取消操作同步实施白名单校验。
   - 统一内嵌的 MCP 协议端点工具注册与任务扩展同样受白名单联动过滤。
 
 ---
 
-## 数据目录锁与故障自愈
+## 数据目录锁与自动恢复
 
 通过 `DataDirLock` 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主进程与受管子进程状态：
 
-- 活跃进程冲突防护：检测到已有活跃宿主主进程正在持有该数据目录时，抛出 `DATA_DIR_IN_USE` 错误拒绝并发启动。
-- 孤儿进程保护：检测到前序宿主主进程异常退出但仍有关联受管子进程处于运行状态时，抛出 `DATA_DIR_RECOVERY_REQUIRED` 错误，阻止脏写并等待子进程回收。
-- 故障自动恢复：前序宿主进程与关联子进程均已死亡时，当前宿主自动接管排他锁并安全清理残留会话。
+- 活跃进程冲突防护：检测到已有活跃宿主主进程持有该数据目录时，抛出 `DATA_DIR_IN_USE` 错误拒绝并发启动。
+- 孤儿进程保护：检测到前序宿主进程非正常退出且受管子进程仍处于执行状态时，抛出 `DATA_DIR_RECOVERY_REQUIRED` 错误。系统阻止脏写并等待子进程回收。
+- 锁自动恢复：前序宿主进程与子进程均已退出时，当前宿主接管排他锁并安全清理残留会话。
 
 ---
 
@@ -120,7 +123,7 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 
 基于 `actiondock.lock.json`（规范版本 `lockfileVersion: 1`）提供严格的依赖版本锁定与原子事务保护：
 
-- 依赖图构建：`PackageGraphBuilder` 递归解析本地包依赖与符号链接，统一建立拓扑图并检测版本冲突。
+- 依赖图构建：`PackageGraphBuilder` 递归解析本地包依赖与符号链接，统一构建拓扑图并检测版本冲突。
 - 原子事务：`beginTransaction` 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
 
 ---

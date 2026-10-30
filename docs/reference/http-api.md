@@ -1,6 +1,6 @@
 # HTTP API 接口契约
 
-ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API 规范，用于向远程 AI 智能体、持续集成流水线、网关及外部业务系统提供能力自省、动作调度与任务流管理。
+ActionDock 微服务模式通过 `ad serve` 启动。该模式提供 RESTful API，用于能力自省、动作调度与任务管理。
 
 ---
 
@@ -8,40 +8,40 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 ### 路由前缀
 
-- 标准 API 根路由：统一采用 `/api/v2` 前缀（例如 `GET /api/v2/actions`、`POST /api/v2/actions/:id/run`）。
-- 虚拟投影视图命名空间路由：统一采用 `/views/:viewName/api/v2/*` 前缀（例如 `GET /views/:viewName/api/v2/actions`、`POST /views/:viewName/api/v2/actions/:id/run`、`GET /views/:viewName/api/v2/config`）。
-  - 视图端点隔离：请求带有 `/views/:viewName` 前缀的端点时，服务端自动激活该指定视图的安全策略（包括该视图独立的 Bearer 令牌、`packageAllowlist` 与 `actionAllowlist` 并集授权声明及管理权限开关）。
-  - 视图专属 MCP 协议端点：挂载在 `/views/:viewName/mcp` 路径下，各视图的工具集合与调用权限严格限定在该视图权限范围内。
-  - 子路径规范化防穿透：服务端在解析视图请求时，对 `:viewName` 之后的子路径执行规范化解析，自动消除多斜杠并解析相对路径跳转，防范命名空间混淆与目录穿透。
-  - 视图未找到拦截：若请求的 `:viewName` 未在服务端注册，直接返回 HTTP 404 状态码与 `NOT_FOUND` 错误。
-- 根路径向后兼容与智能视图匹配：
-  - 传统根路径路由（如 `/health`、`/doctor`、`/info`、`/packages`、`/actions`、`/runs`、`/playbooks`）自动映射至对等的 `/api/v2/*` 端点，既有调用无需修改路径。
-  - 智能令牌视图匹配：当客户端直接请求根路径路由（`/api/v2/*` 或 `/mcp`）时，服务端提取请求中的 Bearer 令牌并遍历已注册视图；若命中匹配，自动激活该视图对应的安全策略。若未提供令牌或未命中任何自定义视图，则平滑回退至默认视图策略。
+- 标准 API 根路由：统一采用 `/api/v2` 前缀。例如 `GET /api/v2/actions`。
+- 虚拟投影视图命名空间路由：统一采用 `/views/:viewName/api/v2/*` 前缀。
+  - 视图端点隔离：带有前缀的端点激活指定视图的安全策略。策略包含独立令牌、白名单与管理权限。
+  - 视图专属 MCP 协议端点：挂载在 `/views/:viewName/mcp` 路径下。工具集合限定在视图权限内。
+  - 子路径规范化防穿透：服务端解析子路径时消除多斜杠与相对跳转。该机制防范目录穿透。
+  - 视图未找到拦截：若请求的 `:viewName` 未注册，返回 404 与 `NOT_FOUND` 错误。
+- 根路径向后兼容与视图匹配：
+  - 传统根路径路由自动映射至对等的 `/api/v2/*` 端点。既有调用无需修改路径。
+  - 智能令牌视图匹配：客户端请求根路径路由时，服务端提取 Bearer 令牌并遍历视图。若命中则激活对应视图策略。未提供令牌或未命中时回退至默认视图。
 
 ### 身份鉴权机制
 
-服务端监听在非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，强制要求配置鉴权令牌（通过启动参数 `--token`、环境变量 `ACTIONDOCK_TOKEN` 或视图独立配置中的 `token` 注入）。所有受保护端点支持以下认证方式：
+服务端监听在非回环地址时，强制要求配置鉴权令牌。可通过启动参数 `--token` 或环境变量 `ACTIONDOCK_TOKEN` 注入。受保护端点支持以下认证方式：
 
-- **HTTP 请求头鉴权（标准推荐方式）**：
+- **HTTP 请求头鉴权**：
   ```text
   Authorization: Bearer <token>
   ```
-- **URL 查询参数鉴权（受控可选方式）**：
+- **URL 查询参数鉴权**：
   ```text
   ?token=<token>
   ```
   > [!IMPORTANT]
-  > **安全策略提示**：出于安全防御考量（防范 Token 泄露至浏览器历史、服务端访问日志及 Referer 引用头），URL 查询参数鉴权**默认处于关闭状态**。仅当服务端启动时显式开启 `--allow-query-token` 开关时，服务端才允许解析 URL 查询参数中的 Token。生产环境强烈建议仅使用请求头鉴权。
+  > **安全策略提示**：URL 查询参数鉴权默认关闭。该设计防范 Token 泄露至日志。仅在显式开启 `--allow-query-token` 时允许该参数。生产环境建议仅使用请求头鉴权。
 
-- **虚拟投影视图独立令牌**：在单端口多视图服务中，每个虚拟视图可声明独立的鉴权令牌。当访问 `/views/:viewName/...` 命名空间端点时，必须提供与该视图相匹配的 Bearer 令牌；访问根路径端点时，服务端通过常数时间比对自动识别令牌归属的视图。
-- **防时序侧信道攻击**：令牌校验底层采用 Node.js 原生的常数时间比对算法（`crypto.timingSafeEqual`），遍历全部已注册视图执行比对，彻底防范时序侧信道嗅探。
-- **未授权拦截**：当配置了令牌且客户端未提供有效凭据时，服务端一律拒绝请求并返回 HTTP 401 状态码与 `UNAUTHORIZED` 错误。
+- **虚拟投影视图独立令牌**：每个虚拟视图可声明独立的鉴权令牌。访问命名空间端点必须提供匹配的令牌。访问根路径端点时，服务端自动识别令牌归属的视图。
+- **防时序侧信道攻击**：令牌校验采用常数时间比对算法（`crypto.timingSafeEqual`）。系统遍历已注册视图执行比对，防范时序侧信道攻击。
+- **未授权拦截**：配置了令牌但客户端未提供凭据时，服务端拒绝请求。服务端返回 401 与 `UNAUTHORIZED` 错误。
 
 ### 视图授权语义
 
-- 视图以 `packageAllowlist` 与 `actionAllowlist` 声明授权范围，两份白名单取并集。视图可声明 `"packageAllowlist": ["pkg-a"]`、`"actionAllowlist": ["pkg-b/read"]`，表示 pkg-a 整包与 pkg-b/read 单动作的并集授权；整包授权包含未来新增动作，单动作引用必须全限定且不支持通配符。
-- 某一白名单省略或为空数组只表示不增加该项授权，另一白名单的授权仍生效；两份白名单均无授权时，包与动作清单为空，执行请求被拒绝。`packageAllowlist: ["*"]` 显式开放全部，但不会自动开启配置与状态管理接口。
-- 仅获单动作授权的包只返回必要身份元数据与已授权动作，不展开其他动作、配置、规程或目录路径；发现结果以真实注册动作为准，不用授权声明伪造能力。动作列表、详情、执行与运行记录按同一授权策略判断；规程、包级诊断与配置状态管理另需整包授权，管理接口仍需 `enableManagement: true`。受限授权下 `package=global` 不能绕过授权。
+- 视图以 `packageAllowlist` 与 `actionAllowlist` 声明范围。两份白名单取并集。整包授权包含未来新增动作。单动作引用必须为全限定格式，不支持通配符。
+- 白名单省略表示不增加授权。两份白名单均无授权时，清单为空，服务端拒绝执行请求。`packageAllowlist: ["*"]` 显式开放全部，但不开启管理接口。
+- 单动作授权包仅返回必要身份元数据与授权动作，不展开其他内容。动作列表、详情与执行记录按同一策略判断。规程与管理端点需要整包授权。受限授权下 `package=global` 不能绕过授权。
 
 ### HTTP 状态码映射标准
 
@@ -57,7 +57,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 | `410 Gone` | SSE 事件流断点续传游标在服务端已过期清理 | `EVENT_CURSOR_EXPIRED` |
 | `413 Payload Too Large` | 请求体体积超过服务端配置的安全上限（默认 1MB） | `REQUEST_TOO_LARGE` |
 | `504 Gateway Timeout` | Action 执行超时，超过了配置或请求指定的时限 | `ACTION_TIMEOUT` |
-| `500 Internal Server Error` | Action 内部抛出未捕获异常或服务端底层故障 | `ACTION_EXECUTION_ERROR`, `ACTION_START_FAILED` |
+| `500 Internal Server Error` | Action 内部抛出未捕获错误或服务端底层错误 | `ACTION_EXECUTION_ERROR`, `ACTION_START_FAILED` |
 
 ---
 
@@ -68,7 +68,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 用于容器健康检测、Kubernetes 就绪探针与负载均衡存活探查：
 
 - 请求方式：`GET`
-- 鉴权说明：若服务端配置了鉴权令牌，访问本端点同样需要通过鉴权校验；未配置令牌时可公开访问。
+- 鉴权说明：服务端配置令牌时需要通过鉴权校验。未配置令牌时可公开访问。
 - 响应状态码：200
 - 响应数据结构：
   ```json
@@ -80,7 +80,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
     "uptime": 3600.5
   }
   ```
-  （若服务端启动时开启了 `--expose-debug-info`，响应中会额外包含 `projectRoot` 字段）。
+  （若服务端启动时开启了 `--expose-debug-info`，响应中额外包含 `projectRoot` 字段）。
 
 ### 环境体检诊断 (`GET /api/v2/doctor`)
 
@@ -117,7 +117,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求方式：`GET`
 - 鉴权说明：需要有效 Bearer 令牌。
 - 查询参数：
-  - `intent`（可选）：按自然语言意图或关键词过滤相关能力。
+  - `intent`（可选）：按关键词过滤能力。
   - `package` 或 `packageId`（可选）：下钻查看指定包的完整详情。
   - `tree=true`（可选）：返回工作区层级树结构。
 - 响应数据结构（平铺于顶层，非嵌套于 `data` 下）：
@@ -160,7 +160,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
     {
       "ok": true,
       "type": "tree",
-      "packages": [...]
+      "packages": []
     }
     ```
 
@@ -201,7 +201,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   - `package` 或 `packageId`（可选）：按所属包筛选。
   - `prefix`（可选）：按 Action 标识前缀筛选。
   - `tag`（可选，可重复）：按标注标签筛选。
-- 白名单过滤：若服务端配置了 `-P, --package` 或 `-A, --action` 白名单，列表中仅返回同时满足白名单条件的 Action。
+- 白名单过滤：若服务端配置了 `-P, --package` 或 `-A, --action` 白名单，列表中仅返回满足白名单条件的 Action。
 - 响应结构：直接返回 Action 规范对象数组：
   ```json
   [
@@ -230,7 +230,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`GET /api/v2/actions/:actionId`
   - 多包模式：`GET /api/v2/packages/:packageId/actions/:actionId`
-- 响应结构：直接返回单个 `ActionSpec` 规范对象（结构同数组单项）。若 Action 不存在则返回 404 与 `ACTION_NOT_FOUND`；若服务端配置了 `-P, --package` 且目标包未在白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED`；若服务端配置了 `-A, --action` 且目标动作未在白名单中，返回 403 与 `ACTION_FORBIDDEN`。
+- 响应结构：直接返回单个 `ActionSpec` 规范对象。若 Action 不存在返回 404 与 `ACTION_NOT_FOUND`。目标包未在白名单中返回 403 与 `PACKAGE_NOT_ALLOWED`。目标动作未在白名单中返回 403 与 `ACTION_FORBIDDEN`。
 
 ---
 
@@ -238,12 +238,12 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 #### 同步阻塞执行 (`POST /api/v2/actions/:actionId/run`)
 
-直接同步执行目标 Action，等待其运行结束并返回最终结果信封：
+直接同步执行目标 Action，等待其执行结束并返回最终结果信封：
 
 - 请求端点：
   - 简短模式：`POST /api/v2/actions/:actionId/run`
   - 多包模式：`POST /api/v2/packages/:packageId/actions/:actionId/run`
-- 白名单约束：若服务端启动时配置了 `-P, --package` 包白名单或 `-A, --action` 动作白名单，请求未列入白名单的包或动作将被服务端阻断拦截，分别返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。同时配置时需同时满足两项白名单约束。
+- 白名单约束：服务端拦截未列入白名单的请求。服务端分别返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。同时配置时需满足两项约束。
 - 请求头支持：
   - `Authorization: Bearer <token>`
   - `Content-Type: application/json`
@@ -298,7 +298,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   - 简短模式：`POST /api/v2/actions/:actionId/start`
   - 多包模式：`POST /api/v2/packages/:packageId/actions/:actionId/start`
 - 请求体与请求头参数与同步模式完全一致。
-- 白名单约束：与同步模式一致，未列入白名单的包或动作将被服务端阻断拦截，分别返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
+- 白名单约束：与同步模式一致。服务端拦截未列入白名单的请求，分别返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 - 响应状态码：202 Accepted
 - 响应数据结构：
   ```json
@@ -312,21 +312,21 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 ---
 
-## 运行历史、取消与事件流端点
+## 执行历史、取消与事件流端点
 
 ### 查询执行历史记录 (`GET /api/v2/runs`)
 
 - 请求方式：`GET`
 - 鉴权说明：需要有效 Bearer 令牌。
-- 白名单过滤：若服务端配置了包白名单或动作白名单，返回的历史记录列表自动过滤，仅包含符合白名单条件的记录。
+- 白名单过滤：配置白名单时，返回的历史记录仅包含符合条件的记录。
 - 查询参数：
-  - `limit`（可选）：最大返回记录数，**默认值为 50**，夹紧在 1 至 500 区间。
+  - `limit`（可选）：最大返回记录数，默认值为 50，夹紧在 1 至 500 区间。
   - `offset`（可选）：偏移游标条数（跳过的记录数），缺省为 0，与 `limit` 组合实现分页遍历。
-  - `status`（可选）：按运行状态筛选。状态包含进行中状态（`pending`、`running`）以及终态（`success`、`failed`、`cancelled`、`timed_out`、`interrupted`）。
+  - `status`（可选）：按执行状态筛选。状态包含进行中状态（`pending`、`running`）以及终态（`success`、`failed`、`cancelled`、`timed_out`、`interrupted`）。
   - `actionId`（可选）：按动作标识筛选。
   - `packageId`（可选）：按包标识筛选。
   - `intent`（可选）：按关键词意图筛选。
-  - `requestIds`（可选）：按幂等请求标识反查关联运行记录，支持重复参数（`requestId=a&requestId=b` 或 `requestIds=a&requestIds=b`）形式传递多个标识，每一个标识均作为不作解释的原样字符串（保留内部逗号与首尾空格），仅命中当前包范围内经 idempotency_keys 登记的记录。
+  - `requestIds`（可选）：按幂等请求标识反查关联记录。支持重复参数形式传递多个标识。每个标识保留原样字符串。仅命中当前包范围内的已登记记录。
 - 响应数据结构：
   ```json
   {
@@ -347,20 +347,20 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
     ]
   }
   ```
-  执行时携带幂等请求标识（`Idempotency-Key` 请求头或 `requestId` 字段）的记录在返回体中携带 `requestId` 字段；无幂等登记的记录不包含该字段。
+  执行时携带幂等标识的记录在返回体中携带 `requestId` 字段。无幂等登记的记录不包含该字段。
 
-- 运行来源追踪属性（可选 `origin` 字段）：
-  - 结构定义：`origin` 包含 `channel`（`http` 或 `mcp`）、`viewName`（生效的服务视图名称，默认 `default`）与 `authenticated`（是否通过该视图配置的非空令牌完成鉴权）。
-  - 来源可信：来源由服务端根据实际生效视图生成，不接受请求体声明。业务 `input.origin` 仍属于普通输入数据。未配置令牌的视图记为 `authenticated: false`，不会因为请求携带任意令牌就视为已鉴权。
-  - 凭据安全：不保存任何令牌原文、片段或摘要。视图名只能关联访问配置，不能识别共享令牌的实际使用者或区分令牌轮换版本。
-  - 调用继承：嵌套及跨包子调用继承根调用来源，父子运行关系仍由 `rootRunId` 与 `parentRunId` 描述。
-  - 历史兼容：存量旧记录与常规本地 CLI 或 STDIO 执行继续缺省 `origin` 字段。
-  - 幂等语义：重复提交幂等请求命中既有记录时，返回已记录的首次运行来源，不覆盖旧来源。来源追踪不改变幂等作用域和访问权限，也不记录未创建运行的访问尝试。
+- 执行来源追踪属性（可选 `origin` 字段）：
+  - 结构定义：`origin` 包含 `channel`、`viewName` 与 `authenticated`。
+  - 来源可信：服务端根据实际生效视图生成来源，不接受请求体声明。未配置令牌的视图记为 `authenticated: false`。
+  - 凭据安全：服务端不存储令牌原文或摘要。视图名仅关联访问配置。
+  - 调用继承：嵌套子调用继承根调用来源。执行关系由 `rootRunId` 与 `parentRunId` 描述。
+  - 历史兼容：存量旧记录与本地 CLI 或 STDIO 执行缺省 `origin` 字段。
+  - 幂等语义：重复提交幂等请求命中既有记录时，返回首次执行来源，不覆盖旧来源。来源追踪不记录未生成执行的访问尝试。
 
 ### 查询单次执行详情 (`GET /api/v2/runs/:runId`)
 
 - 请求方式：`GET`
-- 响应结构：直接返回单个 `RunRecord` 实体对象。若任务不存在返回 404 与 `RUN_NOT_FOUND`；若任务所属包或动作未在允许白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
+- 响应结构：直接返回单个 `RunRecord` 实体对象。若任务不存在返回 404 与 `RUN_NOT_FOUND`。若任务所属包或动作未在允许白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 
 ### 取消正在执行的任务 (`POST /api/v2/runs/:runId/cancel`)
 
@@ -400,13 +400,13 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 批量清理历史执行记录：
 
-- 授权范围：受限授权下，必须显式指定已获整包授权的包或精确到已授权动作。未指定范围、对仅获单动作授权的包发起整包清理，或请求未授权动作，均返回 403 且不执行清理。`packageAllowlist: ["*"]` 保留全局清理能力。
+- 授权范围：受限授权下，必须显式指定已获整包授权的包或精确到已授权动作。未指定范围或请求未授权动作均返回 403。`packageAllowlist: ["*"]` 保留全局清理能力。
 - 请求参数（支持查询参数或 JSON 请求体）：
   - `packageId`：按目标包标识过滤
   - `actionId`：按目标动作标识过滤
   - `status`：按状态过滤（如 `success`、`failed`、`cancelled`、`timed_out`、`interrupted`）
   - `olderThan` 或 `olderThanMs`：仅清理早于指定时间跨度的记录（支持 `14d`、`7d`、`24h`、`30m` 或毫秒数值）
-  - `keep`：保底保留的最新记录条数（例如 `keep: 100` 表示保留最新的 100 条，删除其余匹配记录）
+  - `keep`：保底保留的最新记录条数
 - 响应样例：
   ```json
   {
@@ -417,9 +417,9 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 ### 按保留策略自动清理历史记录 (`POST /api/v2/runs/clean-expired`)
 
-基于时间与数量双重保留策略，清理过期的终态运行记录与超出上限的最旧记录：
+基于时间与数量双重保留策略，清理过期的终态执行记录：
 
-- 授权范围：此接口不支持按包与动作限定范围，受限授权一律返回 403，仅 `packageAllowlist: ["*"]` 显式全量授权可以调用。
+- 授权范围：该接口不支持按包与动作限定范围。受限授权返回 403。仅全量授权（`packageAllowlist: ["*"]`）可以调用。
 - 请求方式：`POST`
 - 请求参数（JSON 请求体，可选覆盖默认策略）：
   - `maxAgeMs`：最大保留时长（毫秒，默认 14 天）
@@ -439,13 +439,13 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 - 请求方式：`GET`
 - 响应头：`Content-Type: text/event-stream`
-- 白名单校验：若任务所属包或动作未在允许白名单中，服务端拒绝推送并返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
+- 白名单校验：若任务所属包或动作未在允许白名单中，服务端拒绝推送并返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 - 断点续传支持：
   - 客户端可在请求头携带 `Last-Event-ID: <eventId>`，或在 URL 中添加 `?after=<eventId>`。
   - 服务端从指定游标之后恢复推送。
-  - 若游标在服务端已过期清理，服务端返回 HTTP 410 Gone 与错误码 `EVENT_CURSOR_EXPIRED`。
+  - 若游标已过期清理，服务端返回 410 与 `EVENT_CURSOR_EXPIRED`。
 - 背压控制：
-  - 若客户端消费速度过慢导致内部事件队列积压超限，服务端推送包含 `EVENT_BACKPRESSURE_LIMIT` 错误码的终止事件并关闭连接，防止服务端内存溢出。
+  - 客户端消费过慢导致队列超限时，服务端推送包含 `EVENT_BACKPRESSURE_LIMIT` 错误码的终止事件并关闭连接。
 
 ---
 
@@ -462,21 +462,21 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`GET /api/v2/playbooks/:id`
   - 多包模式：`GET /api/v2/packages/:packageId/playbooks/:playbookId`
-- 响应结构：返回规程定义对象（包含 `id`, `name`, `description`, `filePath`, `actions` 等）。未找到时返回 404 与 `PLAYBOOK_NOT_FOUND`。
+- 响应结构：返回规程定义对象。未找到时返回 404 与 `PLAYBOOK_NOT_FOUND`。
 
 ---
 
 ## 管理类端点（配置与持久化状态）
 
 > [!IMPORTANT]
-> **管理接口开启门禁**：所有 `/api/v2/config` 与 `/api/v2/state` 管理路由默认处于禁用状态。必须在服务端启动时显式传入 `--management` 参数，或在对应虚拟视图配置中设置 `enableManagement: true`，否则服务端统一返回 HTTP 403 Forbidden 与 `CAPABILITY_UNAVAILABLE` 错误。
+> **管理接口开启门禁**：配置与状态管理路由默认禁用。服务端启动时须传入 `--management` 参数，或在视图中配置 `enableManagement: true`。否则返回 403 与 `CAPABILITY_UNAVAILABLE` 错误。
 
 ### 配置安全列表查询 (`GET /api/v2/config`)
 
 获取当前包或全局配置的安全脱敏视图：
 
 - 请求方式：`GET`
-- 查询参数：`package` 或 `packageId`（可选，缺省为默认包或全局）。传入 `key` 时改为单键查询，返回下面单项接口的 `item` 结构，可查询仅由环境变量提供的模板实例。
+- 查询参数：`package` 或 `packageId`（可选，缺省为默认包或全局）。传入 `key` 时改为单键查询，返回下面单项接口的 `item` 结构。
 - 响应数据结构：
   ```json
   {
@@ -519,10 +519,10 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   }
   ```
 - 兼容性与安全说明：
-  - 响应保留 `values` 字典作为安全投影（顶层敏感整项替换为 `********`，对象内部敏感字段进行局部掩码；整项隐藏且无生效值时为 `undefined`）。
-  - `configViewVersion: 1` 标识结构化安全视图协议版本，为必选字段；缺失时客户端拒绝响应。
-  - `items` 数组提供完整的 `ConfigValueView` 对象列表，精确表达配置是否显式配置（`configured`）、来源（`source`，仅允许 `override`、`package`、`global`、`env`、`default` 或 `null`）与脱敏路径（`redactedPaths`）。
-  - `masked` 字典提供敏感键到脱敏 JSON 指针路径的直接映射。
+  - 响应保留 `values` 字典作为安全投影。顶层敏感整项替换为 `********`。对象内部敏感字段局部掩码。
+  - `configViewVersion: 1` 标识协议版本，为必选字段。缺失时客户端拒绝响应。
+  - `items` 数组提供 `ConfigValueView` 对象列表，表达配置状态与脱敏路径。
+  - `masked` 字典提供敏感键到脱敏路径的映射。
 
 ### 单项配置安全调阅 (`GET /api/v2/config/:key`)
 
@@ -531,7 +531,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求方式：`GET`
 - 路径参数：`:key` 为具体配置键名（拒绝 `*` 通配符）
 - 查询参数：`package` 或 `packageId`（可选）
-- 核心客户端使用等价的 `GET /api/v2/config?key=<编码后的键名>`，避免 `env` 等键名与诊断路由冲突；服务端必须返回同键完整单项视图，无匹配项返回同键 `source: null` 视图，不支持 `key` 参数的旧服务端将被客户端拒绝。
+- 客户端使用 `GET /api/v2/config?key=<编码键名>` 避免路由冲突。服务端须返回同键完整视图。无匹配项返回 `source: null` 视图。客户端拒绝不支持 `key` 参数的旧服务端。
 - 响应数据结构：
   ```json
   {
@@ -552,14 +552,14 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 ActionDock 核心客户端对远端配置响应执行统一归一化处理：
 
-- 本地与远端脱敏并集：客户端结合本地与服务端声明，严格取保护规则并集；本地声明只能加强远端保护，不能撤销服务端标记。整项隐藏可合法省略 `value` 但必须携带根隐藏路径；可选敏感字段缺失时 `value` 为正常对象且 `redactedPaths` 为空列表，缺明文不等于未配置。
-- 协议版本门槛：仅接受 `configViewVersion: 1` 的响应；缺失该字段视为不受支持的旧服务端，直接抛出 `PROTOCOL_UNSUPPORTED` 协议契约错误。
-- 来源与状态自洽校验：`source` 必须为合法 `ConfigSource` 值（`override`、`package`、`global`、`env`、`default`、`null`）；`null` 与 `default` 必须 `configured: false` 且 `null` 不得携带生效值或隐藏路径，显式来源必须 `configured: true`；声明有来源时必须有实际生效值，整项隐藏可省略 `value` 但必须携带根隐藏路径。校验失败同样抛出 `PROTOCOL_UNSUPPORTED`，客户端不猜测来源、不伪造、不执行旧协议列表回退。
-- 单项查询严格契约：`GET /api/v2/config?key=` 要求服务端返回 `configViewVersion: 1` 且 `item` 为与请求键一致的单项视图；无匹配项由服务端返回同键 `source: null` 视图，客户端拒绝列表响应或缺失 `item` 的响应，不用空列表伪装单项未命中。
+- 本地与远端脱敏并集：客户端结合本地与服务端声明，取保护规则并集。本地声明只能加强远端保护。整项隐藏省略 `value` 时必须携带根隐藏路径。
+- 协议版本门槛：客户端仅接受 `configViewVersion: 1` 的响应。缺失该字段时抛出 `PROTOCOL_UNSUPPORTED` 协议错误。
+- 来源与状态自洽校验：`source` 必须为合法的 `ConfigSource` 值。该值必须与 `configured` 状态自洽。校验失败时抛出 `PROTOCOL_UNSUPPORTED`。客户端不猜测来源。
+- 单项查询严格契约：单项查询要求服务端返回对应键的单项视图。无匹配项时服务端返回 `source: null` 视图。客户端拒绝列表响应，不用空列表伪装单项未命中。
 
 ### 环境变量满足度体检 (`GET /api/v2/config/env`)
 
-检查当前包在宿主操作系统环境变量中所需配置的满足情况：
+校验当前包在宿主环境变量中所需配置的满足情况：
 
 - 请求方式：`GET`
 - 查询参数：`package` 或 `packageId`（可选）
@@ -604,11 +604,11 @@ ActionDock 服务端内嵌支持标准 MCP 协议端点，便于 AI 智能体通
 
 - 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
 - 鉴权说明：需携带当前生效的 Bearer 令牌。
-- 策略约束：继承全局策略或基于令牌自动匹配的视图策略，`tools/list` 仅返回授权范围内的工具，`tools/call` 严格实施授权校验。
+- 策略约束：继承全局策略或匹配的视图策略。`tools/list` 仅返回授权范围内的工具。`tools/call` 严格校验授权。
 
 ### 虚拟视图专属 MCP 端点 (`POST /views/:viewName/mcp`)
 
 - 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
 - 鉴权说明：需携带与 `:viewName` 视图匹配的 Bearer 令牌。
-- 策略约束：严格限定在该视图的 `packageAllowlist` 与 `actionAllowlist` 并集授权范围内。单动作授权包的规程不得通过 MCP 资源与提示暴露，未授权工具不可调用。
-- 视图禁用状态：若目标视图配置了 `enableMcp: false`，服务端拒绝连接并返回 HTTP 404 状态码与 `NOT_FOUND` 错误。
+- 策略约束：严格限定在视图的授权范围内。单动作授权包的规程不得通过 MCP 资源与提示暴露，未授权工具不可调用。
+- 视图禁用状态：若目标视图配置了 `enableMcp: false`，服务端拒绝连接并返回 404 与 `NOT_FOUND` 错误。

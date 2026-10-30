@@ -1,26 +1,30 @@
 # Playbook 规程编写指南
 
-Playbook 是面向智能体的**标准作业规程**（SOP）。
-
-如果说 Action 决定了智能体「能做什么」，那么 Playbook 规定了智能体「该怎么做、按什么顺序做、遇到错误如何分支、哪些高危操作绝不能做」。在「人定规程，智能体写实现」的协作模式下，Playbook 是人类划定业务边界与安全底线的核心抓手。
+Playbook 是面向智能体的标准作业规程。
+Action 规定智能体能执行的操作。
+Playbook 规定智能体执行步骤、分支策略与禁忌操作。
+Playbook 是划定业务边界与安全底线的规程。
 
 ---
 
 ## 规程的核心价值与设计哲学
 
-在模型调用工具时，仅靠零散的接口描述往往无法保证业务流程合规：
+在模型调用工具时，仅靠零散的接口描述无法保证流程合规：
 
-- 模型可能会遗漏必要的前置检查（例如在合并代码前未确认持续集成检查是否全部通过）。
-- 在多步骤复合操作中极易出现步骤时序倒错或参数幻觉。
-- 缺乏明确的安全红线与阻断规则，容易误触高危逻辑或误删生产数据。
+- 模型可能会遗漏必要的前置校验（例如合并代码前未确认持续集成校验通过）。
+- 在多步骤操作中可能出现步骤倒错或参数幻觉。
+- 缺乏明确的安全红线，可能误触高危逻辑或删除数据。
 
-Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdown 文件，统一存放在 `playbooks/` 目录下，作为智能体理解任务意图与规避风险的标准指导书。
+Playbook 将业务流程与经验整理为 Markdown 文件。
+文件统一存放在 `playbooks/` 目录下。
+规程作为智能体理解任务意图与规避风险的指导书。
 
 ---
 
 ## 清单配置与单一事实源
 
-在 ActionDock 2.x 中，`actiondock.json`（规范版本 `schemaVersion: 2`）是动作与规程清单的唯一事实源。Playbook 的条目在清单中显式登记：
+在 ActionDock 2.x 中，`actiondock.json` 是清单的唯一事实源。
+Playbook 条目在清单中登记：
 
 ```json
 {
@@ -44,13 +48,16 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 - `entry`：Playbook Markdown 文件的相对路径。
 - `description`：规程功能描述与意图匹配提示。
-- `actions`：该 Playbook 所依赖或调用的 Action 标识列表（支持当前包动作或 `<package-id>/<action-id>` 跨包完全限定标识符）。
+- `actions`：该 Playbook 所依赖或调用的 Action 标识列表（支持当前包动作或跨包完全限定标识符）。
 
 ---
 
 ## Playbook Markdown 文档编写规范
 
-规程文档存放在项目根目录的 `playbooks/` 文件夹下，采用纯 Markdown 格式。正文严禁编写 YAML Frontmatter，所有元数据统一在 `actiondock.json` 中配置。正文用于指导智能体按照规范逻辑执行：
+规程文档存放在 `playbooks/` 目录下，采用 Markdown 格式。
+正文严禁编写 YAML Frontmatter。
+所有元数据统一在 `actiondock.json` 中配置。
+正文用于指导智能体按规范逻辑执行：
 
 ```markdown
 # PR 自动化审查操作规程
@@ -77,8 +84,10 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 ## 传递依赖能力委托
 
-在多包依赖体系中，传递依赖包中的内部 Action 默认不对外公开根调用权限。
-若某个可见的 Playbook 点名声明了传递包中的 Action，宿主便建立起委托关系，仅允许外部通过该 Playbook 关联规程调用该特定 Action，同时继续隐藏传递包的其他内部 Action，保障依赖封装性。
+在多包依赖体系中，传递依赖包中的内部 Action 默认不对外公开。
+若可见的 Playbook 显式声明了传递包中的 Action，宿主形成委托关系。
+外部仅可通过该规程调用该 Action。
+宿主继续隐藏其他内部 Action，保障封装性。
 
 ---
 
@@ -102,16 +111,18 @@ ActionDock 提供专用命令用于查看与校验 Playbook：
   ad playbook validate
   ad playbook validate review-pr
   ```
-  校验器自动检查清单中的入口文件是否存在、声明引用的 Action 是否存在于当前包或已声明的依赖包中。
+  校验器校验清单中的入口文件是否存在。
+  校验器校验声明引用的 Action 是否存在于当前包或依赖包中。
 
 ---
 
 ## 按 Playbook 依赖按需裁剪导出 Skill
 
-在将大型 Action Package 分发为 Skill 资产时，可以通过 `--playbook` 参数仅导出该 Playbook 所需的最小 Action 依赖子集：
+分发大型 Action Package 为 Skill 资产时，可通过 `--playbook` 导出最小依赖子集：
 
 ```bash
 ad export skill --playbook review-pr --out ./dist/review-pr-skill
 ```
 
-导出引擎会自动分析依赖图，裁剪掉未在 `actions` 依赖闭包中声明的无关文件，生成极简自包含的专属 Skill 资产。
+导出引擎分析依赖图，裁剪未在 `actions` 闭包中声明的文件。
+工具链导出自包含的专属 Skill 资产。

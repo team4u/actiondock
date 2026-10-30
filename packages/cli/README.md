@@ -6,15 +6,15 @@ ActionDock 2.x 官方命令行门面工具链。
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/cli` 提供 `ad` 命令行接口，用于开发、测试、构建、分发和运行 AI 智能体工具与技能。
+`@actiondock/cli` 提供 `ad` 命令行接口。工具用于开发、测试、构建、分发与执行 AI 智能体工具及技能。
 
 ---
 
-## 运行环境
+## 环境要求
 
-- 原生基于 Node.js >=24.12.0 运行，充分依托原生类型擦除、内置 SQLite 与原生 HTTP 特性。
-- 支持 npm、pnpm 与 yarn 标准包管理器进行全局安装与项目级管理。
-- 日常开发、调试、测试、构建、打包、MCP 服务启动与 HTTP 部署完全基于 Node.js 与 npm 标准工作流，无需安装外部编译器。
+- 原生基于 Node.js >=24.12.0 执行。底层依托原生类型擦除、内置 SQLite 与原生 HTTP 特性。
+- 支持 npm、pnpm 与 yarn 标准包管理器全局安装与管理项目。
+- 日常开发、测试、构建与打包基于 Node.js 与 npm 工作流。服务无需外部编译器。
 
 ---
 
@@ -67,7 +67,7 @@ printf '这是一段正文' | ad run summarize --stdin-field text -- style=brief
 cat input.json | ad run sample.greet --input-file -
 ```
 
-- 运行单元测试：
+- 执行单元测试：
 ```bash
 ad test
 ```
@@ -108,14 +108,14 @@ ad pack
 - `-v, -V, --version`：打印版本号并退出。
 - `-h, --help`：打印命令帮助并退出。
 - `--json`：以标准 JSON 格式输出结果。
-- `--data-dir <path>`：指定运行时数据库存储目录（包级 `runtime.db`、全局 `global.db` 与目录排他锁），实现多测试或多任务运行数据隔离。注意：本选项仅隔离 SQLite 数据文件，环境配置（profile）与全局注册表（registry）属于用户根目录资产，不受 `--data-dir` 影响。
-- `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录基准（默认对应操作系统的用户主目录）。如需隔离环境配置 `profiles.json`、全局注册表 `registry.json` 或本地证书，请通过设置此环境变量实现沙箱与自动化测试隔离。
+- `--data-dir <path>`：指定运行时数据库存储目录（包级 `runtime.db`、全局 `global.db` 与目录排他锁）。该目录隔离多测试或多任务执行数据。注意：本选项仅隔离 SQLite 数据文件。环境配置 profile 与全局注册表 registry 属于用户根目录资产，不受 `--data-dir` 影响。
+- `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录基准（默认对应操作系统用户主目录）。如需隔离配置 `profiles.json`、全局注册表 `registry.json` 或本地证书，请配置此环境变量隔离沙箱。
 
 ### 严格目标解析机制
 
-- 严格目标定位：通过 `-P, --package <id|path>` 指定目标包。系统严格区分物理路径与注册表包标识符，若目标不存在则不向当前目录或父级目录隐式回退，直接以参数校验错误退出。
-- 多目标检索契约：在执行多目标检索（如 `ad info` 或 `ad list`）时，若无任何匹配项，在机器模式下始终返回确定性空数组结构并以状态码 0 退出，不因空搜索产生异常中断。
-- 服务端细粒度白名单：通过 `ad serve` 启动微服务时，支持通过 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 分别指定包白名单与动作白名单（支持短名与全限定名，可多次指定或逗号分隔）。同时配置时取权限交集。未授权动作的详情调阅与执行均被阻断并返回 403 错误（错误码 `ACTION_FORBIDDEN`），历史运行记录与 MCP 协议工具暴露同步过滤。
+- 严格目标定位：通过 `-P, --package <id|path>` 指定目标包。系统严格区分物理路径与注册表包标识符。若目标不存在，系统不向当前或父级目录回退，直接退出并报告参数校验错误。
+- 多目标检索契约：执行多目标检索（如 `ad info` 或 `ad list`）且无匹配项时，机器模式返回空数组结构。命令以状态码 0 退出，不因空搜索产生中断。
+- 服务端细粒度白名单：通过 `ad serve` 启动微服务时，支持通过 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 分别指定包白名单与动作白名单。参数支持短名与全限定名，可多次指定或逗号分隔。同时配置两者时系统取权限交集。服务端阻断未授权动作的调阅与执行，返回 403 错误（错误码 `ACTION_FORBIDDEN`）。系统同步过滤历史执行记录与 MCP 协议工具暴露。
 
 ### Action 执行入参契约
 
@@ -132,21 +132,21 @@ ad pack
   - 根节点始终物化为对象。
   - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
   - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
-- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-- 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 完整正文原样绑定为指定顶层字段的字符串值（不解析类型、不剥 BOM、不修剪空白、空输入为空字符串）；可与扁平赋值组合，与 `--input` / `--input-file` 互斥；stdin 源字节与绑定后的最终入参序列化大小各自受默认 10MiB 上限约束，分别超限报 `INPUT_LIMIT_EXCEEDED` 与 `FLAT_INPUT_LIMIT_EXCEEDED`，JSON 转义放大也计入最终大小；严格 UTF-8 校验失败报读取错误。管道非事务，高风险写入先完整生成并校验再执行。
+- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）。未指定输入时默认为 `{}`。
+- 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 完整正文绑定为顶层字段字符串值。命令不解析类型，不剥离 BOM，不修剪空白，空输入视为空字符串。该参数可与扁平赋值组合，与 `--input` 及 `--input-file` 互斥。stdin 源字节与最终入参序列化大小受默认 10MiB 上限约束。超限时分别报告 `INPUT_LIMIT_EXCEEDED` 与 `FLAT_INPUT_LIMIT_EXCEEDED` 错误。JSON 转义放大计入最终大小。UTF-8 校验失败报告读取错误。管道非事务，高风险写入先完整构造并校验再执行。
 - 传统输入选项：
   - 简单内联参数：使用 `--input <json>` 直接解析 JSON 字符串。
   - 复杂对象文件：使用 `--input-file <path>` 读取文件并解析 JSON，避免各类终端的引号转义损坏。
   - 标准输入管道：使用 `--input-file -` 从标准输入读取全部数据并解析 JSON。
-  - 统一解析：JSON 输入在解析前剔除 UTF-8 BOM，默认大小上限为 10MiB；改用文件不会解除限制。原始文本绑定保留正文 BOM。
+  - 统一解析：JSON 输入在解析前剔除 UTF-8 BOM，默认大小上限为 10MiB。改用文件不会解除限制。原始文本绑定保留正文 BOM。
 
 ### Windows 与多终端传参建议
 
 针对 Windows PowerShell、cmd 以及各终端中复杂 JSON 容易遇到的双引号转义问题，推荐按以下规范传参：
 
 - 扁平参数传参（推荐）：使用 `--` 分隔并传参，如 `ad run greet -- name=Alice` 或 `ad run greet -- name=Alice count:=1`。
-- 复杂结构：推荐先保存为 JSON 文件并使用 `--input-file`，如 `ad run complex-action --input-file input.json`。
-- 动态生成输入：通过管道输出配合 `--input-file -` 传递，在 PowerShell 中可执行：
+- 复杂结构：推荐先存储为 JSON 文件并使用 `--input-file`，如 `ad run complex-action --input-file input.json`。
+- 动态构造输入：通过管道输出配合 `--input-file -` 传递，在 PowerShell 中可执行：
 
 ```powershell
 $data = @{
@@ -160,13 +160,13 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 
 ### Action 输出模式与机器模式
 
-- **默认纯文本输出**：`ad run` 默认采用纯文本模式。标量直接输出；结构化对象完整输出为标准 JSON 格式到 stdout；不进行私有业务字段自动嗅探。
+- **默认纯文本输出**：`ad run` 默认采用纯文本模式。标量直接输出。结构化对象输出为标准 JSON 格式到 stdout。系统不自动嗅探私有业务字段。
 - **显式正文输出与默认注解**：
-  - 显式指定正文字段：通过 `ad run <id> --text-field <field> -- ...` 提取结果中特定顶层自有字符串字段输出至 stdout（保留真实换行且无 JSON 转义），其余字段以 JSON 对象形式输出至 stderr（元数据为空时不输出）。
-  - 声明式默认正文：Action 清单中声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 时自动按声明提取正文与元数据；显式 `--text-field` 优先于默认注解。
-  - 严格校验与契约闭环：正文字段缺失、非字符串或返回数据非对象时，明确输出错误并以退出码 1 退出，不静默回退，不改写运行记录。契约通过 `ad describe` 呈现通道语义与覆盖指引，并通过 `ad validate` 进行纯静态元数据合规校验。
+  - 显式指定正文字段：通过 `ad run <id> --text-field <field> -- ...` 提取特定顶层字符串字段输出至 stdout。输出保留真实换行且无 JSON 转义。其余字段以 JSON 对象形式输出至 stderr。元数据为空时不输出。
+  - 声明式默认正文：清单声明 `annotations["actiondock.cli"] = { "textField": "<field>" }` 时，未指定 `--text-field` 自动按声明提取正文与元数据。显式 `--text-field` 优先于默认注解。
+  - 严格校验与契约约束：正文字段缺失、类型错误或返回非对象时，命令输出错误并以退出码 1 退出。系统不静默回退，不改写执行记录。`ad describe` 展示通道语义与覆盖指引。`ad validate` 静态校验元数据合规性。
   - 参数互斥：`--text-field` 与 `--json`、`--async` 严格互斥，在执行前校验并以退出码 2 退出。
-- **机器模式**（`--json`）：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。此时始终输出完整执行信封（包含 `ok`、`runId`、`data` 或 `error`），忽略默认正文注解；若参数解析出错输出标准错误信封并以退出码 2 退出。
+- **机器模式**（`--json`）：程序化消费、获取完整结构化数据或集成外部系统时，传入 `--json`。命令输出完整执行信封（包含 `ok`、`runId`、`data` 或 `error`），忽略默认正文注解。若参数解析出错，命令输出标准错误信封并以退出码 2 退出。
 
 ---
 
@@ -182,29 +182,29 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引、建议赋值与输出选择契约 |
 | `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--stdin-field` 绑定原始文本、`--text-field` 提取正文与 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范、模式规范与输出选择契约 |
-| `ad doctor` | 执行运行环境与项目结构健康诊断 |
+| `ad doctor` | 执行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码 |
 | `ad playbook list` / `show` | 查看智能体操作规程 Playbook |
 | `ad config list` / `get` / `set` | 管理包运行时配置与环境变量绑定 |
 | `ad state list` / `get` / `set` / `delete` / `clear` | 查看与维护 SQLite 持久化状态 |
-| `ad runs list` / `show` / `watch` / `clear` | 查询任务执行历史、阻塞等待运行终态聚合退出，或按时间与数量策略清理历史数据；list 支持 `--request-id` 过滤，watch 支持按 `--request-id` 反查等待（后台派工场景主控无 runId 时使用） |
+| `ad runs list` / `show` / `watch` / `clear` | 查询任务执行历史，阻塞等待终态并聚合退出，或按策略清理历史数据。list 支持 `--request-id` 过滤，watch 支持按 `--request-id` 反查等待。 |
 | `ad test` | 执行快速单元测试 |
 | `ad build` | 构建 Node.js 目录交付产物（支持 `--vendor-deps` 与 `--archive`） |
 | `ad pack` | 打包为标准 npm tarball（`.tgz`），支持 `--dry-run` |
 | `ad export skill` | 导出 Agent Skill 资产（默认单包源码浅导出，支持 `--standalone` 免全局工具自包含导出与 `--bundle-deps` 物化依赖） |
 | `ad link` / `unlink` | 注册或注销工作区全局路由与符号链接 |
 | `ad profile` | 管理远程执行节点凭证与环境配置 |
-| `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务（支持 `-P` 包白名单与 `-A` 动作白名单细粒度权限控制，原生支持 `--https` 自签名与生产证书） |
+| `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务。支持 `-P` 与 `-A` 白名单权限控制，原生支持 `--https` 证书。 |
 | `ad mcp` | 以 STDIO 或 HTTP 协议启动 MCP 服务 |
 
 ---
 
 ## 架构集成
 
-作为顶层门面与独立运行分发器，`@actiondock/cli` 串联以下子包：
+作为顶层门面与独立执行分发器，`@actiondock/cli` 串联以下子包：
 
-- 领域内核与运行时：依赖 [@actiondock/core](../core/README.md)，统一对接标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`），承载原生运行时、存储驱动与受管进程治理。
-- 构建与打包：依赖 [@actiondock/builder](../builder/README.md)，完成依赖闭包规划、Node 目录交付产物构建、npm 打包与 Agent Skill 资产导出。
+- 领域内核与运行时：依赖 [@actiondock/core](../core/README.md)。模块对接标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与服务门面（`createActionDock`、`connectActionDock`）。底层承载原生运行时、存储驱动与受管进程治理。
+- 构建与打包：依赖 [@actiondock/builder](../builder/README.md)。模块完成依赖闭包规划、Node 目录交付产物构建、npm 打包与 Agent Skill 资产导出。
 - 协议服务：通过 [@actiondock/mcp](../mcp/README.md) 启动 Model Context Protocol 协议监听与适配。
 
 ---

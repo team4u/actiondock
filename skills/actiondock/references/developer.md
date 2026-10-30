@@ -1,6 +1,6 @@
 # 参考手册：Action 与规程开发指南
 
-本参考手册面向 ActionDock 工具开发者，涵盖清单契约定义、业务代码实现、运行时上下文 API、级联调度规则以及单元测试规范。
+本参考手册面向 ActionDock 工具开发者。内容涵盖清单契约定义与业务代码实现。它阐述运行时上下文、级联调度规则与单元测试规范。
 
 ## 内容索引
 
@@ -18,7 +18,7 @@
 
 ## 清单契约定义 (`actiondock.json`)
 
-每个 Action 包的元数据与输入输出契约必须在工程根目录的 `actiondock.json`（规范版本号为 2）中声明，该文件是包运行时的唯一事实源。
+Action 包的元数据与契约在 `actiondock.json` 中声明。规范版本号为 2。该文件是包运行时的唯一事实源。
 
 ```json
 {
@@ -107,33 +107,33 @@
 ```
 
 - 配置声明规则：
-  - 单个 `*` 匹配一个或更多 `[A-Za-z0-9_.-]` 字符；具体键优先，再按模板最长字面前缀、最长后缀选择。模板不允许 `required`、`default`、`env`，不能作为 `get`、`set`、`delete` 的实键。
-  - 配置 `schema` 仅支持 `type`（`object`、`array`、`string`、`integer`、`number`、`boolean`）、`properties`、`required`、`additionalProperties`、`items`、`enum`、`minLength`、`maxLength`、`minimum`、`maximum` 与布尔扩展 `secret`。不支持 `$ref`、组合、条件、`default`、`format` 或其他关键字；外层 `type` 与根 `schema.type` 一致，外层 `number` 可以配合 `integer`。
-  - 顶层 `secret: true` 隐藏整项；模式中的 `secret: true` 隐藏对应节点。未知字段和类型不符的节点保守隐藏；已经整节点隐藏时不要求 `items` 或 `additionalProperties`。
-  - Action 的 `ctx.config.get` 对最终生效值执行模式校验，失败报 `CONFIG_VALUE_INVALID`，错误只包含键名、路径和原因。没有配置时仍返回 `undefined` 或调用方默认值；外层 `required` 只参与诊断。
-  - 管理视图不会修改执行原值，也不提供明文读取能力。全局管理脱敏合并各包保护范围；全局写入须通过所有匹配模式。避免将凭据放进清单默认值或枚举约束，对外声明会清理这些敏感内容。
-  - `ad config set` 的完整位置值、`--stdin`、扁平赋值及 `--stdin-field` 都先组装完整值，再按模式校验并整键替换，不做部分更新或对象合并。缺少密码等必填字段时报 `CONFIG_VALUE_INVALID` 并保留旧值；字段绑定不意味着保留其他旧字段，完整输入规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
-  - 上述声明同时驱动静态加密：当前声明判定敏感的配置键（顶层 `secret: true` 或模式字段级敏感）持久化时整键加密（AES-256-GCM），无需迁移命令；旧版明文库在升级后首次打开时自动加密存量敏感明文并升级为当前结构（v3）。密钥优先取 `ACTIONDOCK_ENCRYPTION_KEY` 环境变量，否则为 `~/.actiondock/keys/config.key`（`--data-dir` 时为 `<dataDir>/keys/config.key`）；旧版本程序拒绝打开 v3 库。状态存储不加密，不要把配置原值转存到状态并假定仍受配置安全视图保护。
-  - 底层存储集成：配置管理端口统一解析清单并传递敏感声明；直接调用 `RuntimeStorage.setConfig(key, value, { declarations })` 时由调用方传入有效声明，未传声明的新键按普通配置保存，已加密键仍保留加密与历史保护。`SqliteRuntimeStorage` 支持可选 `configDeclarations` 供打开旧库时自动迁移使用；`createNodePlatform({ configKeyProvider })` 可注入同步密钥提供器；测试用 `createConfigKeyProvider({ key: fixedTestKey })` 注入固定 32 字节测试密钥，数据库与密钥文件均放临时目录。
+  - 单个 `*` 匹配一个或更多 `[A-Za-z0-9_.-]` 字符。具体键优先，再按模板最长字面前缀与后缀匹配。模板不允许 `required`、`default` 与 `env`。模板不能作为 `get`、`set`、`delete` 的实键。
+  - 配置 `schema` 仅支持特定关键字：`type`、`properties`、`required`、`additionalProperties`、`items`、`enum`、`minLength`、`maxLength`、`minimum`、`maximum` 以及扩展 `secret`。配置不支持 `$ref`、组合、条件、`default` 或 `format`。外层 `type` 与根 `schema.type` 保持一致，外层 `number` 可配合 `integer`。
+  - 顶层 `secret: true` 隐藏整项。模式中的 `secret: true` 隐藏对应节点。未知字段和类型不符的节点保守隐藏。整节点隐藏时不要求 `items` 或 `additionalProperties`。
+  - Action 的 `ctx.config.get` 对最终生效值执行模式校验。校验失败抛出 `CONFIG_VALUE_INVALID`。错误只包含键名、路径和原因。没有配置时返回 `undefined` 或调用方默认值。外层 `required` 只参与诊断。
+  - 管理视图不会修改执行原值，也不提供明文读取能力。全局管理脱敏合并各包保护范围。全局写入须通过所有匹配模式。开发者避免将凭据放进清单默认值或枚举约束。对外声明会清理这些敏感内容。
+  - `ad config set` 先组装完整值，再按模式校验并整键替换。它不做部分更新或对象合并。缺少密码等必填字段时抛出 `CONFIG_VALUE_INVALID` 并保留旧值。字段绑定不意味着保留其他旧字段。输入规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+  - 上述声明同时驱动静态加密。声明判定敏感的配置键持久化时整键加密（AES-256-GCM）。操作无需迁移命令。升级后首次打开旧版明文库时，系统自动加密存量明文并升级结构（v3）。密钥优先取 `ACTIONDOCK_ENCRYPTION_KEY` 环境变量。若未提供，使用 `~/.actiondock/keys/config.key`（或 `<dataDir>/keys/config.key`）。旧版本程序拒绝打开 v3 库。状态保存不加密。开发者不要把配置原值转存到状态并假定其受保护。
+  - 底层保存集成：配置管理端口统一解析清单并传递敏感声明。调用 `RuntimeStorage.setConfig(key, value, { declarations })` 时传入有效声明。未传声明的新键按普通配置保存。已加密键保留加密与保护。`SqliteRuntimeStorage` 支持可选 `configDeclarations` 供迁移使用。`createNodePlatform({ configKeyProvider })` 可注入密钥提供器。测试时注入固定 32 字节测试密钥，数据库与密钥文件均放临时目录。
 
 - 清单字段说明：
-  - `actions`：声明 Action 标识符、执行源码入口、描述以及输入输出契约。其中 `inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范，推荐在字段或根对象层级添加 `examples` 示例数组，增强智能体参数识别精度。
-  - `annotations`：可选协议注解元数据。`"actiondock.cli": { "textField": "<field>" }` 指定普通 CLI 默认同步正文，将返回结果的该顶层自有字符串字段输出至 stdout，其余字段输出至 stderr。推荐在 `outputSchema` 中明确声明根对象和必填字符串字段；`ad describe` 展示选择方式，`ad validate` 拦截确定矛盾并报告风险警告。`--json` 保留完整结果，显式 `--text-field` 覆盖默认声明；目录型入口当前忽略该注解，保持原有输出规则。
-  - `files`：声明需要随包构建与导出的本地源码或文件目录（如 `src`、`lib` 或辅助模块）。若 Action 内部通过相对路径引用了包内公共模块，必须在此字段声明；未声明的文件在 `ad validate` 与 `ad export skill` 时会触发完整性强校验并直接报错阻断。
+  - `actions`：声明 Action 标识符、源码入口、描述与契约。`inputSchema` 与 `outputSchema` 遵循标准 JSON Schema 规范。推荐添加 `examples` 示例数组以增强识别精度。
+  - `annotations`：可选协议注解元数据。`"actiondock.cli": { "textField": "<field>" }` 指定普通 CLI 默认同步正文。它将结果的顶层字符串字段输出至 stdout，其余字段输出至 stderr。推荐在 `outputSchema` 中明确声明根对象和必填字符串字段。`ad describe` 展示选择方式。`ad validate` 拦截矛盾并报告警告。`--json` 保留完整结果。显式 `--text-field` 覆盖默认声明。目录型入口当前忽略该注解，保持原有输出规则。
+  - `files`：声明需要随包构建与导出的本地源码或目录（如 `src`、`lib` 或辅助模块）。Action 相对路径引用包内公共模块时，必须在此字段声明。未声明的文件在 `ad validate` 与 `ad export skill` 时触发校验并阻断执行。
 
 ---
 
 ## 自动生成 TypeScript 类型声明
 
-在 `actiondock.json` 中声明输入输出模式后，通过命令行工具编译生成强类型声明文件，确立单一事实源：
+在 `actiondock.json` 中声明输入输出模式后，通过命令行工具编译生成类型声明文件：
 
 ```bash
 ad generate types
 ```
 
-- 契约编译产物：命令将在 `.actiondock/generated/actions.d.ts` 生成对应各 Action 的强类型声明命名空间，包含 `ActionInput<T>` 与 `ActionOutput<T>` 泛型工具类型。
-- 脚手架快速起步：使用 `ad action create <id> -i "name:string, count?:number" -o "message:string"` 创建动作时，脚手架会自动完成基础模式登记并触发类型文件刷新。
-- 复杂模式深化：命令行 `--input` 与 `--output` 仅支持基础标量类型的扁平简写。若需要添加字段描述（帮助智能体准确识别意图）、枚举约束（`enum`）、嵌套对象结构（`properties`）或数值区间（`minimum`、`maximum`），直接在 `actiondock.json` 中扩展标准 JSON Schema，然后执行 `ad generate types` 刷新类型。
+- 契约编译产物：命令在 `.actiondock/generated/actions.d.ts` 生成对应 Action 的类型声明。产物包含 `ActionInput<T>` 与 `ActionOutput<T>` 泛型工具类型。
+- 脚手架快速起步：使用 `ad action create <id> -i "name:string, count?:number" -o "message:string"` 生成动作时，脚手架会自动完成模式登记并刷新类型文件。
+- 复杂模式深化：命令行 `--input` 与 `--output` 仅支持基础标量类型的扁平简写。若需添加字段描述、枚举约束（`enum`）、嵌套结构（`properties`）或数值区间（`minimum`、`maximum`），直接在 `actiondock.json` 中扩展标准 JSON Schema。随后执行 `ad generate types` 刷新类型。
 
 ---
 
@@ -152,7 +152,7 @@ export default defineAction<Input, Output>(async (input, ctx) => {
   // 配置读取：自动遵循多级优先级解析
   const token = ctx.config.get<string>("GITHUB_TOKEN");
 
-  // 持久化状态：跨生命周期持久化存储（支持秒级过期 TTL）
+  // 持久化状态：跨生命周期持久化保存（支持秒级过期 TTL）
   const lastSync = await ctx.state.get<string>("last_sync");
   await ctx.state.set("last_sync", new Date().toISOString(), 3600);
 
@@ -185,27 +185,27 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 | 模块名称 | 核心方法签名 | 职责说明 |
 | :--- | :--- | :--- |
-| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，遵循 6 级优先级解析；在 Action 内部始终返回未脱敏的完整原值，若有模式则在最终生效值上执行校验 |
-| | `has(key: string): boolean` | 检查指定配置项是否存在 |
+| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，遵循 6 级优先级解析。Action 内部始终返回未脱敏的原值。若有模式则在最终生效值上执行校验。 |
+| | `has(key: string): boolean` | 校验指定配置项是否存在 |
 | `ctx.state` | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态数据 |
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态数据，`ttl` 单位为秒 |
-| | `delete(key: string): Promise<boolean>` | 删除指定状态键 |
+| | `delete(key: string): Promise<boolean>` | 移除指定状态键 |
 | | `clear(prefix?: string): Promise<number>` | 清空命名空间或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出指定前缀下的所有状态键 |
-| | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
-| `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性运行外部命令，超时终止并收集有限输出（详见 [process-execution.md](process-execution.md)） |
-| | `start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>` | 创建长期受管进程，返回资源元数据与初始游标 |
+| | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态保存 |
+| `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性执行外部命令，超时终止并收集有限输出（详见 [process-execution.md](process-execution.md)） |
+| | `start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>` | 生成长期受管进程，返回资源元数据与初始游标 |
 | | `read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>` | 基于游标读取有界原始输出日志，支持长轮询与断层跳跃 |
 | | `write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>` | 向受管进程输入流写入原始字节数据，需持有有效控制令牌 |
-| | `stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>` | 优雅终止受管进程并执行跨平台进程树清理 |
-| `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I, options?: ActionInvokeOptions): Promise<O>` | 首参数为字符串或 ActionRef；第三参数可通过 `binding` 选择本地或远端执行目标 |
+| | `stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>` | 终止受管进程并执行跨平台进程树清理 |
+| `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I, options?: ActionInvokeOptions): Promise<O>` | 首参数为字符串或 ActionRef。第三参数可通过 `binding` 选择本地或远端执行目标。 |
 | `ctx.log` | `info / warn / error / debug(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至标准错误流 |
 | `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
 | `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
 | `ctx.run` | `{ id: string; rootId: string; parentId?: string }` | 当前执行任务追踪标识与调用链路快照 |
 
-- 输入解析复用：核心 `resolveInput` 与 `resolveValueInput` 共用解码能力，供 `run`、配置、状态及独立入口复用，不由各命令复制扁平规则。`set` 保留完整位置值的 JSON 或字符串解码，扁平赋值仅在 `--` 后生效；原始字段绑定保留全部文本，沿用管道大小上限与取消语义，已知模式冲突、赋值解析与路径错误先于 stdin 读取或实际写入以退出码 2 拒绝。
-- 状态边界：`ad state set` 共用配置写入的输入方式，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则，仍整键替换而非合并。`--stdin-field` 只改变输入渠道，不自动加密或脱敏状态；状态读取可能显示原文，不要将配置原值转存到状态并假定仍受配置安全视图保护。
+- 输入解析复用：核心 `resolveInput` 与 `resolveValueInput` 共用解码能力。这供 `run`、配置、状态及独立入口复用，不由各命令复制扁平规则。`set` 保留完整位置值的 JSON 或字符串解码。扁平赋值仅在 `--` 后生效。原始字段绑定保留全部文本，沿用管道大小上限与取消语义。已知模式冲突、赋值解析与路径错误在读取 stdin 或实际写入前以退出码 2 拒绝。
+- 状态边界：`ad state set` 共用配置写入的输入方式。保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则。状态仍为整键替换而非合并。`--stdin-field` 只改变输入渠道，不自动加密或脱敏状态。状态读取可能展示原文。不要将配置原值转存到状态并假定其受保护。
 
 ---
 
@@ -214,14 +214,14 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通过物理相对路径直接导入其他 Action 源码：
 
 - 当前宿主内的同包 Action 调用：
-  - 默认豁免 `uses`；出于说明或构建裁剪需要显式声明时，使用短标识符，如 `"uses": ["validate-token"]`。
+  - 默认豁免 `uses`。出于说明或构建裁剪需要显式声明时，使用短标识符，如 `"uses": ["validate-token"]`。
   - 源码短标识符调度：`await ctx.actions.invoke("validate-token", {})`。同包名但跨执行目标的调用不适用此豁免。
 
 - 本机注册表包的使用与跨包引用：
-  - 资产挂载与全局共享：在源码模式下，外部 Action 包或导出的浅模式技能分发至宿主机器后，在对应包根目录执行 `ad link .`，登记至本机全局路由表（`~/.actiondock/registry.json`）。该包即可在当前机器内被所有智能体与工程全局共享。
-  - 依赖拓扑并入：启用全局链接扫描的宿主可将有效本地注册包纳入依赖图，适用于源码联调。正式工程的本地实现依赖应使用 `ad add` 安装并锁定，不以本机注册表代替可重现的依赖声明；远端依赖另见命名绑定规则。
-  - 清单权限显式声明：即使目标包在全局注册表中可见，出于安全治理与闭包防死锁要求，发起调用的 Action 仍必须在其自身的 `actiondock.json` 中声明权限。未声明即调用将被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
-  - 清单 uses 字段的三种授权语法：
+  - 资产挂载与全局共享：在源码模式下，外部 Action 包分发至宿主后，在对应包根目录执行 `ad link .`。命令将其登记至本机全局路由表（`~/.actiondock/registry.json`）。当前机器即可全局共享该包。
+  - 依赖拓扑并入：启用全局链接扫描的宿主可将有效本地注册包纳入依赖图。正式工程的本地实现依赖应使用 `ad add` 安装并锁定。开发者不以本机注册表代替可重现的依赖声明。远端依赖遵循命名绑定规则。
+  - 清单权限显式声明：目标包在全局注册表中可见时，发起调用的 Action 仍须在 `actiondock.json` 中声明权限。未声明即调用时，系统会拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 清单 `uses` 字段的三种授权语法：
     - 完全限定形式（推荐）：`"<package-id>/<action-id>"`，精准授权指定动作（如 `"team4u.deploy-tools/health-check"`）。
     - 包级通配形式：`"<package-id>/*"`，授权目标包下的全部动作（如 `"team4u.deploy-tools/*"`）。
     - 裸包名形式：`"<package-id>"`，等效于授权该包下的全部动作（如 `"team4u.deploy-tools"`）。
@@ -242,30 +242,30 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
     ```
 
 - 正式工程的本地依赖：
-  - 在工程根目录执行 `ad add <package>` 安装本地实现并锁定版本与内容摘要，写入 `actiondock.lock.json`；同样适用于远端主用、本地备用场景中需要的本地实现。
+  - 在工程根目录执行 `ad add <package>` 安装本地实现并锁定版本。信息写入 `actiondock.lock.json`。此机制同样适用于本地备用实现。
   - 权限声明与源码调度规则与上述跨包语法完全保持一致。
 
 - 复合包与多包工作区内部引用规范：
-  - 工程结构与全局注册：多包复合套件（由 `ad export skill --bundle` 导出或多包工作区）包含多个子包目录（如 `packages/*`），每个子包拥有独立的 `actiondock.json`。在聚合根目录执行 `ad link . -r`（或 `ad link .`）可批量将所有子包登记至全局路由表。
-  - 复合包同子包内调用：使用短标识符，清单声明 `"uses": ["local-action"]`，源码调度 `await ctx.actions.invoke("local-action", input)`。
-  - 复合包跨子包调用：不同子包具有不同的 `id`，跨子包调用属于标准跨包调度。调用方子包的 Action 清单必须在 `uses` 中声明被调用子包的动作限定名或包名通配符（如 `"uses": ["sub-pkg-b/worker", "sub-pkg-c/*"]`）；源码中必须使用完全限定标识符 `await ctx.actions.invoke("sub-pkg-b/worker", input)`。
-  - 严禁物理穿越导入：各子包即使处于同一工作区文件树相邻目录下，也严禁使用相对路径直接 `import` 其他子包的源码，必须通过 `ctx.actions.invoke` 经由运行时分发调度，确保调用链追踪（`rootId`、`parentId`）与取消信号（`ctx.signal`）完整传递。
+  - 工程结构与全局注册：多包套件包含多个子包目录（如 `packages/*`）。每个子包拥有独立的 `actiondock.json`。在聚合根目录执行 `ad link . -r`（或 `ad link .`）可批量将所有子包登记至全局路由表。
+  - 复合包同子包内调用：使用短标识符。清单声明 `"uses": ["local-action"]`。源码调度 `await ctx.actions.invoke("local-action", input)`。
+  - 复合包跨子包调用：不同子包具有不同的 `id`。跨子包调用属于标准跨包调度。调用方必须在 `uses` 中声明动作限定名或包名通配符。例如 `"uses": ["sub-pkg-b/worker", "sub-pkg-c/*"]`。源码中必须使用完全限定标识符 `await ctx.actions.invoke("sub-pkg-b/worker", input)`。
+  - 严禁物理穿越导入：各子包即使处于同一工作区相邻目录，也严禁相对路径直接 `import` 其他子包源码。调用必须通过 `ctx.actions.invoke` 经由运行时分发调度。这确保调用链追踪（`rootId`、`parentId`）与取消信号（`ctx.signal`）完整传递。
 
 - 级联调用红线与边界约束：
-  - 显式声明原则：跨包或跨目标调用未声明 `uses` 时，即使代码物理可见或已全局挂载，仍会被拦截为 `UNDECLARED_ACTION_DEPENDENCY`；当前宿主内的同包调用保持豁免。
-  - 传递依赖隔离原则：若目标包属于间接传递依赖，直接调用将被拦截，除非被直接依赖包可见的 Playbook 显式委托。
-  - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
-  - 环路死锁保护：系统内置环路检测与递归配额保护，当调用链成环时抛出 `ACTION_CALL_CYCLE`，派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
+  - 显式声明原则：跨包或跨目标调用未声明 `uses` 时，系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY`。当前宿主内的同包调用保持豁免。
+  - 传递依赖隔离原则：目标包属于间接传递依赖时，系统拦截直接调用。直接依赖包可见的 Playbook 显式委托时除外。
+  - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象。严禁传入 Action 定义对象或裸函数。违规抛出 `INVALID_ACTION_REF` 错误。
+  - 环路死锁保护：系统内置环路检测与递归配额保护。调用链成环时抛出 `ACTION_CALL_CYCLE`。派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
 
 ---
 
 ## 本地包执行前准备
 
-本地 `ad run` 为主动作与已发现的本地子动作启用执行前准备：目标授权、环路与配额检查通过后，在首次导入业务模块前检查依赖。`uses` 仅用于授权，未调用的包不会单独触发准备；一次安装仍按安装根的 `package.json` 与工作区配置执行。
+本地 `ad run` 为主动作与已发现的本地子动作启用执行前准备。目标授权、环路与配额校验通过后，在首次导入业务模块前校验依赖。`uses` 仅用于授权，未调用的包不会单独触发准备。一次安装仍按安装根的 `package.json` 与工作区配置执行。
 
-若当前工程声明了正式 Action 包依赖，CLI 会在创建宿主前准备建图所需的工程依赖。执行前准备不会改变已组装的宿主快照，安装过程中出现的新 Action 包不会自动注册。已有 `node_modules` 但缺少必需依赖时只报 `DEPENDENCIES_NOT_READY`，不会自动重建。目标原始路径或符号链接解析后的真实路径只要有一处位于 `node_modules`，均跳过首装，不进入链接指向的外部源码目录安装。
+工程声明了正式 Action 包依赖时，CLI 会在生成宿主前准备工程依赖。执行前准备不会修改已组装的宿主快照。安装过程中出现的新 Action 包不会自动注册。已有 `node_modules` 但缺少必需依赖时抛出 `DEPENDENCIES_NOT_READY`，系统不会自动重建。目标原始路径或真实路径位于 `node_modules` 时，均跳过首装，不进入外部源码目录安装。
 
-SDK、`ad serve`、`ad mcp` 默认不新增执行前首装。编程式宿主需要该能力时，在保证建图所需包元数据已可读的前提下，显式传入 `prepareLocalPackage`：
+SDK、`ad serve`、`ad mcp` 默认不新增执行前首装。编程式宿主需要该能力时，在保证包元数据可读的前提下，显式传入 `prepareLocalPackage`：
 
 ```ts
 import { createActionDock } from "@actiondock/core";
@@ -285,72 +285,72 @@ try {
 }
 ```
 
-- `allowInstall` 控制事务恢复安装；准备器的 `install` 控制执行前首装，两者应使用同一个策略值。`install: false` 仍执行就绪检查。
-- 根调用指定 `timeoutMs` 时，准备阶段与后续动作执行共享同一预算：准备超时会先取消安装并等待清理完成，再返回 `ACTION_TIMEOUT` 且不启动业务处理函数；准备只消耗部分预算时，动作仅获得剩余预算，不会重新获得完整时限。幂等摘要使用调用者声明的原始时限，同一 `requestId` 的相同请求不会因准备耗时不同而冲突；更改输入、配置或原始时限仍会报 `IDEMPOTENCY_CONFLICT`。外部取消与宿主关闭语义不受影响。
+- `allowInstall` 控制事务恢复安装。准备器的 `install` 控制执行前首装。两者应使用同一个策略值。`install: false` 仍执行就绪校验。
+- 根调用指定 `timeoutMs` 时，准备阶段与后续动作执行共享同一预算。准备超时会先取消安装并等待清理完成，再返回 `ACTION_TIMEOUT` 且不启动业务处理函数。准备只消耗部分预算时，动作仅获得剩余预算，不会重新获得完整时限。幂等摘要使用调用者声明的原始时限。同一 `requestId` 的相同请求不会因耗时不同而冲突。修改输入、配置或原始时限仍会报告 `IDEMPOTENCY_CONFLICT`。外部取消与宿主关闭语义不受影响。
 - 准备回调接收目标 `identity`、`packageRoot`，以及包含 `signal`、`rootRunId` 的上下文。无物理根目录的运行时与远端目标不会触发回调。
-- `createLocalPackagePreparer` 按包实例与快照缓存就绪结果，按根运行与真实安装目录合并在途任务。共享安装成功后，每个包仍须独立检查自己的依赖；共享失败会传给所有等待者，不自动重试或永久缓存失败。
-- 一个等待者取消不影响其他等待者；最后一个等待者取消时中止安装，等到底层清理完成才释放工程锁。自定义回调也必须响应 `signal` 并等待清理结束，宿主关闭会等待这些在途准备。
+- `createLocalPackagePreparer` 按包实例与快照缓存就绪结果。它按根执行与真实安装目录合并在途任务。共享安装成功后，每个包仍须独立校验自身的依赖。共享失败会传给所有等待者，系统不自动重试或永久缓存失败。
+- 一个等待者取消不影响其他等待者。最后一个等待者取消时中止安装，等到底层清理完成才释放工程锁。自定义回调必须响应 `signal` 并等待清理结束。宿主关闭会等待在途准备完成。
 - 子包准备失败不会重跑父动作，也不会撤销父动作此前的副作用。`--no-install` 与 `ACTIONDOCK_AUTO_INSTALL=false` 贯穿 CLI 本地调用链，智能体不得绕过禁装策略手动安装。
 
 ---
 
 ## 动作命名绑定与远端调用
 
-在同一个 Action 内混合调用本地与远端依赖，或将同一完全限定动作分别调用到多个目标时，保持 `uses` 中的逻辑引用不变，在调用方项目 `.actiondock/bindings.json` 中配置命名绑定：
+Action 内混合调用本地与远端依赖，或将同一动作分别调用到多个目标时，保持 `uses` 中的逻辑引用不变。在调用方项目 `.actiondock/bindings.json` 中配置命名绑定：
 
 ```ts
 await ctx.actions.invoke("pricing/quote", input, { binding: "primary" });
 await ctx.actions.invoke("pricing/quote", input, { binding: "fallback" });
 ```
 
-- SDK 的 `ActionInvokeOptions` 仅包含可选 `binding`，可调用形式 `ctx.actions(ref, input, options)` 同样支持；不传入 Profile、地址或凭证。
-- 不指定绑定仅查找 `default`；未配置则保持本地。指定不存在的绑定直接报 `NOT_FOUND`，不自动回退。
-- 绑定和 Profile 在执行调用方 Action 的宿主装配时生成快照；`local` 指该宿主，不固定指发起 CLI 的电脑。
-- 纯远端依赖不要求安装本地源码；需要本地备用实现时再安装或装载对应包。跨目标调用即使同包名，也必须声明 `uses`。
-- 降级由业务显式实现，不能吞掉取消、权限和契约错误；断链后结果可能未知，不能盲目重跑写操作。
+- SDK 的 `ActionInvokeOptions` 仅包含可选 `binding`。可调用形式 `ctx.actions(ref, input, options)` 同样支持。入参不传入 Profile、地址或凭证。
+- 不指定绑定仅查找 `default`。未配置则保持本地。指定不存在的绑定直接抛出 `NOT_FOUND`，不自动回退。
+- 绑定和 Profile 在执行调用方 Action 的宿主装配时生成快照。`local` 指该宿主，不固定指发起 CLI 的电脑。
+- 纯远端依赖不要求安装本地源码。需要本地备用实现时再安装或装载对应包。跨目标调用即使同包名，也必须声明 `uses`。
+- 降级由业务显式实现，不能吞掉取消、权限和契约错误。断链后结果可能未知，不能重跑写操作。
 
-完整配置、编程式装配、只读降级示例、运行关联与分布式边界见 [action-bindings.md](action-bindings.md)。
+完整配置、编程式装配、只读降级示例与边界说明见 [action-bindings.md](action-bindings.md)。
 
 ---
 
 ## 受管进程与系统命令治理
 
-当 Action 需要调用底层系统命令或与外部进程交互时，严禁使用 Node.js 原生 `node:child_process`，必须使用 `ctx.process` 统一接口。核心规则与交互模式如下（详见 [process-execution.md](process-execution.md)）：
+Action 调用系统命令或与外部进程交互时，严禁使用 Node.js 原生 `node:child_process`。必须使用 `ctx.process` 统一接口。核心规则如下（详见 [process-execution.md](process-execution.md)）：
 
-- 一次性执行 `run`：适用于短时有界命令，自动收集有限输出并提供超时强制阻断与缓冲区截断保护，配合 SDK 导出的 `decodeText` 安全解码。
-- 长期交互进程 `start`：对于交互式会话（如 REPL、终端交互），通过 `start` 启动后直接调用 `write` 提交指令（进程运行中即可写入）；输出通过游标 `read` 长轮询获取，配合 `createStreamDecoder` 增量多字节解码避免跨分块乱码。
-- 确定性测试红线：单元测试中严禁唤起操作系统真实子进程，必须使用 `@actiondock/testing` 提供的 `FakeProcessDriver` 进行确定性全生命周期模拟。
+- 一次性执行 `run`：适用于短时有界命令。系统自动收集输出并提供超时阻断与缓冲区截断保护。配合 SDK 导出的 `decodeText` 安全解码。
+- 长期交互进程 `start`：对于交互式会话（如 REPL 或终端交互），通过 `start` 启动后调用 `write` 提交指令。输出通过游标 `read` 长轮询获取。配合 `createStreamDecoder` 增量多字节解码避免跨分块乱码。
+- 确定性测试红线：单元测试中严禁唤起操作系统真实子进程。必须使用 `@actiondock/testing` 提供的 `FakeProcessDriver` 执行确定性全流程模拟。
 
 ---
 
 ## Playbook 任务规程编写规范
 
-Playbook 用于将分散的原子 Action 编排为针对特定业务场景的标准作业流程。规程模板通过 `ad playbook create <id>` 生成，包含清单声明与 Markdown 文件正文两部分：
+Playbook 用于将分散的原子 Action 编排为针对业务场景的标准作业流程。规程模板通过 `ad playbook create <id>` 生成，包含清单声明与 Markdown 文件两部分：
 
 ```markdown
 # 业务部署流水线标准规程
 
 本文档规范生产环境服务部署的标准操作步骤。
 
-## 前置环境检查
-调用健康检查动作确认集群可用性：
-- 目标 Action：\`team4u.deploy-tools/health-check\`
+## 前置环境校验
+调用健康校验动作确认集群可用性：
+- 目标 Action：`team4u.deploy-tools/health-check`
 
 ## 执行构建部署
 执行打包产物发布：
-- 目标 Action：\`team4u.deploy-tools/release\`
+- 目标 Action：`team4u.deploy-tools/release`
 
 ## 验证与回滚预案
-检查应用健康状态并在异常时自动回滚。
+校验应用健康状态并在错误时自动回滚。
 ```
 
-规程引用的所有 Action 标识符必须在对应项目的 `actiondock.json` 的 `playbooks.<id>.actions` 节点中完整登记，并执行 `ad playbook validate` 确保全部引用真实存在。
+规程引用的 Action 标识符必须在 `actiondock.json` 的 `playbooks.<id>.actions` 中完整登记。执行 `ad playbook validate` 确保引用真实存在。
 
 ---
 
 ## 单元测试与沙箱验证规范
 
-ActionDock 提供了纯内存测试沙箱 `createTestRuntime`，测试执行无需真实网络或外部数据库。针对下游动作依赖与多目标命名绑定，通过 `runtime.actions`（`MockActionInvoker` 实例）进行细粒度模拟、异常注入与调用断言，完整指南参见 [testing.md](testing.md)。
+ActionDock 提供了纯内存测试沙箱 `createTestRuntime`。测试执行无需真实网络或外部数据库。针对下游动作依赖与多目标命名绑定，通过 `runtime.actions`（`MockActionInvoker` 实例）进行细粒度模拟、错误注入与调用断言。完整指南参见 [testing.md](testing.md)。
 
 - 内存状态与配置驱动执行：
 
@@ -445,7 +445,7 @@ describe("多目标绑定降级模拟", () => {
 });
 ```
 
-- 受管子进程事件驱动模拟：针对涉及系统命令与子进程调用的 Action，严禁唤起真实进程，必须使用 `FakeProcessDriver` 进行确定性事件模拟：
+- 受管子进程事件驱动模拟：针对涉及系统命令与子进程调用的 Action，严禁唤起真实进程。必须使用 `FakeProcessDriver` 进行确定性事件模拟：
 
 ```typescript
 import { describe, it } from "node:test";

@@ -19,7 +19,7 @@
   - [受控系统命令与子进程执行](/practices/process-execution.md)
   - [长时间异步任务与进度上报](/practices/long-running-tasks.md)
   - [多 Action 组合编排与防死锁](/practices/composing-actions.md)
-  - [智能体协同开发与自愈闭环](/practices/ai-agent-development.md)
+  - [智能体协同开发与自愈流程](/practices/ai-agent-development.md)
 
 - **消费接入指南**
   - [消费与接入总览](/consumer/overview.md)

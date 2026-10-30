@@ -33,10 +33,10 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
 
 ## 极简黄金路径
 
-无需手动编写复杂的 JSON Schema，仅需 5 个核心命令即可走通从创建、单测、本地运行到多形态交付的全流程：
+无需编写复杂 JSON Schema。仅需 5 个核心命令，即可走通创建、单测、本地运行到多形态交付：
 
 - 全局安装命令行工具：
-  确保本地 Node.js 版本大于等于 24.12.0，在终端全局安装工具链：
+  确保本地 Node.js 版本大于等于 24.12.0。在终端全局安装工具链：
   ```bash
   npm install -g @actiondock/cli
   ```
@@ -46,20 +46,20 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   ```
 
 - 初始化项目骨架：
-  运行初始化命令并进入生成的项目目录：
+  运行初始化命令并进入创建的项目目录：
   ```bash
   ad init hello
   cd hello
   ```
 
 - 声明并创建 Action：
-  直接通过命令行参数声明输入与输出字段，脚手架自动生成强类型契约并维护底层清单，无需手写模式配置：
+  通过命令行参数声明输入与输出字段。脚手架自动创建强类型契约并维护底层清单，无需手写模式配置：
   ```bash
   ad action create greet --input name:string --output message:string
   ```
 
-- 编写极简业务源码：
-  查看自动生成的 `actions/greet.ts` 业务源码，输入与输出自动享受完整的类型提示与校验：
+- 编写业务源码：
+  查看自动创建的 `actions/greet.ts` 源码。输入与输出自动享受类型提示与校验：
   ```ts
   import { defineAction } from "@actiondock/sdk";
   import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
@@ -75,14 +75,14 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   });
   ```
 
-- 执行纯内存沙箱测试：
-  运行单测套件，毫秒级纯内存沙箱与轻量加载机制提供即时反馈：
+- 运行纯内存沙箱测试：
+  运行单测套件。毫秒级纯内存沙箱与轻量加载机制提供即时反馈：
   ```bash
   ad test
   ```
 
 - 本地命令行即时调用：
-  通过本地命令行直接调用动作，验证输入解析与统一数据信封。推荐使用规范的扁平参数赋值协议：
+  通过命令行直接调用动作，验证输入解析与统一数据信封。推荐使用扁平参数赋值协议：
   ```bash
   # 扁平参数规范调用（使用 -- 隔离控制选项与数据入参，推荐）
   ad run greet -- name=World
@@ -99,12 +99,12 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 将原始文本绑定为字符串入参，无需包装 JSON
   printf 'World' | ad run greet --stdin-field name
   ```
-  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
-  - 赋值操作符：`path=value` 严格保留为字符串；`path:=json` 严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
-  - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
-  - 原有三种输入方式互斥：扁平参数、`--input` 与 `--input-file` 不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-  - 原始文本绑定：`--stdin-field <field>` 的字段名来自入参契约，可与扁平赋值组合，但不能与内联或文件 JSON 混用。正文保留空白与 BOM；源字节及最终入参序列化大小各有默认 10MiB 上限。
-  - 输出选择：通过 `ad describe greet` 查看默认输出方式；需要完整结构化数据时再使用 `--json`。参数解析错误以退出码 2 退出。
+  - 协议边界：`--` 分隔符作为控制平面（选项如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 赋值操作符：`path=value` 保留为字符串。`path:=json` 解析为 JSON 值，并递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：命名段表示对象属性。纯数字段表示数组连续索引，从 0 连续编号并拒绝稀疏数组。根节点物化为对象。系统拒绝路径冲突（`INPUT_PATH_CONFLICT`），并拦截 `__proto__`、`constructor`、`prototype` 等原型污染属性。
+  - 输入方式互斥：扁平参数、`--input` 与 `--input-file` 互斥，混用报 `INPUT_CONFLICT`。未指定输入时默认为 `{}`。
+  - 原始文本绑定：`--stdin-field <field>` 的字段名来自入参契约。它可以与扁平赋值组合，但不能与内联或文件 JSON 混用。正文保留空白与 BOM。源字节与入参序列化大小默认上限各为 10MiB。
+  - 输出选择：运行 `ad describe greet` 查看默认输出方式。需要完整结构化数据时增加 `--json`。参数解析错误以退出码 2 退出。
 
   显式调用 `ad run greet --json -- name=World` 时，stdout 返回统一结构的成功响应信封：
   ```json
@@ -135,11 +135,11 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
 
 ## 进阶特性与底层机制
 
-当项目需要深度定制输入输出校验规则、引入持久化状态、编排业务规程或构建独立交付包时，可以进一步使用以下进阶能力。
+项目需要定制校验、引入状态、编排规程或构建交付包时，可使用以下进阶能力。
 
 ### 清单契约与手动模式定义
 
-在底层架构中，`actiondock.json` 是项目元数据、动作声明与配置项的唯一事实源。使用 `ad action create` 时工具会自动维护该文件，开发者亦可随时手动修改扩展复杂校验约束：
+在底层架构中，`actiondock.json` 是项目元数据、动作声明与配置项的唯一事实源。使用 `ad action create` 时工具会自动维护该文件。开发者亦可手动修改以扩展校验约束：
 
 ```json
 {
@@ -183,15 +183,15 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
 }
 ```
 
-手动修改清单结构后，执行以下命令即可同步刷新生成的类型契约：
+手动修改清单结构后，运行以下命令刷新类型契约：
 
 ```bash
 ad generate types
 ```
 
-类型生成器将在 `.actiondock/generated/actions.d.ts` 中输出对齐的 TypeScript 接口。
+类型工具将在 `.actiondock/generated/actions.d.ts` 中输出 TypeScript 接口。
 
-此外，可随时运行 `ad describe <id>` 调阅编码顾问，查看字段模式规范、Flat 编码指引与建议赋值样例展示，辅助人类开发者与智能体准确传参。
+此外，可随时运行 `ad describe <id>` 调阅编码顾问。命令展示字段模式规范、扁平编码指引与赋值样例，辅助准确传参。
 
 ### 状态持久化与配置体系
 
@@ -223,33 +223,33 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 ### 操作规程与安全边界
 
-为防止大模型在复杂任务中产生幻觉或越权操作，可以在 `playbooks/` 目录下编写纯 Markdown 业务规程：
+为防止大模型产生幻觉或越权，可在 `playbooks/` 目录下编写纯 Markdown 业务规程：
 
 ```markdown
 # 用户问候标准作业规程
 
-当会话中有新用户进入时，按以下时序执行：
+当会话中有新用户进入时，按以下时序运行：
 
-- 验证用户真实姓名，严禁使用未经核实的匿名代号。
-- 调用 greet 执行问候并检索历史频次。
+- 校验用户真实姓名，严禁使用未经核实的匿名代号。
+- 调用 greet 问候并检索历史频次。
 - 若频次大于 1，在回答中体现老用户关怀。
 ```
 
-规程在导出 Agent 技能包时会自动与动作打包，引导智能体按照人类预设的正确时序与安全边界执行。
+规程在导出 Agent 技能包时会自动与动作打包。规程引导智能体按照预设时序与安全边界运行。
 
 ### 独立交付包构建
 
-如果需要将项目打包为免全局依赖的独立交付目录，可使用构建命令：
+需要独立交付目录时，可使用构建命令：
 
 ```bash
 ad build
 ```
 
-该命令将分析所有动作依赖，生成包含内嵌生产依赖与入口的独立产物目录，在目标机器上仅需 Node.js 运行时即可直接执行。
+该命令分析所有动作依赖，构建包含内嵌生产依赖与入口的独立产物目录。在目标机器上仅需 Node.js 运行时即可直接运行。
 
 ### 底层包机制与运行原理
 
 脚手架在底层基于 Node.js 现代原生生态构建：
 
-- 测试底层机制：`ad test` 底层依托 Node.js 原生测试运行器与轻量加载器 `tsx`，支持零编译即时加载测试文件。
-- 依赖管理底座：`package.json` 声明基础依赖，供底层 npm 或其他包管理器按需安装，开发者日常开发无需记忆繁琐的包管理命令，统一使用 ad 体系操作即可。
+- 测试底层机制：`ad test` 底层依托 Node.js 原生测试运行器与轻量加载器 `tsx`，支持零编译加载测试文件。
+- 依赖管理底座：`package.json` 声明基础依赖。底层包管理器按需安装依赖。日常开发统一使用 ad 命令即可。

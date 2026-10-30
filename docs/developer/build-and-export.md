@@ -1,23 +1,28 @@
 # 构建规划与产物导出
 
-ActionDock 2.x 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `SelectionPlanner`、Skill 模板生成器、Node 目录型交付产物构建器、npm Action 标准打包器与多模态 Skill 导出器。
+ActionDock 2.x 提供构建与导出工具链。
+核心由 `@actiondock/builder` 驱动。
+工具链包含依赖闭包规划器 `SelectionPlanner`、Skill 模板生成器。
+工具链包含 Node 目录交付产物构建器、npm Action 打包器与 Skill 导出器。
 
-工具链全面采用标准、透明且易于容器化部署的 Node 目录型交付产物体系。
+工具链采用标准、透明的 Node 目录型交付产物体系。
+产物便于容器化部署。
 
 ---
 
 ## 声明式构建规划与依赖闭包裁剪
 
-构建规划器采用纯声明式静态解析机制，确保在规划阶段绝不执行任何 Action 源码，杜绝模块加载副作用。
+构建规划器采用声明式静态解析机制。
+规划阶段不执行 Action 源码，杜绝模块加载副作用。
 
 ### 纯声明式解析机制
 
-- **静态元数据驱动**：规划器仅读取静态的 `actiondock.json` 清单文件，在整个规划与依赖分析阶段绝对不执行任何 Action 源码，杜绝运行时污染。
-- **纯文本规程提取**：对于 `playbooks/` 目录下的 Markdown 规程文档，规划器仅解析其关联的 Action 标识列表，杜绝不必要的动态探测。
+- **静态元数据驱动**：规划器仅读取静态 `actiondock.json` 清单。规划与依赖分析阶段绝不执行 Action 源码，杜绝环境污染。
+- **纯文本规程提取**：对于 `playbooks/` 下的 Markdown 规程，规划器仅解析关联动作列表，杜绝动态探测。
 
 ### 基于清单与 `uses` 的静态依赖闭包裁剪
 
-Action 在 `actiondock.json` 中可以通过 `uses` 数组显式声明其依赖的下游 Action 列表：
+Action 在 `actiondock.json` 中通过 `uses` 声明下游动作列表：
 
 ```json
 {
@@ -30,37 +35,37 @@ Action 在 `actiondock.json` 中可以通过 `uses` 数组显式声明其依赖�
 }
 ```
 
-当执行构建或导出时，可以通过参数指定目标裁剪范围：
+执行构建或导出时，可以通过参数指定裁剪范围：
 
-- **通过 Action 驱动裁剪**：指定 `--actions <ids...>`，规划器以指定的 Action 作为起始根节点进行闭包分析。
-- **通过 Playbook 驱动裁剪**：指定 `--playbooks <ids...>`，规划器提取指定规程引用的所有 Action 作为起始根节点。
+- **动作驱动裁剪**：指定 `--actions <ids...>`。规划器以指定动作作为根节点分析闭包。
+- **规程驱动裁剪**：指定 `--playbooks <ids...>`。规划器提取规程引用的动作作为根节点。
 
 依赖闭包计算遵循以下原则：
 
-- **广度优先闭包扩展**：从起始根节点出发，依照各 Action 清单中声明的 `uses` 关系进行图遍历，自动解析所有直接依赖与传递依赖，并安全处理环形引用。
-- **孤立文件自动剔除**：未被闭包覆盖的 Action 源码文件与无关静态资产将被完全排除在构建产物之外。
-- **规程反向约束裁剪**：当显式挑选了 Action 集合时，规划器会自动反向审查规程；如果某个 Playbook 依赖了闭包之外的 Action，该 Playbook 将被自动从导出产物中排除，防止智能体在消费时调用失效规程。
+- **广度优先扩展**：规划器从根节点出发，依据清单中的 `uses` 遍历依赖图。规划器自动解析直接与传递依赖，并处理循环引用。
+- **孤立文件剔除**：闭包未覆盖的源码与静态资产不会进入构建产物。
+- **规程反向约束**：显式指定动作集合时，规划器反向审查规程。若 Playbook 依赖闭包外的动作，规划器将其排除，防止调用失效规程。
 
 ---
 
 ## Node 目录型交付产物构建 (`ad build`)
 
-`ad build` 命令将项目及其依赖闭包构建为标准的可运行 Node.js 目录型交付产物。
+`ad build` 命令将项目及依赖闭包构建为 Node.js 交付产物。
 
 ### 构建机制
 
-构建引擎在目标输出目录中生成自包含的运行环境：
-- 保留经过闭包裁剪的 Action 源码、Playbook 文档与静态资产。
+构建引擎在输出目录中生成独立执行环境：
+- 保留裁剪后的 Action 源码、Playbook 文档与静态资产。
 - 生成规范的入口启动脚本与元数据声明文件。
-- 支持直接通过标准 Node.js 命令启动执行，无需全局安装 ActionDock CLI。
+- 支持通过标准 Node.js 命令启动执行，无需全局安装 ActionDock CLI。
 
 ### 核心参数说明
 
 - **指定输出目录**：`-o, --out <path>`，指定产物生成的目标路径（默认为 `dist` 目录）。
-- **生成归档压缩包**：`-z, --archive`，将构建输出目录打包为标准的 `.zip` 格式压缩文件，便于网络传输与分发。
-- **物化锁定生产依赖**：`--vendor-deps`，在干净的暂存目录中物化锁定的生产依赖，将所需的 `node_modules` 完整内嵌至交付产物中，使目标服务器在离线无网络环境下亦可直接运行。
-- **安装脚本安全门禁**：`--allow-install-scripts`，默认禁用（`false`）。防止依赖包中的生命周期脚本在物化期间隐式执行恶意系统命令。
-- **强制可复现性校验**：`--require-reproducible`，强制要求构建结果可复现。如果检测到外部依赖存在必须执行的生命周期安装脚本，构建将立即报错中止。
+- **生成归档压缩包**：`-z, --archive`，将构建输出目录打包为 `.zip` 压缩文件，便于分发。
+- **物化锁定生产依赖**：`--vendor-deps`，在暂存目录中物化锁定的依赖。依赖内嵌至交付产物中，离线无网络也可直接执行。
+- **安装脚本安全门禁**：`--allow-install-scripts`，默认禁用（`false`）。禁止依赖包生命周期脚本执行恶意系统命令。
+- **强制可复现性校验**：`--require-reproducible`，强制要求构建结果可复现。若依赖包含生命周期脚本，工具链立即报告错误并中止。
 
 ### 构建示例
 
@@ -79,14 +84,14 @@ ad build --archive --vendor-deps --require-reproducible
 
 ## npm Action 包标准打包 (`ad pack`)
 
-`ad pack` 命令用于将当前 Action Package 打包为符合 npm 规范的标准分发压缩包（`.tgz`），专供模块发布与跨项目引用。
+`ad pack` 命令将 Action Package 打包为 npm 规范压缩包（`.tgz`），专供模块发布与跨项目引用。
 
 ### 打包机制与核心选项
 
-- **清单与边界严审**：打包器基于 `actiondock.json` 的声明审查包含的文件列表，确保没有未受控的私有文件泄露。
-- **完整性摘要生成**：自动计算包内所有文件的 SHA-256 校验哈希与归档包体大小。
-- **预检模式**：`--dry-run`，仅执行元数据验证与打包文件清单预览，不实际写入磁盘压缩包，适合在持续集成部署前进行健康体检。
-- **JSON 结果输出**：`--json`，将打包结果（包名、版本、文件列表、SHA-256 哈希、字节大小）以机器可读的 JSON 格式输出，便于自动化发布流水线对接。
+- **清单与边界审查**：打包器基于 `actiondock.json` 审查文件列表，防止私有文件泄露。
+- **完整性摘要生成**：自动计算包内文件的 SHA-256 校验哈希与包体大小。
+- **预检模式**：`--dry-run`，仅校验元数据并预览文件清单，不写入压缩包，适合在发布前校验。
+- **JSON 结果输出**：`--json`，将打包结果以 JSON 格式输出，便于对接自动化发布流水线。
 
 ### 打包示例
 
@@ -105,13 +110,13 @@ ad pack --dry-run
 
 ## AI Agent Skill 资产导出 (`ad export skill`)
 
-`ad export skill` 命令将 Action Package 导出为供各类 AI 智能体（如 Claude Code、Cursor、Windsurf、Antigravity）理解与消费的自包含 Skill 资产。
+`ad export skill` 命令将 Action Package 导出为 AI 智能体可读取的 Skill 资产。
 
-ActionDock 2.x 提供了两种清晰的 Skill 导出模式：
+ActionDock 2.x 提供两种 Skill 导出模式：
 
 ### 源码型 Skill 模式 (`--mode source`)
 
-源码型 Skill 是默认的导出模式，适用于目标运行环境中已具备 Node.js 底座的场景。
+源码型 Skill 为默认模式，适用于具备 Node.js 环境的宿主。
 
 - **导出命令**：
   ```bash
@@ -135,7 +140,7 @@ ActionDock 2.x 提供了两种清晰的 Skill 导出模式：
 
 ### Node 目录型 Skill 模式 (`--mode node`)
 
-Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经过依赖裁剪的源码输出至 Skill 目录，使智能体能直接通过 Node.js 调用入口。
+Node 目录型 Skill 将启动胶水层 `entry.mjs` 与裁剪后的源码输出至目录。智能体可直接通过 Node.js 执行入口。
 
 - **导出命令**：
   ```bash
@@ -148,7 +153,7 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经�
   # 仅导出运行入口与源码（不物化依赖，目标机首次缺依赖时需由 Agent 执行 npm install --omit=dev）
   ad export skill --mode node
   ```
-- **核心特点**：目标机仅需通用 Node.js 运行时，无需全局预装 ActionDock 工具链；配合 `--vendor-deps` 时内嵌锁定的生产依赖，实现真正的离线开箱即用。
+- **核心特点**：目标机仅需 Node.js 运行时，无需全局预装 ActionDock。配合 `--vendor-deps` 内嵌锁定的依赖，实现离线使用。
 
 ### 导出参数速查
 
@@ -156,14 +161,14 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经�
 - `--archive`（`-z`）：生成 `.zip` 归档文件。
 - `--vendor-deps`：在导出目录中物化锁定的依赖库。
 - `--playbook <playbooks...>`：仅导出指定规程及其依赖闭包内的动作。
-- `--actions <actions...>`：仅导出指定的 Action 及其依赖闭包。
-- `--skill-md <path>`：显式指定现有的自定义 `SKILL.md` 说明书，避免被默认模板覆盖。
-- `--bundle [name]`：在源码模式下将工作区内多个包聚合导出为单一复合技能套件。
-- `--skill-md-only`：仅就地重生成复合 `SKILL.md` 说明书，不重复拷贝子包代码与文件资产。
+- `--actions <actions...>`：仅导出指定 Action 及其依赖闭包。
+- `--skill-md <path>`：显式指定自定义 `SKILL.md`，防止官方模板覆盖文件。
+- `--bundle [name]`：在源码模式下将多个包聚合导出为单一复合套件。
+- `--skill-md-only`：仅刷新复合 `SKILL.md` 说明书，不重复拷贝代码与资产。
 
 ### 本地导出与私有分发
 
-开发团队可在本地通过 ActionDock CLI 将自研能力导出并分发为 Skill，直接安装至本地智能体目录供日常使用：
+开发团队可在本地将自研能力导出为 Skill，安装至本地智能体目录：
 
 - 从本地已注册的 Action Package 导出：
   ```bash
@@ -184,7 +189,9 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经�
 
 ### 自定义技能说明书（SKILL.custom.md）
 
-无论是单包技能导出还是多包复合技能套件导出，`SKILL.md` 默认由官方模板依据包清单与规程定义自动生成。若需注入宿主或团队特有的内容（如环境初始化步骤、特殊配置声明、支持渠道说明），无需手工维护整份说明书——在包根目录或工作区根目录放置 `SKILL.custom.md` 自定义说明书，导出时会按插槽自动拼入官方模板：
+单包导出与复合套件导出默认依据清单与规程生成 `SKILL.md`。
+若需注入环境初始化步骤或配置声明，可使用 `SKILL.custom.md`。
+在根目录放置 `SKILL.custom.md`，导出时按插槽拼入官方模板：
 
 ```markdown
 ---
@@ -201,21 +208,23 @@ description: 覆盖技能的 description 元数据（可选）
 - 团队内部知识库
 ```
 
-可用插槽决定自定义段落的插入位置（单包与复合套件共用同一套插槽体系）：
+可用插槽决定自定义段落的插入位置：
 
 | 插槽名称 | 单包导出插入位置 | 复合套件导出插入位置 |
 | :--- | :--- | :--- |
 | `intro` | 标题与简介之后 | 标题与简介之后 |
-| `after-init` | 运行时与注册指引之后 | 故障排查与环境安装指引之后 |
+| `after-init` | 运行时与注册指引之后 | 环境问题排查与安装指引之后 |
 | `after-describe` | 动作参数契约调阅之后 | 动作参数契约调阅之后 |
 | `after-invoke` | 标准调用命令与响应解析之后 | 标准调用命令与响应解析之后 |
 | `after-playbooks` | 业务操作规程之后 | 推荐操作规程之后 |
 | `after-actions` | Action 目录与配置状态之后 | 可用 Action 工具清单之后 |
 | `append` | 文档末尾 | 文档末尾 |
 
-- 标记行之前的内容自动归入 `append` 插槽；未知插槽名称会直接报错拦截。
-- frontmatter 中的 `description` 支持覆盖默认生成的技能描述。
-- 单包导出命令（`ad export skill`）会自动发现项目根目录下的 `SKILL.custom.md`；复合导出命令（`ad export skill --bundle ...`）会自动发现工作区根目录或当前目录下的 `SKILL.custom.md`；两者均可通过 `--custom-md <path>` 显式指定文件路径。
+- 标记行之前的内容自动归入 `append` 插槽。未知插槽名称会直接报告错误。
+- 头部元数据 `description` 支持覆盖默认生成的技能描述。
+- 单包导出命令自动发现项目根目录下的 `SKILL.custom.md`。
+- 复合导出命令自动发现工作区根目录下的 `SKILL.custom.md`。
+- 两者均可通过 `--custom-md <path>` 显式指定文件路径。
 
 单包导出示例：
 
@@ -229,7 +238,7 @@ ad export skill -o ./dist/my-skill --custom-md ./SKILL.custom.md
 ad export skill --bundle vip-agent-tools --out ./dist/vip-agent-tools-skill
 ```
 
-日常维护中，复合套件若仅需更新说明书而无需重复拷贝代码与资产，可就地刷新说明书：
+日常维护复合套件时，可就地刷新说明书：
 
 ```bash
 ad export skill --bundle vip-agent-tools --skill-md-only
@@ -239,11 +248,11 @@ ad export skill --bundle vip-agent-tools --skill-md-only
 
 ## 本地相对依赖与 `files` 声明规范
 
-为了防止导出的 Skill 或交付目录丢失非入口引用的辅助模块，ActionDock 建立了严格的本地依赖完整性校验机制：
+为了防止导出的 Skill 或交付目录丢失辅助模块，ActionDock 采用本地依赖完整性校验机制：
 
-- 单文件推荐：原子 Action 推荐保持单一职责与高内聚，尽量以独立单文件形式编写。
-- 包内共享模块声明：若 Action 依赖包内公共源码或工具目录（如 `src/utils`、`lib/`），必须在 `actiondock.json` 清单的 `files` 数组中显式声明该目录（例如 `"files": ["src", "lib"]`）。
-- 完整性自动拦截：构建规划器与导出器在执行导出及 `ad validate` 时，会自动静态解析相对路径导入。若检测到 Action 引用了未包含在 `actions` 且未在 `files` 声明的文件，工具链将直接报错阻断，防止交付损坏产物。
+- 单文件推荐：原子 Action 推荐保持单一职责，尽量以独立单文件形式编写。
+- 包内共享模块声明：若 Action 依赖包内公共源码或工具目录（如 `src/utils`、`lib/`），必须在 `actiondock.json` 清单的 `files` 数组中声明该目录（例如 `"files": ["src", "lib"]`）。
+- 完整性自动拦截：规划器与导出器在导出及 `ad validate` 时，静态解析相对路径导入。若检测到 Action 引用未在 `actions` 与 `files` 声明的文件，工具链直接报告错误并阻断，防止交付损坏产物。
 
 ---
 

@@ -9,26 +9,27 @@
 
 写一次 Action，同时交付 CLI、MCP、HTTP 和 Agent Skill。
 
-面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链。内置纯内存测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
+面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链。
+内置纯内存测试沙箱、状态存储、配置体系、执行追踪与可复现打包。
 
 ```bash
-# 为智能体一键安装官方技能（供 Cursor、Claude Code、Antigravity 掌握 ActionDock 开发）
+# 为智能体安装官方技能（供 Cursor、Claude Code、Antigravity 掌握 ActionDock 开发）
 npx skills add team4u/actiondock -g -y
 
 # 或在本地安装命令行工具链并初始化
 npm install -g @actiondock/cli
 ad init hello && cd hello
 
-# 声明并创建 Action，自动生成强类型契约
+# 声明并创建 Action，自动创建强类型契约
 ad action create greet --input name:string --output message:string
 
-# 运行毫秒级纯内存沙箱测试
+# 执行毫秒级纯内存沙箱测试
 ad test
 
 # 本地验证执行
 ad run greet -- name=World
 
-# 一键交付多种目标形态
+# 交付多种目标形态
 ad mcp          # MCP 协议通信服务（供 Cursor、Windsurf、Claude Desktop 挂载）
 ad serve        # RESTful HTTP 微服务（默认端口 8080）
 ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费）
@@ -38,18 +39,18 @@ ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费
 
 ## 核心特性
 
-- **契约驱动开发**：以 Action 为唯一核心原子，基于命令行自动生成强类型契约并维护能力清单，告别手动编写 JSON Schema。
-- **确定性测试沙箱**：内置纯内存测试沙箱与虚拟时钟驱动，无需配置真实环境即可执行高可靠确定性测试。
-- **一次编写多形态交付**：业务逻辑仅需编写一次，无缝以本地命令行、MCP 协议服务、RESTful HTTP 微服务或 Agent Skill 资产发布。
-- **现代原生运行底座**：基于 Node.js 24+ 原生类型擦除、`node:sqlite` 嵌入式存储与 `node:http` 微服务引擎，零外部重型依赖。
-- **人定规程与安全红线**：结合纯 Markdown 操作规程与原子 Action 执行，划定业务边界与安全红线，杜绝模型越权与时序混乱。
+- **契约驱动开发**：以 Action 为核心原子。命令行自动创建强类型契约，并维护能力清单。开发者无需手写 JSON Schema。
+- **确定性测试沙箱**：内置纯内存测试沙箱与虚拟时钟驱动。无需配置真实环境，即可执行确定性测试。
+- **一次编写多形态交付**：业务逻辑只需编写一次。系统支持发布为本地命令行、MCP 协议服务、RESTful HTTP 微服务或 Agent Skill 资产。
+- **现代原生运行时底座**：基于 Node.js 24+ 原生类型擦除、`node:sqlite` 嵌入式存储与 `node:http` 微服务引擎。底层无外部重型依赖。
+- **人定规程与安全红线**：结合纯 Markdown 操作规程与原子 Action 执行。规程划定业务边界与安全红线，杜绝模型越权与时序混乱。
 
 ---
 
 ## 快速上手
 
 - 安装官方智能体技能（推荐智能体开发场景）：
-  为 AI 编程助手（如 Cursor、Claude Code、Codex、Antigravity 等）一键安装官方技能，让智能体自主按规范编写、测试与交付 Action：
+  为 AI 编程助手安装官方技能。智能体可按规范编写、测试并交付 Action：
   ```bash
   npx skills add team4u/actiondock -g -y
   ```
@@ -62,13 +63,13 @@ ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费
   ```
 
 - 声明并创建 Action：
-  命令行自动解析字段类型、生成强类型契约并更新清单：
+  命令行自动解析字段类型。工具创建强类型契约，并更新清单：
   ```bash
   ad action create greet --input name:string --output message:string
   ```
 
 - 编写业务实现：
-  在 `actions/greet.ts` 中直接使用生成的类型定义，聚焦纯粹业务逻辑：
+  在 `actions/greet.ts` 中使用所创建的类型定义，聚焦纯粹业务逻辑：
   ```ts
   import { defineAction } from "@actiondock/sdk";
   import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
@@ -84,9 +85,9 @@ ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费
   });
   ```
 
-- 运行测试与本地验证：
+- 执行测试与本地验证：
   ```bash
-  # 运行纯内存沙箱测试
+  # 执行纯内存沙箱测试
   ad test
 
   # 本地规范调用
@@ -113,7 +114,7 @@ ActionDock 采用分层解耦的单体多包架构：
 
 | 子包 | 描述 |
 | --- | --- |
-| `@actiondock/sdk` | 极简核心公共 SDK 与类型定义（`defineAction`、`ActionContext`），零外部依赖 |
+| `@actiondock/sdk` | 核心公共 SDK 与类型定义（`defineAction`、`ActionContext`），零外部依赖 |
 | `@actiondock/core` | 原生运行时驱动、统一服务门面、标准服务端口模型与存储系统 |
 | `@actiondock/cli` | 命令行工具链、分发器、参数扁平编码解析与执行门面 |
 | `@actiondock/mcp` | Model Context Protocol 协议适配、工具暴露与异步取消链路 |
@@ -124,7 +125,7 @@ ActionDock 采用分层解耦的单体多包架构：
 
 ## 文档指引
 
-更多深度功能与详细说明请访问 [在线官方文档](https://team4u.github.io/actiondock/) 或查阅本地指南：
+查阅 [在线官方文档](https://team4u.github.io/actiondock/) 或查阅本地指南：
 
 - [系统概览与核心概念](docs/getting-started/overview.md)
 - [快速上手指南](docs/getting-started/quick-start.md)

@@ -207,17 +207,17 @@ export interface ActionRef {
 ```
 
 #### 调用参数约束与禁止事项
-- 仅接受标识符与引用：`ctx.actions.invoke` 严格只接受动作标识符字符串（短标识符如 `"greet"` 或跨包限定标识符如 `"shared-pkg/b"`）或 `ActionRef` 引用对象。
-- 禁止传入动作定义对象：严禁将动作定义对象或裸函数传入 `ctx.actions.invoke`。传入定义对象将绕过 `actiondock.json` 清单校验、模式规范检查与子运行链路记录，执行引擎将抛出 `INVALID_ACTION_REF` 错误。
-- 依赖权限：跨包调用以及跨执行目标的调用必须显式声明 `uses`，未声明时报 `UNDECLARED_ACTION_DEPENDENCY`。当前宿主内的同包调用保持豁免。
-- 命名绑定：第三参数仅接受可选的 `binding`，不接受 Profile、地址或凭证。指定不存在的绑定时报 `NOT_FOUND`，不会自动回退。参见[动作命名绑定与远端调用](/developer/action-bindings.md)。
-- 循环调用防护：当检测到相互调用成环时，执行引擎抛出 `ACTION_CALL_CYCLE` 错误。
+- 仅接受标识符与引用：`ctx.actions.invoke` 仅接受动作标识符字符串或 `ActionRef` 引用对象。支持短标识符与跨包限定标识符。
+- 禁止传入动作定义对象：严禁将动作定义对象或裸函数传入 `ctx.actions.invoke`。传入定义对象将绕过清单校验与子执行链路记录。执行引擎将抛出 `INVALID_ACTION_REF` 错误。
+- 依赖权限：跨包调用以及跨执行目标的调用必须显式声明 `uses`。未声明时报 `UNDECLARED_ACTION_DEPENDENCY`。当前宿主内的同包调用保持豁免。
+- 命名绑定：第三参数仅接受可选的 `binding`。不接受 Profile、地址或凭证。指定不存在的绑定时报 `NOT_FOUND`，不会自动回退。参见[动作命名绑定与远端调用](/developer/action-bindings.md)。
+- 循环调用防护：检测到相互调用成环时，执行引擎抛出 `ACTION_CALL_CYCLE` 错误。
 
 ---
 
 ### 统一受管进程接口 ProcessAPI
 
-ActionDock 2.x 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、逐流增量读取、结构化控制与优雅终止：
+ActionDock 2.x 提供受管进程接口 ProcessAPI。该接口统一管理短时外部命令与长期交互式进程。支持进程启动、增量读取、结构化控制与优雅终止：
 
 ```ts
 export interface ProcessAPI {
@@ -258,7 +258,7 @@ export interface ProcessAPI {
 
 #### 核心输入与返回类型定义
 
-一次性运行类型：
+一次性执行类型：
 
 ```ts
 export interface ProcessRunInput {
@@ -331,7 +331,7 @@ export interface ProcessInfo {
 
 SDK 导出了针对受管进程交互的高阶工具函数：
 
-- `createStreamDecoder()`（别名 `createIncrementalTextDecoder()`）：创建逐流增量 UTF-8 解码器，针对不同输出流（`stdout`、`stderr`、`pty`）独立缓存残缺多字节字符，杜绝切块乱码与跨流污染。
+- `createStreamDecoder()`（别名 `createIncrementalTextDecoder()`）：创建逐流增量 UTF-8 解码器。该解码器针对不同输出流独立缓存多字节字符，防止乱码与跨流污染。
 - `encodeText(text)` 与 `encodeBytes(data)`：将纯文本或二进制数据编码为标准的 Base64 `Bytes` 结构。
 - `decodeText(bytesOrChunks)` 与 `decodeBytes(bytes)`：将 `Bytes` 结构或 `OutputChunk` 数组快速转换为 UTF-8 文本或二进制数组。
 

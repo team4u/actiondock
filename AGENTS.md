@@ -1,32 +1,31 @@
 # Agent 开发协作指引 - ActionDock 2.x
 
 - **核心定位**：ActionDock 2.x 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 `node:sqlite`、`node:http` 与类型擦除提供原生驱动）。
 - **代码库分层结构**：
-  - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
-  - `packages/core`：`@actiondock/core`（Node-first 原生运行时与核心领域：统一服务门面 `createActionDock` 与 `connectActionDock`、标准服务端口体系 `DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`、统一错误模型 `ActionDockError`、原生平台装配 `createNodePlatform`、服务启动 `startActionDockServer`、核心工程辅助 `initProject` 及包图模型抽象 `PackageGraph`；精细化子路径导出支持：`server`、`project`、`registry`、`profile`、`graph`、`package`）。
-  - `packages/builder`：`@actiondock/builder`（依赖规划与分发构建：`SelectionPlanner`、`SkillExporter`、Skill 模板生成与导出、目录型构建与 npm 打包）。
-  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`createTestRuntime`、`FakeClock`、`FakeProcessDriver`、`MockProcessExecutor`、`MockActionInvoker`、`MemoryStorage`）。
-  - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO 与 HTTP 传输、Tool 映射、取消链路）。
-  - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`）。
+  - `packages/sdk`：`@actiondock/sdk`。极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`。
+  - `packages/core`：`@actiondock/core`。Node-first 原生运行时与核心领域。提供服务门面 `createActionDock` 与 `connectActionDock`。提供标准服务端口（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`）、统一错误模型 `ActionDockError`、平台装配 `createNodePlatform`、服务启动 `startActionDockServer`、工程辅助 `initProject` 与包图模型 `PackageGraph`。支持子路径导出：`server`、`project`、`registry`、`profile`、`graph`、`package`。
+  - `packages/builder`：`@actiondock/builder`。依赖规划与分发构建：`SelectionPlanner`、`SkillExporter`、Skill 模板生成与导出、目录型构建与 npm 打包。
+  - `packages/testing`：`@actiondock/testing`。确定性测试工具框架：`createTestRuntime`、`FakeClock`、`FakeProcessDriver`、`MockProcessExecutor`、`MockActionInvoker`、`MemoryStorage`。
+  - `packages/mcp`：`@actiondock/mcp`。Model Context Protocol 适配器：STDIO 与 HTTP 传输、Tool 映射、取消链路。
+  - `packages/cli`：`@actiondock/cli`。CLI 工具链与独立执行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`。
   - `examples/*`：官方示例 Action Packages。
 - **常用验证命令**：
   - 执行所有单元与集成测试：`npm test`
-  - 执行全量 TypeScript 类型检查：`npm run typecheck`
-  - **文档改动免测准则**：若改动仅涉及文档、说明书或注释，严禁执行全量测试与构建命令，直接完成文档编辑即可。
+  - 执行全量 TypeScript 类型校验：`npm run typecheck`
+  - **文档改动免测准则**：改动仅涉及文档、说明书或注释时，严禁执行全量测试与构建命令。直接完成文档编辑即可。
 - **核心工程设计原则**：
-  - **第一性原理**：回归事物本质与根本定位进行推导，杜绝经验主义、惯性沿用与过度设计，由真实需求与底层物理约束推演架构边界。
+  - **第一性原理**：回归事物本质与根本定位推导。杜绝经验主义、惯性沿用与过度设计。由真实需求与底层物理约束推演架构边界。
   - **解耦优先**：核心业务与外部环境及底层实现解耦，保持平台中立。
-  - **单一职责**：模块保持职责单一明确，杜绝逻辑复杂混杂与过度膨胀。
-  - **单一事实源**：拒绝重复实现与逻辑拷贝，关键模型与通用能力保持唯一事实来源。
+  - **单一职责**：模块职责单一明确，杜绝逻辑混杂与过度膨胀。
+  - **单一事实源**：拒绝重复实现与逻辑拷贝。关键模型与通用能力保持唯一事实来源。
   - **非阻塞异步**：执行链路保持非阻塞异步，确保系统高吞吐与灵敏响应。
-  - **防御与透明**：严禁静默吞没异常，坚持边界安全校验与全链路错误透传。
-- **技能文档优先同步**：涉及公开接口、CLI 命令、配置、依赖调用或错误语义的变更，必须同步更新 `skills/actiondock/SKILL.md` 与相关 `references/`，不能只更新 `docs/`。技能目录是 Agent 使用指南的优先交付入口，安装后应能独立说明用法与安全边界。
+  - **防御与透明**：严禁静默吞没错误。坚持边界安全校验与全链路错误透传。
+- **技能文档优先同步**：公开接口、CLI 命令、配置、依赖调用或错误语义发生变更时，必须同步更新 `skills/actiondock/SKILL.md` 与对应 `references/`。禁止仅更新 `docs/`。技能目录是 Agent 使用指南的优先交付入口。安装后应能独立说明用法与安全边界。
 - **文档与输出风格规范**：
-  - **禁止使用数字序号**：排版一律采用无序列表符号（`- `），不得使用数字列表（如 `1.`、`2.`、`3.`）。
+  - **禁止使用数字序号**：排版一律采用无序列表符号（`- `），不得使用数字列表（严禁 `1.`、`2.`、`3.`）。
   - **严禁使用表情符号**：严禁在文档或输出中添加任何表情符号与图标。
-  - **杜绝中英文夹杂**：标题、括号及正文中不得添加非必要的英文翻译和短语，仅保留必要的类名、方法名、包名、命令与专有名词。
-  - **严禁粗体嵌套行内代码**：严禁在 Markdown 粗体标签内部嵌套行内代码反引号，反引号会导致文档解析引擎破坏粗体闭合标签并直接渲染出原始双星号；行内代码必须独立于粗体之外书写。
+  - **杜绝中英文夹杂**：标题、括号及正文中不得添加非必要的英文翻译和短语。仅保留必要的类名、方法名、包名、命令与专有名词。
+  - **严禁粗体嵌套行内代码**：严禁在 Markdown 粗体标签内部嵌套行内代码反引号。反引号会导致解析引擎破坏粗体闭合标签，直接渲染出原始双星号。行内代码必须独立于粗体之外书写。
   - **规范术语表述**：严禁使用「制品」等生硬词汇，统一表述为「框架」、「产物」或「资产」等规范清晰术语。
-- **版本发布与分发规范**：统一遵循 docs/release.md。
-
+- **版本发布与分发规范**：统一遵循 `docs/release.md`。

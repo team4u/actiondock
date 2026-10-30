@@ -1,6 +1,6 @@
 # 参考手册：Agent Skill 消费与使用指南
 
-本参考手册面向智能体宿主环境，规范技能资产安装、客户端装载路径、Agent 在缺依赖时的按需自举步骤，以及引导智能体正确调度与执行技能的完整生命周期。
+本参考手册面向智能体宿主环境。它规范技能资产安装与客户端装载路径。它规定 Agent 在缺依赖时的自举步骤。它引导智能体正确调度与执行技能。
 
 ---
 
@@ -39,20 +39,20 @@ npx skills remove <skill-name>
 - 常用参数：
   - `-g, --global`：全局安装至当前用户目录。
   - `-y, --yes`：跳过交互式确认，适用于自动化脚本与智能体自治安装。
-  - `--copy`：强制独立拷贝文件而非创建符号链接。
+  - `--copy`：强制独立拷贝文件而非生成符号链接。
 
 ---
 
 ## Agent 按需自举工序（环境未就绪或缺依赖时）
 
-用户获取或安装技能后，智能体直接调用即可。本地 `ad run` 默认支持在无 `node_modules` 时自动完成源码包缺失直接生产依赖冷首装。若遇到命令不存在（如 `ad: command not found`）或依赖损坏报错，智能体在目标环境中按以下步骤排查自愈：
+用户获取或安装技能后，智能体直接调用即可。本地 `ad run` 默认支持在无 `node_modules` 时自动完成源码包缺失直接生产依赖冷首装。若遇到命令不存在（如 `ad: command not found`）或依赖损坏错误，智能体在目标环境中按以下步骤排查自愈：
 
-- **级联依赖准备**：本地 `ad run` 在首次调用前准备主动作与宿主快照中已有的本地子动作。`uses` 仅授权，未调用的包不会单独触发准备；远端子调用不准备本机同名包。子包准备失败不重跑父动作，也不撤销此前副作用。
-- **安装范围**：正式 Action 包依赖可能在建图前引导准备；一次安装按安装根与工作区清单执行。运行期不扩大宿主包图，SDK、`ad serve`、`ad mcp` 默认不新增按需首装；详见 [developer.md](developer.md#本地包执行前准备)。
-- **确认运行时底座**：确保目标机器具备 Node.js 运行环境（建议版本大于等于 24.12.0）。
+- **级联依赖准备**：本地 `ad run` 在首次调用前准备主动作与宿主快照中已有的本地子动作。`uses` 仅授权。未调用的包不会单独触发准备。远端子调用不准备本机同名包。子包准备失败不重跑父动作，也不撤销此前副作用。
+- **安装范围**：正式 Action 包依赖可能在建图前引导准备。一次安装按安装根与工作区清单执行。运行时不扩大宿主包图。SDK、`ad serve`、`ad mcp` 默认不新增按需首装。详见 [developer.md](developer.md#本地包执行前准备)。
+- **确认运行时底座**：确保目标机器具备 Node.js 执行环境（建议版本大于等于 24.12.0）。
 - **安装命令行工具链**：若终端提示 `ad: command not found`，执行 `npm install -g @actiondock/cli`。若受限无全局权限，亦可通过 `npx @actiondock/cli` 执行。
-- **禁止安装策略遵守**：若调用显式指定了 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false`，代表当前调用明确禁止安装依赖，智能体必须严格遵守该策略并报告依赖未就绪，严禁擅自执行安装命令绕过策略。
-- **修复已有损坏依赖或显式预装**：若已有 `node_modules` 存在缺失损坏，或使用者明确要求预先准备环境，进入技能根目录，按项目实际使用的包管理器执行安装：
+- **禁止安装策略遵守**：若调用显式指定了 `--no-install` 或环境变量 `ACTIONDOCK_AUTO_INSTALL=false`，代表当前调用明确禁止安装依赖。智能体必须严格遵守该策略并报告依赖未就绪。严禁擅自执行安装命令绕过策略。
+- **修复已有损坏依赖或显式预装**：依赖缺失损坏或用户要求预先准备时，进入技能根目录。按项目实际使用的包管理器执行安装：
   ```bash
   # npm 项目
   npm install --omit=dev
@@ -70,7 +70,7 @@ npx skills remove <skill-name>
   ```bash
   # 查验 Action 接口契约（编码顾问）
   ad describe <package-id>/<action-id>
-  # 试运行调用（扁平参数规范传参，默认自动首装生产依赖）
+  # 试执行调用（扁平参数规范传参，默认自动首装生产依赖）
   ad run <package-id>/<action-id> -- key=value
   ```
 
@@ -78,13 +78,13 @@ npx skills remove <skill-name>
 
 ## 技能包含远端依赖时
 
-- 区分调用宿主与依赖目标：`ad run <pkg>/<action> --profile office` 将主 Action 放到远端执行；Action 内部的本地与远端依赖则由该宿主的命名绑定决定，切换 CLI 默认 Profile 不能代替依赖绑定。
-- 部署后单独配置：构建或导出的技能不会携带开发机 `.actiondock/bindings.json` 与 Profile 凭据。请在运行调用方 Action 的宿主上配置 Profile、令牌环境变量与调用方项目绑定，再重新创建宿主使其生效。
-- 不盲目安装远端源码：纯远端依赖通过 `uses` 与命名绑定使用，不需要执行 `ad add` 或 `ad link` 把其实现复制到本机。若显式绑定了本地备用实现，该实现才需要在调用方宿主可用。
-- 出错后定位正确环境：结合父运行日志及错误详情中的 `profile`、`remoteRunId`、`requestId`、`resultUnknown`，在对应远端查询运行记录；不能拿父任务的请求标识代替子调用标识。
-- 不把失败等同于未执行：远端超时或断链时，不自动重跑有副作用的操作；父任务取消后不启动备用调用。
+- 区分调用宿主与依赖目标：`ad run <pkg>/<action> --profile office` 将主 Action 放到远端执行。Action 内部的本地与远端依赖由该宿主的命名绑定决定。切换 CLI 默认 Profile 不能代替依赖绑定。
+- 部署后单独配置：构建或导出的技能不携带开发机的 `.actiondock/bindings.json` 与 Profile 凭据。请在执行调用方 Action 的宿主上配置 Profile、环境变量与绑定。随后重新生成宿主以使其生效。
+- 不盲目安装远端源码：纯远端依赖通过 `uses` 与命名绑定使用。用户无需执行 `ad add` 或 `ad link` 把其实现复制到本机。若显式绑定了本地备用实现，该实现才需要在调用方宿主可用。
+- 出错后定位正确环境：结合父任务日志及错误详情中的字段定位。字段包括 `profile`、`remoteRunId`、`requestId` 与 `resultUnknown`。在对应远端查询执行记录。不能拿父任务的请求标识代替子调用标识。
+- 不把失败等同于未执行：远端超时或断链时，系统不自动重跑有副作用的操作。父任务取消后不启动备用调用。
 
-完整配置与调用示例见 [action-bindings.md](action-bindings.md)，遇到实际错误再查阅 [troubleshooting.md](troubleshooting.md)。
+完整配置与调用示例见 [action-bindings.md](action-bindings.md)。遇到实际错误再查阅 [troubleshooting.md](troubleshooting.md)。
 
 ---
 
@@ -107,11 +107,11 @@ npx skills remove <skill-name>
 
 ### MCP 协议原生挂载
 
-对于支持 Model Context Protocol 协议的智能体客户端与集成开发环境，可通过本地进程或远程服务原生接入工具能力：
+智能体客户端与开发环境支持 MCP 协议时，可通过本地进程或远程服务接入工具能力：
 
-- **本地 STDIO 挂载**：在客户端配置文件（如 `mcp.json`）中指定启动命令与参数（例如 `"command": "ad", "args": ["mcp", "--all"]`）。
-- **远程专属虚拟视图挂载**：在多权限服务环境下，智能体可通过 HTTP 或 SSE 方式连接远程微服务的专属虚拟视图 MCP 端点（如 `http://host:port/views/:viewName/mcp`），并在请求头中携带该视图对应的鉴权 Token。
-- **纯净工具集隔离保障**：专属虚拟视图端点在 `tools/list` 工具发现与 `tools/call` 执行阶段均由统一策略守卫严格把关，仅向智能体呈现白名单授权范围内的纯净工具集，杜绝因全量暴露带来的工具列表抖动与未授权元数据泄露。
+- **本地 STDIO 挂载**：在客户端配置文件（如 `mcp.json`）中指定启动命令与参数。例如 `"command": "ad", "args": ["mcp", "--all"]`。
+- **远程专属虚拟视图挂载**：在多权限环境下，智能体可通过 HTTP 或 SSE 连接微服务的专属视图端点。例如 `http://host:port/views/:viewName/mcp`。请求头需携带视图对应的鉴权 Token。
+- **纯净工具集隔离保障**：专属视图端点在工具发现与执行阶段均由统一策略守卫把关。端点仅向智能体显示授权白名单内的工具集。这杜绝了工具列表抖动与元数据泄露。
 
 ---
 
@@ -127,48 +127,48 @@ npx skills remove <skill-name>
 ```
 
 - **第一阶段：意图匹配与技能激活**：
-  - 智能体根据系统提示词中已载入的 `SKILL.md` 描述与触发条件，自主判定当前任务匹配该技能并激活上下文。
+  - 智能体根据系统提示词中的 `SKILL.md` 描述与触发条件，判定任务匹配技能并激活上下文。
 - **第二阶段：规程优先决议准则**：
-  - 激活技能后，智能体必须首先检查是否存在匹配当前场景的 Playbook 规程。
+  - 激活技能后，智能体必须首先校验是否存在匹配当前场景的 Playbook 规程。
   - 若存在规程，必须执行 `ad playbook show <id>` 读取规程内容，严格按照规程界定的步骤时序、前置依赖与安全红线推进。
   - **严禁无序拼凑**：严禁在规程存在的情况下，跳过规程直接猜测或无序调用底层 Action。
   - **单点降级调用**：仅当无匹配规程或用户明确指示执行单点操作时，方可直接调用单一 Action。
 - **第三阶段：参数契约按需调阅**：
   - 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。
-  - 在调用未知参数的 Action 前，智能体必须在终端执行 `ad describe <id>` 调阅编码顾问，动态获取该 Action 的输入输出模式、字段明细、Flat 编码指引与建议赋值样例。
+  - 在调用未知参数的 Action 前，智能体必须在终端执行 `ad describe <id>` 调阅编码顾问。动态获取该 Action 的输入输出模式、字段明细、Flat 编码指引与建议赋值样例。
   - 杜绝参数猜测与伪造属性，确保传参严格符合 `inputSchema` 约束。
 - **第四阶段：确定性执行调用**：
   - 规范调用语法：推荐使用 `ad run <action> [control-options] -- <assignments...>`。
   - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`-c/--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
-  - 单次调用配置覆盖：支持通过 `-c KEY=value`（纯字符串）或 `-c KEY:=json`（严格解析为 JSON 且要求所有数值为有限数，键名按字面处理，点号不生成嵌套对象，解析失败退出码 2）临时覆盖配置。
-  - 持久化配置：`ad config set <key> [value] [options] [-- <assignments...>]` 支持完整位置值（JSON 或字符串，含根数组与标量）或 `--stdin` 完整值输入，也支持仅 `--` 后的扁平赋值及 `--stdin-field <field>` 原始文本绑定。完整位置值、`--stdin`、结构化模式互斥，字段绑定只能与扁平赋值组合；模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝。安全示例：
+  - 单次调用配置覆盖：支持通过 `-c KEY=value`（纯字符串）或 `-c KEY:=json` 覆盖配置。严格解析为 JSON 且要求数值为有限数。键名按字面处理，点号不生成嵌套对象，解析失败以退出码 2 退出。
+  - 持久化配置：`ad config set <key> [value] [options] [-- <assignments...>]` 支持完整位置值（JSON 或字符串，含根数组与标量）或 `--stdin` 完整值输入。也支持仅 `--` 后的扁平赋值及 `--stdin-field <field>` 原始文本绑定。完整位置值、`--stdin`、结构化模式互斥。字段绑定只能与扁平赋值组合。模式冲突、赋值解析与路径错误在读取 stdin 或写入前以退出码 2 拒绝。安全示例：
     ```bash
     printf '%s' "$MYSQL_PASSWORD" | ad config set MYSQL_191 -P db.tools --stdin-field password -- host=localhost port:=3306 username=root
     ad config set MYSQL_191 --stdin < connection.json
     ```
-    - `--stdin` 裁剪末尾 CR/LF，空输入报错；字段绑定保留 BOM、换行与全部空白，不猜测 JSON，空输入为空字符串。完整边界及大小与取消规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
-    - 所有方式均先组装完整值，再按模式校验并整键替换；缺少密码等必填字段时报 `CONFIG_VALUE_INVALID`，原值不变，不合并旧对象。配置管理返回安全脱敏视图，不提供明文查看参数，拒绝通配符 `*` 实键。
+    - `--stdin` 裁剪末尾 CR/LF，空输入报告错误。字段绑定保留 BOM、换行与全部空白，不猜测 JSON，空输入为空字符串。完整边界及大小与取消规则见 [cli.md](cli.md#运行时配置与状态持久化-ad-config-ad-state)。
+    - 所有方式均先组装完整值，再按模式校验并整键替换。缺少密码等必填字段时报 `CONFIG_VALUE_INVALID`，原值不变，不合并旧对象。配置管理返回安全脱敏视图，不提供明文查看参数，拒绝通配符 `*` 实键。
   - 两种赋值操作符：
     - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
     - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
   - 路径语法规则：
     - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
-    - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
+    - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引。数组索引必须从 0 开始连续编号，拒绝稀疏数组。
     - 根节点始终物化为对象。
     - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
     - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
-  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
-  - 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 完整正文原样绑定为指定顶层字段的字符串值（不解析类型、不剥 BOM、不修剪空白、空输入为空字符串）；可与扁平赋值组合，与 `--input` / `--input-file` 互斥；stdin 源字节与最终入参序列化大小各有默认 10MiB 上限，合并字段和 JSON 转义放大计入最终大小；非法 UTF-8 报读取失败。管道非事务，高风险写入先完整生成并校验再执行。
-  - 传统文件与管道输入：对于超长文本或复杂嵌套对象，亦可写入临时 JSON 文件使用 `--input-file <path>`，或通过管道传入 `--input-file -`；读取完整输入后才执行 Action，不是逐行或流式执行。
-  - 纯文本正文输出：未指定 `--text-field` 且无声明式注解时，标量直接输出，结构化对象以标准 JSON 格式输出到 stdout，不进行私有业务字段自动嗅探。当通过 `--text-field <field>` 显式指定或 Action 清单通过 `annotations["actiondock.cli"]` 声明默认正文字段时，仅将该顶层自有字符串正文输出至 stdout（保留真实换行且无 JSON 转义），其余字段以格式化 JSON 对象输出至 stderr（元数据为空时不输出）。极佳适配文件查阅、代码阅读与 Unix 管道消费。
-  - 机器 JSON 信封输出：需要结构化提取时传入 `--json`，终端输出标准 JSON 信封并忽略默认正文注解；若参数解析出错输出错误信封并以退出码 2 退出。`--text-field` 与 `--json`、`--async` 严格互斥并在执行前校验。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）。未指定输入时默认为 `{}`。
+  - 原始文本管道绑定：`printf '正文' | ad run <action> --stdin-field <field> [-- <assignments...>]` 将 stdin 正文原样绑定为指定顶层字段的字符串值。系统不解析类型，不剥离 BOM，不修剪空白。空输入为空字符串。此选项可与扁平赋值组合，与 `--input` 及 `--input-file` 互斥。stdin 源字节与入参序列化大小受 10MiB 上限约束。非法 UTF-8 报告读取失败。管道非事务，高风险写入先完整生成并校验再执行。
+  - 传统文件与管道输入：超长文本或复杂嵌套对象可写入临时 JSON 文件，使用 `--input-file <path>` 传入。也可以通过管道传入 `--input-file -`。读取完整输入后才执行 Action，不是逐行或流式执行。
+  - 纯文本正文输出：未指定 `--text-field` 且无声明式注解时，标量直接输出。结构化对象以标准 JSON 输出到 stdout，不执行私有业务字段自动嗅探。显式指定 `--text-field <field>` 或清单声明默认正文字段时，仅输出该顶层字符串正文至 stdout。保留真实换行且无 JSON 转义。其余字段以格式化 JSON 输出至 stderr（元数据为空时不输出）。该模式适合文件查阅、代码阅读与 Unix 管道消费。
+  - 机器 JSON 信封输出：需要结构化提取时传入 `--json`。终端输出标准 JSON 信封并忽略默认正文注解。若参数解析出错，输出错误信封并以退出码 2 退出。`--text-field` 与 `--json`、`--async` 严格互斥并在执行前校验。
   - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --async --json -- task=deploy`），获取包含 `runId` 的票据。
 - **第五阶段：结果校验与错误处置**：
-  - 默认模式：直接消费 stdout 纯文本；若执行失败，stderr 输出错误详情并伴随非 0 退出码。
+  - 默认模式：直接消费 stdout 纯文本。若执行失败，stderr 输出错误详情并伴随非 0 退出码。
   - `--json` 模式：解析标准 JSON 信封：
     - `ok: true`：提取 `data` 节点获取业务执行结果。
-    - `ok: false`：提取 `error.code` 与 `error.message`。遇到报错时查阅 [troubleshooting.md](troubleshooting.md) 定向自愈。
-- **第六阶段：跨生命周期状态与运行追踪**：
-  - 异步任务执行 `ad runs show <runId>` 追踪执行进度与事件流；必要时执行 `ad runs cancel <runId>` 取消。
-  - 多条后台任务用 `ad runs watch [ids...]` 阻塞等待全部终态聚合退出；后台派工无 runId 时以 `--request-id` 反查等待。
-  - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。`ad state set <key> [value] [options] [-- <assignments...>]` 与配置写入共用上述输入规则，仍整键替换，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则；例如 `ad state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md`。字段绑定只改变输入渠道，不自动加密或脱敏状态，状态读取可能显示原文，不具有配置安全视图的保护。
+    - `ok: false`：提取 `error.code` 与 `error.message`。遇到错误时查阅 [troubleshooting.md](troubleshooting.md) 定向自愈。
+- **第六阶段：跨生命周期状态与执行追踪**：
+  - 异步任务执行 `ad runs show <runId>` 追踪执行进度与事件流。需要中止时执行 `ad runs cancel <runId>` 取消。
+  - 多条后台任务用 `ad runs watch [ids...]` 阻塞等待全部终态聚合退出。后台派工无 runId 时以 `--request-id` 反查等待。
+  - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。`ad state set <key> [value] [options] [-- <assignments...>]` 与配置写入共用上述输入规则。状态仍为整键替换，保留 `-a`、`-n`、`ns:key` 与 `--ttl` 规则。例如 `ad state set article -n drafts --stdin-field content -- title=草稿 tags.0=笔记 < article.md`。字段绑定只改变输入渠道，不自动加密或脱敏状态。状态读取可能显示原文，不具有配置安全视图的保护。

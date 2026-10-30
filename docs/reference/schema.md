@@ -1,8 +1,8 @@
 # 参考手册：actiondock.json 清单规范
 
-在 ActionDock 2.x 体系中，位于工程根目录的 `actiondock.json` 是项目元数据、配置项声明、跨包依赖、原子动作契约与操作规程映射的唯一事实源。
+在 ActionDock 中，工程根目录的 `actiondock.json` 是元数据声明的唯一事实源。它定义配置项、跨包依赖、动作契约与操作规程映射。
 
-框架在静态检索（`ad info`、`ad list`）、运行期入参出参模式校验、构建依赖静态裁剪（`ad build`）与技能导出（`ad export skill`）时，统一以 `actiondock.json` 作为唯一仲裁依据。
+框架在检索、执行期模式校验、依赖裁剪与技能导出时，统一以 `actiondock.json` 作为仲裁依据。
 
 ---
 
@@ -11,9 +11,9 @@
 根级对象基于 ActionDockManifest 契约，遵循以下字段规范：
 
 - 模式规范指示：`$schema`
-  类型为字符串。指向官方规范约束文档，标准规范地址为 `https://actiondock.dev/schema/v2.json`（亦兼容早期路径 `https://actiondock.dev/schema/v2/actiondock.json`）。
+  类型为字符串。指向官方规范约束文档，标准规范地址为 `https://actiondock.dev/schema/v2.json`。
 - 清单规范版本：`schemaVersion`
-  类型为整数。新项目推荐并应当声明为 `2`；运行时为保障向后兼容，仍接受 `1` 或缺省。
+  类型为整数。新项目推荐声明为 `2`。运行时仍兼容 `1` 或缺省。
 - 包唯一标识：`id`
   类型为字符串。作为当前包在本地与远程调用中的命名空间标识，遵循小写字母、数字、中划线与点号组合。若缺省则自动基于当前工程目录名推断。
 - 包友好名称：`name`
@@ -25,7 +25,7 @@
 - 跨包外部依赖映射：`dependencies`
   类型为键值映射对象。声明逻辑包标识到 npm 包名或本地路径的映射，例如 `{"team4u.infra": "@team4u/infra"}`。
 - 显式打包资产：`files`
-  类型为字符串数组。声明除默认的 `actions/` 与 `playbooks/` 之外需要被打包收集的本地模块或资产路径（例如 `["src", "assets"]`）。
+  类型为字符串数组。声明除默认目录之外需打包收集的本地模块或资产路径。例如 `["src", "assets"]`。
 - 静态资产文件列表：`assets`
   类型为字符串数组。声明需包含的静态资产或数据模板文件路径。
 - 全局配置项声明：`config`
@@ -82,26 +82,26 @@
 配置项属性约束说明：
 
 - 配置项描述：`description`
-  类型为字符串。描述配置用途与格式要求。对外公开的元数据严禁携带敏感凭据或泄漏真实密码。
+  类型为字符串。描述配置用途与格式要求。对外公开的元数据严禁携带敏感凭据。
 - 数据类型约束：`type`
-  类型为枚举字符串，支持 `string`、`number`、`boolean`、`object`、`array`。若定义了内嵌 `schema`，外层 `type` 必须同 `schema.type` 保持一致（其中 `number` 兼容 `integer`）。
+  类型为枚举字符串，支持 `string`、`number`、`boolean`、`object`、`array`。若定义了内嵌 `schema`，外层 `type` 必须同 `schema.type` 保持一致。
 - 细粒度校验模式：`schema`
-  支持针对复杂对象或数组进行细粒度校验。出于运行时确定性与安全性考虑，仅允许使用受限关键字集：
+  支持针对复杂对象或数组进行细粒度校验。仅允许使用受限关键字集：
   - 核心类型：`type`（支持 `object`、`array`、`string`、`integer`、`number`、`boolean`）。
-  - 对象与数组：`properties`、`required`、`additionalProperties`（支持布尔值或内嵌 schema）、`items`。
+  - 对象与数组：`properties`、`required`、`additionalProperties`、`items`。
   - 范围与约束：`enum`、`minLength`、`maxLength`、`minimum`、`maximum`。
   - 扩展敏感标记：`secret`（布尔值）。
-  - 明确拒绝其他关键字：严禁使用 `$ref`、模式组合（`allOf`、`anyOf`、`oneOf`）、`default`、`format` 等未受限特性。
+  - 明确拒绝其他关键字：严禁使用 `$ref`、模式组合（`allOf`、`anyOf`、`oneOf`）、`default`、`format` 等特性。
 - 敏感标记：`secret`
-  类型为布尔值。顶层配置声明 `secret: true` 时整项隐藏；若在内嵌 `schema` 字段声明 `secret: true`，脱敏引擎仅隐藏该字段节点。当遇到未知字段或数据结构不符时，系统实施保守脱敏隐藏。若根节点自身已标记敏感，不强制要求配置 `items` 或 `additionalProperties`。
+  类型为布尔值。顶层配置声明 `secret: true` 时整项隐藏。内嵌字段声明时仅隐藏该字段节点。数据结构不符时系统保守隐藏。根节点标记敏感时不强制要求配置 `items`。
 - 默认值：`default`
-  任意符合类型约束的值。当环境与存储均未指定该配置时回退使用。通配模板不允许配置默认值。具体键仍可声明敏感默认值，但不建议将凭据写入清单；对外声明会剥离含敏感信息的默认值。
+  任意符合类型约束的值。环境与存储未指定时回退使用。通配模板不允许配置默认值。对外声明会剥离敏感默认值。
 - 外部环境变量映射：`env`
-  类型为字符串或字符串数组（`string | string[]`）。支持指定单个环境变量名或按优先级排序的环境变量候选列表。通配模板严禁配置环境变量映射。
+  类型为字符串或字符串数组（`string | string[]`）。支持指定单个环境变量名或按优先级排序的候选列表。通配模板严禁配置环境变量映射。
 - 是否必填：`required`
   类型为布尔值。作为静态诊断标识。通配模板严禁标记为必填。
 - 允许单次调用覆盖：`allowInvocationOverride`
-  类型为布尔值。元数据声明字段，标识配置项是否设计为允许在单次调用中通过参数临时覆盖。
+  类型为布尔值。元数据声明字段，标识配置项是否允许单次调用临时覆盖。
 
 通配模板匹配与解析规则：
 
@@ -116,7 +116,7 @@
 `actions` 映射下的每个键名为动作的完整标识符（如 `sample.greet` 或 `github.get-pr`）。
 
 > [!NOTE]
-> 命令行命令 `ad action create <id> --input ... --output ...` 提供了基础类型的便捷简写，适用于快速生成初始骨架。对于复杂业务契约（包含字段描述 `description`、枚举约束 `enum`、嵌套属性 `properties`、正则与范围等），统一直接在 `actiondock.json` 中使用完整 JSON Schema 定义，并通过 `ad generate types` 刷新 TypeScript 类型。
+> `ad action create` 提供基础类型简写，适用于生成初始骨架。复杂契约直接在 `actiondock.json` 中使用 JSON Schema 定义。随后执行 `ad generate types` 刷新类型。
 
 ```json
 {
@@ -167,11 +167,11 @@
 动作属性约束说明：
 
 - 源码入口路径：`entry`
-  类型为字符串，必填项。相对于项目根目录的 TypeScript 或 JavaScript 源码文件路径。
+  类型为字符串，必填项。相对于项目根目录的源码文件路径。
 - 动作功能描述：`description`
   类型为字符串。供 MCP 协议工具说明、智能体能力检索与开发者阅读。
 - 输入参数模式约束：`inputSchema`
-  类型为标准 JSON Schema 对象或布尔值。运行时在调用 `run` 前由引擎自动执行严格校验。支持在具体字段定义或模式根层级通过 `examples`（数组格式）补充调用示例，帮助智能体更精确地理解预期参数格式。
+  类型为标准 JSON Schema 对象或布尔值。引擎在调用 `run` 前自动校验。可在字段或根层级通过 `examples` 补充调用示例。
 - 输出结果模式约束：`outputSchema`
   类型为标准 JSON Schema 对象或布尔值。运行时在动作返回后执行出参合法性校验。支持通过 `examples` 补充输出结构样例。
 - 级联依赖声明：`uses`
@@ -179,10 +179,10 @@
 - 分类标签：`tags`
   类型为字符串数组。用于在 `ad info` 与 `ad list` 中进行分类筛选。
 - 协议注解元数据：`annotations`
-  类型为键值映射对象。用于承载协议适配器与调用入口相关的元数据。
-  - `"actiondock.cli": { "textField": "message" }` 声明普通 CLI 默认同步输出的正文字段，字段对应返回结果中顶层自有字符串属性，而非入参。推荐在 `outputSchema` 中明确声明根类型为对象、该字段为字符串并列入 `required`。
-  - `ad describe` 展示默认字段和消费方式，`ad validate` 拦截确定矛盾、对可选字段或无法静态确认的 Schema 给出警告。显式 `--text-field` 优先于默认声明，`--json` 忽略默认声明并保留完整信封。
-  - 该注解不改变业务返回值、运行记录或 SDK、HTTP、MCP 的结果。目录型入口当前不应用此注解，仍使用其现有 `content`、`text`、`message` 提取规则。
+  类型为键值映射对象。承载协议适配器与调用入口元数据。
+  - `"actiondock.cli": { "textField": "message" }` 声明 CLI 默认同步输出的正文字段。该字段对应结果中的顶层属性。
+  - `ad describe` 展示默认字段。`ad validate` 拦截确定矛盾。显式 `--text-field` 优先于默认声明。`--json` 模式保留完整信封。
+  - 该注解不改变业务返回值与执行记录。目录型入口不应用此注解。
 
 ---
 
@@ -209,7 +209,7 @@
 - 规程描述：`description`
   类型为字符串。阐明该规程适用的业务场景与触发条件。
 - 关联动作清单：`actions`
-  类型为字符串数组。列出规程执行过程中可能被调度的动作标识列表，作为导出裁剪与能力委托的依据。
+  类型为字符串数组。列出规程执行中可能调度的动作标识。该列表作为导出裁剪与委托的依据。
 
 ---
 
@@ -217,7 +217,7 @@
 
 使用 `ad validate` 对 `actiondock.json` 执行静态合规性校验：
 
-- 结构完整性校验：验证根字段是否满足版本 `schemaVersion: 2` 的必要约束。
-- 路径可达性校验：验证所有 `entry` 指定的文件在磁盘上真实存在。
-- 模式有效性校验：验证 `inputSchema` 与 `outputSchema` 为合法的 JSON Schema 规范对象。
-- 引用闭包校验：验证 `playbooks` 与 `uses` 中引用的动作在清单中已声明或已在锁文件中注册。
+- 结构完整性校验：校验根字段是否满足版本 `schemaVersion: 2` 的约束。
+- 路径可达性校验：校验所有 `entry` 指定的文件是否存在。
+- 模式有效性校验：校验 `inputSchema` 与 `outputSchema` 为合法的 JSON Schema 对象。
+- 引用闭包校验：校验 `playbooks` 与 `uses` 中引用的动作是否已在清单或锁文件中声明。
